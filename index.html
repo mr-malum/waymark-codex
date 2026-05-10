@@ -33,16 +33,14 @@
   const imageWidth = 8192;
   const imageHeight = 8192;
 
-  // IMPORTANT:
-  // Use negative Y so 0 is top and -8192 is bottom.
-  const bounds = [[-imageHeight, 0], [0, imageWidth]];
+  const bounds = [[0, 0], [imageHeight, imageWidth]];
 
   L.imageOverlay('Kadesh.png', bounds).addTo(map);
   map.fitBounds(bounds);
 
   // AppSheet XY for 300:300 = 1.33,1
   const centerX = (1.33 / 100) * imageWidth;
-  const centerY = -((1 / 100) * imageHeight);
+  const centerY = imageHeight - ((1 / 100) * imageHeight);
 
   const hexRadius = 70;
 
@@ -51,10 +49,8 @@
 
     for (let i = 0; i < 6; i++) {
       const angle = Math.PI / 180 * (60 * i);
-
       const x = centerX + radius * Math.cos(angle);
       const y = centerY + radius * Math.sin(angle);
-
       points.push([y, x]);
     }
 
@@ -73,10 +69,9 @@
   ).addTo(map);
 
   topLeftHex.bindPopup('300:300');
-
   map.setView([centerY, centerX], 2);
 
-  console.log('Hex drawn at top-left coordinate system');
+  console.log('Hex drawn with inverted Y');
 </script>
 </body>
 </html>
