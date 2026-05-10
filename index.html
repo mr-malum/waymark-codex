@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <title>Kadesh Map</title>
-
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <link
@@ -29,47 +28,48 @@
 </head>
 
 <body>
+  <div id="map"></div>
 
-<div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Create map using simple image coordinates instead of real-world lat/lng
+    const map = L.map('map', {
+      crs: L.CRS.Simple,
+      minZoom: -2,
+      maxZoom: 4
+    });
 
-<script>
-  // Create map
-  const map = L.map('map', {
-    crs: L.CRS.Simple,
-    minZoom: -2,
-    maxZoom: 4
-  });
+    // Your image dimensions
+    const imageWidth = 8192;
+    const imageHeight = 8192;
 
-  // Image dimensions
-  const imageWidth = 8192;
-  const imageHeight = 8192;
+    // Leaflet uses [Y, X], not [X, Y]
+    const bounds = [[0, 0], [imageHeight, imageWidth]];
 
-  // Define image bounds
-  const bounds = [[0,0], [imageHeight, imageWidth]];
+    // Add the map image
+    L.imageOverlay('Kadesh.png', bounds).addTo(map);
 
-  // Add image
-  L.imageOverlay('Kadesh.png', bounds).addTo(map);
+    // Fit map to image
+    map.fitBounds(bounds);
 
-  // Fit map to image
-  map.fitBounds(bounds);
+    // Force view to center for testing
+    map.setView([4096, 4096], 0);
 
-  // Test marker
-  const hex = L.circleMarker(
-  [4096, 4096],
-  {
-    radius: 30,
-    color: 'blue',
-    weight: 5,
-    fillColor: 'blue',
-    fillOpacity: 0.8,
-    opacity: 1
-  }
-).addTo(map);
+    // Loud test marker
+    const testMarker = L.circleMarker([4096, 4096], {
+      radius: 80,
+      color: 'red',
+      weight: 8,
+      fillColor: 'yellow',
+      fillOpacity: 1,
+      opacity: 1
+    }).addTo(map);
 
-hex.bindPopup('300:300');
-</script>
+    testMarker.bindPopup('LOUD TEST MARKER').openPopup();
 
+    console.log('Marker added:', testMarker);
+    alert('Map script loaded');
+  </script>
 </body>
 </html>
