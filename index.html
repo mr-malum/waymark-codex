@@ -18,8 +18,16 @@
 <div id="parchment-bg"></div>
 <div id="map"></div>
 
-<div id="side-panel">
-  <h2 id="panel-title">Select a Hex</h2>
+<div id="app-panel" class="closed">
+  <div id="app-panel-header">
+    <button id="panel-close" type="button">×</button>
+
+    <div>
+      <div id="panel-subtitle">Hex</div>
+      <h2 id="panel-title">Select a Hex</h2>
+    </div>
+  </div>
+
   <div id="panel-content">
     Click any hex to view its details.
   </div>
@@ -175,7 +183,9 @@
 
         selectedHex = this;
         this.setStyle(selectedStyle);
-
+        
+        document.getElementById('app-panel').classList.add('open');
+        
         const data = hexData?.[hexId];
 
         document.getElementById('panel-title').textContent =
@@ -193,11 +203,22 @@
   }
 
   map.on('click', function () {
-    if (selectedHex) {
-      selectedHex.setStyle(defaultStyle);
-      selectedHex = null;
-    }
-  });
+  document.getElementById('app-panel').classList.remove('open');
+
+  if (selectedHex) {
+    selectedHex.setStyle(defaultStyle);
+    selectedHex = null;
+  }
+});
+
+  document.getElementById('panel-close').addEventListener('click', function () {
+  document.getElementById('app-panel').classList.remove('open');
+
+  if (selectedHex) {
+    selectedHex.setStyle(defaultStyle);
+    selectedHex = null;
+  }
+});
 </script>
 
 </body>
