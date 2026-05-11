@@ -565,7 +565,7 @@ function renderCodexNpcsIndex() {
       return [
         row.Name,
         [row.Race, row.Occupation].filter(Boolean).join(" • "),
-        homeLabel ? `Home: ${homeLabel}` : ""
+        homeLabel || ""
       ].filter(Boolean).join(" — ");
     }
   ));
