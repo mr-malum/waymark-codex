@@ -444,10 +444,13 @@ for (let xxx = 300; xxx < 350; xxx++) {
       }
     });
 
-    hex.on('click', function (e) {
-      L.DomEvent.stopPropagation(e);
+hex.on('click', function (e) {
+  L.DomEvent.stopPropagation(e);
 
-      selectHex(this);
+  document.getElementById('codex-button')
+    .classList.remove('codex-label-visible');
+
+  selectHex(this);
 
       const data = db?.hexesById?.[hexId];
 
