@@ -1341,3 +1341,30 @@ text-shadow:
 .codex-sort-direction:active {
   transform: scale(0.96);
 }
+
+/* =========================================================
+   CODEX DETAIL PAGE TYPOGRAPHY
+   ========================================================= */
+
+#codex-content p {
+  font-size: 1.08rem;
+  line-height: 1.7;
+}
+
+/* Large lore/journal manuscript blocks */
+#codex-content h3 + p {
+  padding-left: 1.1em;
+
+  font-style: italic;
+  font-weight: 400;
+
+  font-size: 1.02rem;
+  line-height: 1.9;
+
+  letter-spacing: 0.01em;
+}
+
+/* Slightly reduce metadata size */
+#codex-content strong {
+  font-size: 0.96em;
+}
