@@ -469,18 +469,24 @@ function renderCodexNpcsIndex() {
 function renderCodexSearchPage() {
   setCodexTitle("Search the Codex");
 
-  setCodexContent(`
-    <input
-      id="codex-search-input"
-      type="search"
-      placeholder="Search regions, POIs, NPCs..."
-      autocomplete="off"
-    />
+  const content = document.getElementById("codex-content");
+
+  content.className = "codex-search-page";
+
+  content.innerHTML = `
+    <div class="codex-search-shell">
+      <input
+        id="codex-search-input"
+        type="search"
+        placeholder="Search regions, POIs, NPCs..."
+        autocomplete="off"
+      />
+    </div>
 
     <div id="codex-search-results">
       <p>Begin typing to search the records of Kadesh.</p>
     </div>
-  `);
+  `;
 
   const input = document.getElementById("codex-search-input");
 
