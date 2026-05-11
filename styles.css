@@ -866,7 +866,7 @@ text-shadow:
 
 .codex-search-shell {
   width: min(100%, 520px);
-  margin: 0 0 28px auto;
+  margin: 0 auto 28px;
 }
 
 #codex-search-input {
