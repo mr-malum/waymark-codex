@@ -562,7 +562,11 @@ function renderCodexNpcsIndex() {
       const home = row.Home_ID_Ref ? db?.poisById?.[row.Home_ID_Ref] : null;
       const homeLabel = home?.Name || row.Home_ID_Ref;
 
-      return [row.Name, row.Race, row.Occupation, homeLabel].filter(Boolean).join(" — ");
+      return [
+        row.Name,
+        [row.Race, row.Occupation].filter(Boolean).join(" • "),
+        homeLabel ? `Home: ${homeLabel}` : ""
+      ].filter(Boolean).join(" — ");
     }
   ));
 }
@@ -697,7 +701,7 @@ function renderCodexLinkedList(rows, emptyText, type, idField, getLabel) {
         const label = getLabel(row) || id || "Unnamed Record";
         const parts = String(label).split(" — ");
         const title = parts.shift() || "Unnamed Record";
-        const meta = parts.join(" • ");
+        const metaLines = parts;
 
         return `
           <button
@@ -707,7 +711,9 @@ function renderCodexLinkedList(rows, emptyText, type, idField, getLabel) {
           >
             <span class="codex-record-main">
               <span class="codex-record-title">${escapeHtml(title)}</span>
-              ${meta ? `<span class="codex-record-meta">${escapeHtml(meta)}</span>` : ""}
+              ${metaLines.map(line => `
+                  <span class="codex-record-meta">${escapeHtml(line)}</span>
+                  `).join("")}
             </span>
             <span class="codex-record-arrow">›</span>
           </button>
