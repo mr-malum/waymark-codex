@@ -23,7 +23,7 @@
     <button id="panel-close" type="button">×</button>
 
     <div>
-      <div id="panel-subtitle">Hex</div>
+      <div id="panel-subtitle"></div>
       <h2 id="panel-title">Select a Hex</h2>
     </div>
   </div>
@@ -37,12 +37,21 @@
 <script src="data-loader.js"></script>
 
 <script>
+
+  // =====================================================
+  // Database Startup
+  // =====================================================
+
   let db = null;
 
   loadDatabase().then(loadedDb => {
     db = loadedDb;
     console.log("Database loaded:", db);
   });
+
+  // =====================================================
+  // Map Setup
+  // =====================================================
 
   const map = L.map('map', {
     crs: L.CRS.Simple,
@@ -57,6 +66,7 @@
   const bounds = [[0, 0], [imageHeight, imageWidth]];
 
   L.imageOverlay('Kadesh.png', bounds).addTo(map);
+
   map.fitBounds(bounds);
 
   function updatePanBounds() {
@@ -80,11 +90,24 @@
   const isTouchDevice =
     window.matchMedia('(pointer: coarse)').matches;
 
+  // =====================================================
+  // Hex Geometry
+  // =====================================================
+
   const centerX = (1.33 / 100) * imageWidth;
   const centerY = imageHeight - ((1 / 100) * imageHeight);
 
   const hexWidth = 105;
   const hexHeight = 155;
+
+  const startX = centerX;
+  const startY = centerY;
+
+  const rowStepY = 162.22;
+  const colStepX = 325.51;
+
+  const oddColY = rowStepY / -2;
+  const oddColX = colStepX / 2;
 
   function makeHex(centerX, centerY, width, height) {
     return [
@@ -96,15 +119,6 @@
       [centerY - height * 0.5, centerX + width * 0.5]
     ];
   }
-
-  const startX = centerX;
-  const startY = centerY;
-
-  const rowStepY = 162.22;
-  const colStepX = 325.51;
-
-  const oddColY = rowStepY / -2;
-  const oddColX = colStepX / 2;
 
   function getHexCenter(xxx, yyy) {
     const row = xxx - 300;
@@ -126,6 +140,10 @@
     return { x, y };
   }
 
+  // =====================================================
+  // Panel Navigation State
+  // =====================================================
+
   let selectedHex = null;
   let panelHistory = [];
 
@@ -146,6 +164,25 @@
         .classList.remove('open');
     }
   }
+
+  function setPanelSideFromClick(event) {
+    const panel = document.getElementById('app-panel');
+
+    const clickX = event.originalEvent.clientX;
+    const screenWidth = window.innerWidth;
+
+    panel.classList.remove('left', 'right');
+
+    if (clickX > screenWidth / 2) {
+      panel.classList.add('left');
+    } else {
+      panel.classList.add('right');
+    }
+  }
+
+  // =====================================================
+  // Hex Interaction Styling
+  // =====================================================
 
   const defaultStyle = {
     color: '#ffffff',
@@ -177,6 +214,10 @@
     hex.setStyle(selectedStyle);
   }
 
+  // =====================================================
+  // Generic Helpers
+  // =====================================================
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -188,25 +229,16 @@
 
   function getRowsByField(rows, fieldName, value) {
     if (!Array.isArray(rows)) return [];
+
     return rows.filter(row => row?.[fieldName] === value);
   }
 
-  function setPanelSideFromClick(event) {
-    const panel = document.getElementById('app-panel');
-
-    const clickX = event.originalEvent.clientX;
-    const screenWidth = window.innerWidth;
-
-    panel.classList.remove('left', 'right');
-
-    if (clickX > screenWidth / 2) {
-      panel.classList.add('left');
-    } else {
-      panel.classList.add('right');
-    }
-  }
+  // =====================================================
+  // Shared Render Helpers
+  // =====================================================
 
   function renderList(title, rows, emptyText, labelFields) {
+
     if (!rows.length) {
       return `
         <section>
@@ -219,8 +251,10 @@
     return `
       <section>
         <h3>${title}</h3>
+
         <ul>
           ${rows.map(row => {
+
             const label = labelFields
               .map(field => row?.[field])
               .filter(Boolean)
@@ -236,13 +270,19 @@
                 </button>
               </li>
             `;
+
           }).join("")}
         </ul>
       </section>
     `;
   }
 
+  // =====================================================
+  // Panel Renderers
+  // =====================================================
+
   function renderHexScreen(hexId) {
+
     const hex = db?.hexesById?.[hexId];
 
     const region =
@@ -258,13 +298,12 @@
       .classList.add('open');
 
     document.getElementById('panel-title')
-      .textContent = hex ? `Hex ${hex.Hex_ID}` : hexId;
+      .textContent = `HEX ${hexId}`;
 
     document.getElementById('panel-subtitle')
-      .textContent = hex?.Terrain || "Unknown Terrain";
+      .textContent = "";
 
     document.getElementById('panel-content').innerHTML = `
-      <p><strong>Hex:</strong> ${escapeHtml(hexId)}</p>
 
       <p>
         <strong>Terrain:</strong>
@@ -286,6 +325,7 @@
   }
 
   function renderPoiScreen(poiId) {
+
     const poi = db?.poisById?.[poiId];
 
     if (!poi) return;
@@ -300,9 +340,10 @@
       .textContent = poi.Name || "Unknown POI";
 
     document.getElementById('panel-subtitle')
-      .textContent = poi.POI_Type || "POI";
+      .textContent = "";
 
     document.getElementById('panel-content').innerHTML = `
+
       <button
         class="panel-link"
         onclick="goBackPanel()"
@@ -311,6 +352,22 @@
       </button>
 
       <p>
+        <strong>Type:</strong>
+        ${escapeHtml(poi.POI_Type || "Unknown")}
+      </p>
+
+      <p>
+        <strong>Notoriety Tier:</strong>
+        ${escapeHtml(poi["Notoriety Tier"] || "Unknown")}
+      </p>
+
+      <p>
+        <strong>Population:</strong>
+        ${escapeHtml(poi.Population || "N/A")}
+      </p>
+
+      <p>
+        <strong>Description:</strong><br>
         ${escapeHtml(poi.Description || "No description.")}
       </p>
 
@@ -327,20 +384,27 @@
                     onclick="pushPanelScreen(() => renderNpcScreen('${npc.NPC_ID}'))"
                   >
                     ${escapeHtml(npc.Name)}
+                    ${npc.Occupation ? ` — ${escapeHtml(npc.Occupation)}` : ""}
                   </button>
                 </li>
               `).join("")}
             </ul>
           `
-          : `<p>No NPCs.</p>`
+          : `<p>No known NPCs at this location.</p>`
       }
     `;
   }
 
   function renderNpcScreen(npcId) {
+
     const npc = db?.npcsById?.[npcId];
 
     if (!npc) return;
+
+    const home =
+      npc?.Home_ID_Ref
+        ? db?.poisById?.[npc.Home_ID_Ref]
+        : null;
 
     document.getElementById('app-panel')
       .classList.add('open');
@@ -349,9 +413,10 @@
       .textContent = npc.Name || "Unknown NPC";
 
     document.getElementById('panel-subtitle')
-      .textContent = npc.Role || "NPC";
+      .textContent = "";
 
     document.getElementById('panel-content').innerHTML = `
+
       <button
         class="panel-link"
         onclick="goBackPanel()"
@@ -360,21 +425,44 @@
       </button>
 
       <p>
-        ${escapeHtml(npc.Description || "No description.")}
+        <strong>Home:</strong>
+        ${escapeHtml(home?.Name || npc.Home_ID_Ref || "Unknown")}
+      </p>
+
+      <p>
+        <strong>Occupation:</strong>
+        ${escapeHtml(npc.Occupation || "Unknown")}
+      </p>
+
+      <p>
+        <strong>Lore:</strong><br>
+        ${escapeHtml(npc["Lore Snippet"] || "No lore recorded.")}
       </p>
     `;
   }
+
+  // =====================================================
+  // Panel Entry Helpers
+  // =====================================================
 
   function openPanelForHex(hexId) {
     panelHistory = [];
     pushPanelScreen(() => renderHexScreen(hexId));
   }
 
+  // =====================================================
+  // Global Exports
+  // =====================================================
+
   window.openPanelForHex = openPanelForHex;
   window.renderPoiScreen = renderPoiScreen;
   window.renderNpcScreen = renderNpcScreen;
   window.goBackPanel = goBackPanel;
   window.pushPanelScreen = pushPanelScreen;
+
+  // =====================================================
+  // Hex Layer Creation
+  // =====================================================
 
   for (let xxx = 300; xxx < 350; xxx++) {
     for (let yyy = 300; yyy < 350; yyy++) {
@@ -388,18 +476,23 @@
       ).addTo(map);
 
       hex.on('mouseover', function () {
+
         if (!isTouchDevice && this !== selectedHex) {
           this.setStyle(hoverStyle);
         }
+
       });
 
       hex.on('mouseout', function () {
+
         if (!isTouchDevice && this !== selectedHex) {
           this.setStyle(defaultStyle);
         }
+
       });
 
       hex.on('click', function (e) {
+
         L.DomEvent.stopPropagation(e);
 
         selectHex(this);
@@ -407,9 +500,12 @@
         const data = db?.hexesById?.[hexId];
 
         if (isTouchDevice) {
+
           this.bindPopup(`
             <div style="min-width:180px;">
+
               <strong>${escapeHtml(hexId)}</strong><br>
+
               ${escapeHtml(data?.Terrain || 'Unknown')}<br><br>
 
               <button
@@ -426,20 +522,30 @@
               >
                 Open Details
               </button>
+
             </div>
           `).openPopup();
 
         } else {
+
           setPanelSideFromClick(e);
 
           panelHistory = [];
+
           pushPanelScreen(() => renderHexScreen(hexId));
+
         }
+
       });
     }
   }
 
+  // =====================================================
+  // Close / Deselect Handlers
+  // =====================================================
+
   map.on('click', function () {
+
     document.getElementById('app-panel')
       .classList.remove('open');
 
@@ -447,10 +553,12 @@
       selectedHex.setStyle(defaultStyle);
       selectedHex = null;
     }
+
   });
 
   document.getElementById('panel-close')
     .addEventListener('click', function () {
+
       document.getElementById('app-panel')
         .classList.remove('open');
 
@@ -458,7 +566,9 @@
         selectedHex.setStyle(defaultStyle);
         selectedHex = null;
       }
+
     });
+
 </script>
 
 </body>
