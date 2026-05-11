@@ -594,14 +594,21 @@ function renderCodexLinkedList(rows, emptyText, type, idField, getLabel) {
       ${rows.map(row => {
         const id = row?.[idField];
         const label = getLabel(row) || id || "Unnamed Record";
+        const parts = String(label).split(" — ");
+        const title = parts.shift() || "Unnamed Record";
+        const meta = parts.join(" • ");
 
         return `
           <button
-            class="codex-section-button"
+            class="codex-section-button codex-record-button"
             type="button"
             onclick="openCodexPage('${escapeJsString(type)}', '${escapeJsString(id)}')"
           >
-            ${escapeHtml(label)}
+            <span class="codex-record-main">
+              <span class="codex-record-title">${escapeHtml(title)}</span>
+              ${meta ? `<span class="codex-record-meta">${escapeHtml(meta)}</span>` : ""}
+            </span>
+            <span class="codex-record-arrow">›</span>
           </button>
         `;
       }).join("")}
