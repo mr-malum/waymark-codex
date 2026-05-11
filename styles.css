@@ -498,3 +498,207 @@ button.panel-link:active {
   }
 
 }
+
+/* Atlas Modal */
+
+#atlas-overlay {
+  position: fixed;
+  inset: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  z-index: 2500;
+
+  background: rgba(12, 7, 3, 0.34);
+  backdrop-filter: blur(1.5px);
+
+  opacity: 0;
+  pointer-events: none;
+
+  transition: opacity 180ms ease;
+}
+
+#atlas-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#atlas-modal {
+  position: relative;
+
+  width: min(78vw, 980px);
+  height: min(82vh, 760px);
+
+  padding: 86px 110px 90px;
+
+  color: #3a2614;
+
+  font-family: 'Cormorant Garamond', Georgia, serif;
+
+  isolation: isolate;
+  overflow: hidden;
+}
+
+#atlas-modal::before {
+  content: "";
+
+  position: absolute;
+  inset: -90px -120px;
+
+  background-image: url("assets/Parchment_Panel.png");
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  opacity: 0.98;
+
+  z-index: -1;
+  pointer-events: none;
+}
+
+#atlas-close {
+  position: absolute;
+  top: 72px;
+  right: 78px;
+
+  border: none;
+  background: transparent;
+
+  color: rgba(58, 38, 20, 0.82);
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 36px;
+  line-height: 1;
+
+  cursor: pointer;
+
+  z-index: 5;
+}
+
+#atlas-close:hover {
+  transform: scale(1.08);
+  color: rgba(58, 38, 20, 1);
+}
+
+#atlas-header {
+  text-align: center;
+  margin-bottom: 34px;
+}
+
+#atlas-subtitle {
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 13px;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#atlas-title {
+  margin: 0;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 2.5rem;
+  letter-spacing: 1.5px;
+
+  color: #2f1d10;
+}
+
+#atlas-header::after {
+  content: "";
+
+  display: block;
+
+  width: 72%;
+  max-width: 360px;
+  height: 1px;
+
+  margin: 16px auto 0;
+
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(72, 43, 18, 0.65),
+    transparent
+  );
+}
+
+#atlas-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.atlas-section-button {
+  padding: 18px 20px;
+
+  border-radius: 14px;
+  border: 1px solid rgba(94, 55, 22, 0.22);
+
+  background: rgba(94, 55, 22, 0.08);
+  color: #3a2614;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.15rem;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.atlas-section-button:hover {
+  background: rgba(94, 55, 22, 0.14);
+  border-color: rgba(94, 55, 22, 0.32);
+}
+
+.atlas-section-button:active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 700px) {
+
+  #atlas-overlay {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  #atlas-modal {
+    width: 100vw;
+    height: 100vh;
+
+    padding: 88px 34px 120px;
+
+    box-sizing: border-box;
+  }
+
+  #atlas-modal::before {
+    inset: -120px -80px;
+  }
+
+  #atlas-close {
+    top: 58px;
+    right: 34px;
+  }
+
+  #atlas-title {
+    font-size: 2.1rem;
+  }
+
+  #atlas-content {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .atlas-section-button {
+    padding: 16px 18px;
+    font-size: 1.05rem;
+  }
+
+}
