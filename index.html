@@ -70,13 +70,27 @@
   L.imageOverlay('Kadesh.png', bounds).addTo(map);
 
   // Fit map to image
-  map.fitBounds(bounds);
+map.fitBounds(bounds);
 
-  // Prevent excessive panning outside map
-  map.setMaxBounds([
-    [-1000, -1000],
-    [imageHeight + 1000, imageWidth + 1000]
-  ]);
+  // Dynamic pan bounds based on zoom
+  function updatePanBounds() {
+    const zoom = map.getZoom();
+  
+    // More padding when zoomed out, less when zoomed in
+    const padding =
+      zoom < -2 ? 2000 :
+      zoom < -1 ? 1200 :
+      zoom < 0  ? 700  :
+                  300;
+  
+    map.setMaxBounds([
+      [-padding, -padding],
+      [imageHeight + padding, imageWidth + padding]
+    ]);
+  }
+  
+  map.on('zoomend', updatePanBounds);
+  updatePanBounds();
   
 
   // ============================================
