@@ -577,7 +577,11 @@ function renderCodexPoisIndex() {
     "No points of interest recorded.",
     "poi",
     "POI_ID",
-    row => [row.Name, row.POI_Type, row.Hex_ID_Ref].filter(Boolean).join(" — ")
+row => [
+  row.Name,
+  row.POI_Type,
+  row["Notoriety Tier"] ? `Notoriety: ${row["Notoriety Tier"]}` : ""
+].filter(Boolean).join(" — ")
   ));
 }
 
