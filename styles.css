@@ -308,8 +308,8 @@ button.panel-link.mobile-nav-back {
   margin-top: auto;
   margin-left: 24px;
   margin-right: 24px;
-  margin-bottom: 28px;
-
+  margin-bottom: 96px;
+  
   justify-content: space-between;
   align-items: center;
   gap: 16px;
