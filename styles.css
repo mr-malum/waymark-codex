@@ -833,3 +833,265 @@ text-shadow:
 
   cursor: pointer;
 }
+
+/* =========================================================
+   CODEX PHASE 1 POLISH
+   ========================================================= */
+
+/* Make Codex detail pages behave like document pages, not the old home-button grid */
+#codex-content {
+  display: block;
+  width: min(100%, 860px);
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 18px 170px;
+  overflow-y: auto;
+  font-size: 21px;
+  line-height: 1.55;
+}
+
+/* Codex home/index can still use a grid */
+#codex-content.codex-home {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  max-width: 620px;
+}
+
+/* Codex search page layout */
+#codex-content.codex-search-page {
+  display: block;
+  max-width: 860px;
+}
+
+.codex-search-shell {
+  width: min(100%, 520px);
+  margin: 0 0 28px auto;
+}
+
+#codex-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(94, 55, 22, 0.38);
+  background:
+    linear-gradient(
+      rgba(255, 235, 184, 0.50),
+      rgba(214, 159, 82, 0.22)
+    );
+  color: #2f1d10;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.25rem;
+  box-shadow:
+    inset 0 1px 5px rgba(55, 28, 8, 0.22),
+    0 2px 8px rgba(55, 28, 8, 0.14);
+}
+
+#codex-search-input::placeholder {
+  color: rgba(58, 38, 20, 0.62);
+}
+
+#codex-search-input:focus {
+  outline: none;
+  border-color: rgba(94, 55, 22, 0.62);
+  box-shadow:
+    inset 0 1px 5px rgba(55, 28, 8, 0.24),
+    0 0 0 2px rgba(166, 108, 41, 0.18),
+    0 2px 8px rgba(55, 28, 8, 0.16);
+}
+
+#codex-search-results {
+  clear: both;
+}
+
+/* Headings inside Codex pages */
+#codex-content h3 {
+  margin: 30px 0 10px;
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.45rem;
+  letter-spacing: 0.04em;
+  color: #2f1d10;
+}
+
+#codex-content h3::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 1px;
+  margin-top: 7px;
+  background: linear-gradient(
+    to right,
+    rgba(72, 43, 18, 0.58),
+    rgba(72, 43, 18, 0.18),
+    transparent
+  );
+}
+
+#codex-content p {
+  margin: 0 0 14px;
+}
+
+#codex-content strong {
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-weight: 500;
+}
+
+/* Make all Codex buttons match the parchment UI */
+.codex-section-button,
+.codex-link-button,
+.popup-open-details {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(94, 55, 22, 0.36);
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      rgba(255, 231, 174, 0.46),
+      rgba(166, 108, 41, 0.18)
+    );
+  color: #3a2614;
+  font-family: 'Marcellus SC', Georgia, serif;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 3px rgba(255, 241, 202, 0.35),
+    0 2px 8px rgba(45, 25, 8, 0.14);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
+}
+
+.codex-section-button:hover,
+.codex-link-button:hover,
+.popup-open-details:hover {
+  background:
+    linear-gradient(
+      rgba(255, 236, 188, 0.58),
+      rgba(166, 108, 41, 0.26)
+    );
+  border-color: rgba(94, 55, 22, 0.55);
+  box-shadow:
+    inset 0 1px 3px rgba(255, 241, 202, 0.42),
+    0 3px 10px rgba(45, 25, 8, 0.20);
+}
+
+.codex-section-button:active,
+.codex-link-button:active,
+.popup-open-details:active {
+  transform: scale(0.985);
+}
+
+.codex-link-button {
+  display: inline-block;
+  padding: 5px 12px;
+  margin-left: 6px;
+  font-size: 1rem;
+  vertical-align: baseline;
+}
+
+/* Codex record cards */
+.codex-list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 22px;
+}
+
+.codex-record-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+  padding: 12px 15px;
+}
+
+.codex-record-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.codex-record-title {
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.08rem;
+  color: #2f1d10;
+}
+
+.codex-record-meta {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1rem;
+  opacity: 0.78;
+}
+
+.codex-record-arrow {
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.5rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+/* Themed scrollbars */
+#codex-content,
+#panel-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(94, 55, 22, 0.52) rgba(232, 196, 137, 0.28);
+}
+
+#codex-content::-webkit-scrollbar,
+#panel-content::-webkit-scrollbar {
+  width: 12px;
+}
+
+#codex-content::-webkit-scrollbar-track,
+#panel-content::-webkit-scrollbar-track {
+  background: rgba(232, 196, 137, 0.28);
+  border-radius: 999px;
+}
+
+#codex-content::-webkit-scrollbar-thumb,
+#panel-content::-webkit-scrollbar-thumb {
+  background:
+    linear-gradient(
+      rgba(111, 66, 26, 0.72),
+      rgba(64, 36, 13, 0.62)
+    );
+  border: 3px solid rgba(232, 196, 137, 0.42);
+  border-radius: 999px;
+}
+
+#codex-content::-webkit-scrollbar-thumb:hover,
+#panel-content::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(
+      rgba(126, 74, 29, 0.82),
+      rgba(64, 36, 13, 0.72)
+    );
+}
+
+/* Mobile Codex polish */
+@media (max-width: 700px) {
+  #codex-content {
+    width: auto;
+    max-width: none;
+    padding: 18px 36px calc(170px + env(safe-area-inset-bottom)) 36px;
+    font-size: 19px;
+  }
+
+  #codex-content.codex-home {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .codex-search-shell {
+    width: 100%;
+    margin: 0 0 24px;
+  }
+
+  .codex-link-button {
+    margin-left: 0;
+    margin-top: 6px;
+  }
+}
