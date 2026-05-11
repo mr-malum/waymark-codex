@@ -56,7 +56,7 @@
   const map = L.map('map', {
     crs: L.CRS.Simple,
     minZoom: -2,
-    maxZoom: 4
+    maxZoom: 5
   });
 
   // Image dimensions
@@ -106,7 +106,7 @@
 
 // Estimated spacing
     const rowStepY = 162.22;
-    const colStepX = 325.9;
+    const colStepX = 325.8;
     
     const oddColY = rowStepY / -2;
     const oddColX = colStepX / 2;
@@ -151,10 +151,6 @@
     }
   }
 
-  // Zoom to test hex
-  map.setView([centerY, centerX], 2);
-
-  console.log('Hex overlay drawn');
 </script>
 
 </body>
