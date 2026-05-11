@@ -72,6 +72,13 @@
   // Fit map to image
   map.fitBounds(bounds);
 
+  // Prevent excessive panning outside map
+  map.setMaxBounds([
+    [-1000, -1000],
+    [imageHeight + 1000, imageWidth + 1000]
+  ]);
+  
+
   // ============================================
   // TEST HEX: 300:300
   // AppSheet XY = 1.33,1
