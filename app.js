@@ -618,22 +618,104 @@ function renderCodexRegionsIndex() {
   ));
 }
 
+function getPoiNotorietyRank(value) {
+  const order = {
+    "Local": 1,
+    "Regional": 2,
+    "Major": 3,
+    "Legendary": 4
+  };
+
+  return order[value] || 0;
+}
+
+function renderPoiListIntoContainer() {
+  const listEl = document.getElementById("codex-poi-list");
+  const typeFilter = document.getElementById("codex-poi-type-filter")?.value || "all";
+  const sortMode = document.getElementById("codex-poi-sort")?.value || "name";
+
+  let pois = [...(db?.raw?.pois || [])];
+
+  if (typeFilter !== "all") {
+    pois = pois.filter(poi => poi.POI_Type === typeFilter);
+  }
+
+  if (sortMode === "name") {
+    pois.sort((a, b) => String(a.Name || "").localeCompare(String(b.Name || "")));
+  }
+
+  if (sortMode === "type") {
+    pois.sort((a, b) => String(a.POI_Type || "").localeCompare(String(b.POI_Type || "")));
+  }
+
+  if (sortMode === "notoriety") {
+    pois.sort((a, b) => {
+      return getPoiNotorietyRank(b["Notoriety Tier"]) - getPoiNotorietyRank(a["Notoriety Tier"]);
+    });
+  }
+
+  listEl.innerHTML = renderCodexLinkedList(
+    pois,
+    "No points of interest match these filters.",
+    "poi",
+    "POI_ID",
+    row => [
+      row.Name,
+      row.POI_Type,
+      row["Notoriety Tier"] ? `Notoriety: ${row["Notoriety Tier"]}` : ""
+    ].filter(Boolean).join(" — ")
+  );
+}
+
 function renderCodexPoisIndex() {
   const pois = db?.raw?.pois || [];
 
+  const poiTypes = [...new Set(
+    pois
+      .map(poi => poi.POI_Type)
+      .filter(Boolean)
+  )].sort();
+
   setCodexTitle("Points of Interest");
 
-  setCodexContent(renderCodexLinkedList(
-    pois,
-    "No points of interest recorded.",
-    "poi",
-    "POI_ID",
-row => [
-  row.Name,
-  row.POI_Type,
-  row["Notoriety Tier"] ? `Notoriety: ${row["Notoriety Tier"]}` : ""
-].filter(Boolean).join(" — ")
-  ));
+  setCodexContent(`
+    <div class="codex-filter-row">
+      <label>
+        Type
+        <select id="codex-poi-type-filter">
+          <option value="all">All</option>
+          ${poiTypes.map(type => `
+            <option value="${escapeHtml(type)}">${escapeHtml(type)}</option>
+          `).join("")}
+        </select>
+      </label>
+
+      <label>
+        Sort
+        <select id="codex-poi-sort">
+          <option value="name">Name</option>
+          <option value="type">Type</option>
+          <option value="notoriety">Notoriety</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="codex-poi-list"></div>
+  `, [
+    {
+      label: "Codex",
+      clickable: true,
+      onclick: "resetCodexToIndex()"
+    },
+    {
+      label: "Points of Interest"
+    }
+  ]);
+
+  document.getElementById("codex-poi-type-filter").addEventListener("change", renderPoiListIntoContainer);
+  document.getElementById("codex-poi-sort").addEventListener("change", renderPoiListIntoContainer);
+
+  renderPoiListIntoContainer();
 }
 
 function renderCodexNpcsIndex() {
