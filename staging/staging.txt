@@ -1,23 +1,13 @@
-bindCodexListControls({
-    filters: [
-      {
-        fieldId: "codex-poi-filter-1-field",
-        valueId: "codex-poi-filter-1-value",
-        updateOptions: () => updatePoiFilterValueOptions(
-          "codex-poi-filter-1-field",
-          "codex-poi-filter-1-value"
-        )
-      },
-      {
-        fieldId: "codex-poi-filter-2-field",
-        valueId: "codex-poi-filter-2-value",
-        updateOptions: () => updatePoiFilterValueOptions(
-          "codex-poi-filter-2-field",
-          "codex-poi-filter-2-value"
-        )
-      }
-    ],
-    sortId: "codex-poi-sort",
-    directionId: "codex-poi-direction",
-    render: renderPoiListIntoContainer
-  });
+function compareByTextThenName(getPrimary) {
+  return (a, b) => {
+    const primary = compareText(getPrimary(a), getPrimary(b));
+    return primary !== 0 ? primary : compareText(a.Name, b.Name);
+  };
+}
+
+function compareByNumberThenName(getPrimary) {
+  return (a, b) => {
+    const primary = getPrimary(a) - getPrimary(b);
+    return primary !== 0 ? primary : compareText(a.Name, b.Name);
+  };
+}
