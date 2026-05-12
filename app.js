@@ -1171,6 +1171,11 @@ function renderCodexNpcsIndex() {
     renderNpcListIntoContainer
   );
 
+  document.getElementById("codex-npc-occupation-filter").addEventListener(
+    "change",
+    renderNpcListIntoContainer
+  );
+  
   document.getElementById("codex-npc-direction").addEventListener(
     "click",
     function () {
@@ -1510,11 +1515,6 @@ document.getElementById("codex-back").addEventListener("click", function () {
     return;
   }
 
-document.getElementById("codex-npc-occupation-filter").addEventListener(
-  "change",
-  renderNpcListIntoContainer
-);
-  
   goBackCodex();
 });
 
