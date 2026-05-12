@@ -842,44 +842,31 @@ function renderCodexNpcPage(npcId) {
   setCodexTitle(npcName);
 
   setCodexContent(`
-    ${
-      npc?.Title
-        ? `<p class="codex-superheader">${escapeHtml(npc.Title)}</p>`
-        : ""
-    }
+    ${npc?.Title ? `
+      <div class="codex-superheader">${escapeHtml(npc.Title)}</div>
+    ` : ""}
 
-    <p>
-      <strong>Home:</strong>
-      ${
-        home
-          ? `<button class="codex-link-button" type="button" onclick="openCodexPage('poi', '${escapeJsString(home.POI_ID)}')">${escapeHtml(home.Name)}</button>`
-          : escapeHtml(npc?.Home_ID_Ref || "Unknown")
-      }
-    </p>
+    <p><strong>Home:</strong> ${
+      home
+        ? `<button class="codex-link" type="button" onclick="openCodexPage('poi', '${escapeJsString(home.POI_ID)}')">${escapeHtml(home.Name)}</button>`
+        : escapeHtml(npc?.Home_ID_Ref || "Unknown")
+    }</p>
 
     <p><strong>Race:</strong> ${escapeHtml(npc?.Race || "Unknown")}</p>
-    <p><strong>Faction:</strong> ${escapeHtml(npc?.Faction || "Unknown")}</p>
+
     <p><strong>Occupation:</strong> ${escapeHtml(npc?.Occupation || "Unknown")}</p>
 
-    <h3>Lore</h3>
-    <p>${escapeHtml(npc?.Lore || "No lore recorded.")}</p>
+    <p><strong>Faction:</strong> ${escapeHtml(npc?.Faction || "Unknown")}</p>
 
     <h3>DM Journal</h3>
     <p>${escapeHtml(npc?.DM_Journal || "No journal entries.")}</p>
+
+    <h3>Lore</h3>
+    <p>${escapeHtml(npc?.Lore || "No lore recorded.")}</p>
   `, [
-    {
-      label: "Codex",
-      clickable: true,
-      onclick: "resetCodexToIndex()"
-    },
-    {
-      label: "NPCs",
-      clickable: true,
-      onclick: "openCodexPage('npcs')"
-    },
-    {
-      label: npcName
-    }
+    { label: "Codex", clickable: true, onclick: "resetCodexToIndex()" },
+    { label: "NPCs", clickable: true, onclick: "openCodexPage('npcs')" },
+    { label: npcName }
   ]);
 }
 
