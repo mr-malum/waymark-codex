@@ -1,91 +1,55 @@
-function renderCodexPoisIndex() {
-  renderCodexListPage({
-    ...poiCodexListConfig,
+function readCodexSortState(config) {
+  const sortMode =
+    document.getElementById(config.sortId)?.value ||
+    config.selectedSort;
 
-    title: "Points of Interest",
+  const direction =
+    document.getElementById(config.directionId)?.dataset?.direction ||
+    "asc";
 
-    listId: "codex-poi-list",
-
-    breadcrumbs: [
-      { label: "Codex", clickable: true, onclick: "resetCodexToIndex()" },
-      { label: "Points of Interest" }
-    ],
-
-    getFilterOptions: getPoiFilterOptions,
-
-    renderList: renderPoiListIntoContainer
-  });
-}
-
-........ 
-
-function renderCodexNpcsIndex() {
-  renderCodexListPage({
-    ...npcCodexListConfig,
-
-    title: "NPCs",
-
-    listId: "codex-npc-list",
-
-    breadcrumbs: [
-      { label: "Codex", clickable: true, onclick: "resetCodexToIndex()" },
-      { label: "NPCs" }
-    ],
-
-    getFilterOptions: getNpcFilterOptions,
-
-    renderList: renderNpcListIntoContainer
-  });
-}
-
-........ 
-
-function readCodexFilterState(config) {
-  return config.filters.map(filter => {
-    const field =
-      document.getElementById(filter.fieldId)?.value ||
-      filter.fieldValue;
-
-    const value =
-      document.getElementById(filter.id)?.value ||
-      filter.selectedValue ||
-      "all";
-
-    return {
-      field,
-      value
-    };
-  });
+  return {
+    sortMode,
+    direction
+  };
 }
 
 ....... 
 
-const [filterOne, filterTwo] = readCodexFilterState(
-    poiCodexListConfig
-  );
-
-........ 
-
-value: filterOne.value,
-      getValue: poi => getPoiFilterValue(poi, filterOne.field)
-
-........ 
-
-value: filterTwo.value,
-      getValue: poi => getPoiFilterValue(poi, filterTwo.field)
+const {
+    sortMode,
+    direction: sortDirection
+  } = readCodexSortState(poiCodexListConfig);
 
 ....... 
 
-const [filterOne, filterTwo] = readCodexFilterState(
-    npcCodexListConfig
+const {
+    sortMode,
+    direction: sortDirection
+  } = readCodexSortState(npcCodexListConfig);
+
+....... 
+
+function applyConfiguredSort(rows, compareFn, sortDirection) {
+  if (!compareFn) {
+    return rows;
+  }
+
+  return sortRows(rows, compareFn, sortDirection);
+}
+
+....... 
+
+
+pois = applyConfiguredSort(
+    pois,
+    compareFn,
+    sortDirection
   );
 
 ....... 
 
-value: filterOne.value,
-      getValue: npc => getNpcFilterValue(npc, filterOne.field)
-
-........ 
-
-value: filterTwo.value,
-      getValue: npc => getNpcFilterValue(npc, filterTwo.field)
+npcs = applyConfiguredSort(
+    npcs,
+    compareFn,
+    sortDirection
+  );
