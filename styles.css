@@ -345,7 +345,11 @@ button.panel-link.mobile-nav-back {
 }
 
 #app-panel .panel-nav {
-  justify-content: flex-end;
+  justify-content: center;
+}
+
+#mobile-panel-close {
+  margin: 0 auto;
 }
 
 #panel-content .panel-journal-preview {
