@@ -333,6 +333,11 @@ function getCodexBreadcrumbLabel(label) {
   return label;
 }
 
+function getCodexBreadcrumbLabel(label) {
+  if (label === "Points of Interest") return "POIs";
+  return label;
+}
+
 function renderCodexBreadcrumbs(breadcrumbs = []) {
   const breadcrumbsEl = document.getElementById("codex-breadcrumbs");
   if (!breadcrumbsEl) return;
@@ -362,8 +367,13 @@ function renderCodexBreadcrumbs(breadcrumbs = []) {
   }).join("");
 
   const mobileCrumbs = displayCrumbs.slice(-2);
+
   const mobileHtml = `
-    ${displayCrumbs.length > 2 ? `<span class="codex-breadcrumb-ellipsis">...</span><span class="codex-breadcrumb-separator">/</span>` : ""}
+    ${displayCrumbs.length > 2
+      ? `<span class="codex-breadcrumb-ellipsis">...</span><span class="codex-breadcrumb-separator">/</span>`
+      : ""
+    }
+
     ${mobileCrumbs.map((crumb, index) => {
       const isLast = index === mobileCrumbs.length - 1;
 
@@ -374,7 +384,11 @@ function renderCodexBreadcrumbs(breadcrumbs = []) {
             </button>`
           : `<span>${escapeHtml(crumb.label)}</span>`
         }
-        ${!isLast ? `<span class="codex-breadcrumb-separator">/</span>` : ""}
+
+        ${!isLast
+          ? `<span class="codex-breadcrumb-separator">/</span>`
+          : ""
+        }
       `;
     }).join("")}
   `;
@@ -383,6 +397,7 @@ function renderCodexBreadcrumbs(breadcrumbs = []) {
     <div id="codex-breadcrumbs-inner" class="codex-breadcrumbs-desktop">
       ${desktopHtml}
     </div>
+
     <div class="codex-breadcrumbs-mobile">
       ${mobileHtml}
     </div>
