@@ -1,1 +1,73 @@
 
+const poiCodexListConfig = {
+  fieldOptions: [
+    { value: "Type", label: "Type" },
+    { value: "Notoriety", label: "Notoriety" },
+    { value: "Region", label: "Region" }
+  ],
+
+  filters: [
+    {
+      id: "codex-poi-filter-1-value",
+      fieldId: "codex-poi-filter-1-field",
+      label: "Type",
+      fieldValue: "Type",
+      selectedValue: "all"
+    },
+    {
+      id: "codex-poi-filter-2-value",
+      fieldId: "codex-poi-filter-2-field",
+      label: "Notoriety",
+      fieldValue: "Notoriety",
+      selectedValue: "all"
+    }
+  ],
+
+  sortId: "codex-poi-sort",
+  directionId: "codex-poi-direction",
+  selectedSort: "name",
+
+  sortOptions: [
+    { value: "name", label: "Name" },
+    { value: "type", label: "Type" },
+    { value: "notoriety", label: "Notoriety" },
+    { value: "population", label: "Population" },
+    { value: "npc-count", label: "NPC Count" }
+  ]
+};
+
+const npcCodexListConfig = {
+  fieldOptions: [
+    { value: "Race", label: "Race" },
+    { value: "Occupation", label: "Occupation" },
+    { value: "Organization", label: "Organization" },
+    { value: "Home", label: "Home" }
+  ],
+
+  filters: [
+    {
+      id: "codex-npc-filter-1-value",
+      fieldId: "codex-npc-filter-1-field",
+      label: "Race",
+      fieldValue: "Race",
+      selectedValue: "all"
+    },
+    {
+      id: "codex-npc-filter-2-value",
+      fieldId: "codex-npc-filter-2-field",
+      label: "Occupation",
+      fieldValue: "Occupation",
+      selectedValue: "all"
+    }
+  ],
+
+  sortId: "codex-npc-sort",
+  directionId: "codex-npc-direction",
+  selectedSort: "name",
+
+  sortOptions: [
+    { value: "name", label: "Name" },
+    { value: "race", label: "Race" },
+    { value: "occupation", label: "Occupation" }
+  ]
+};
