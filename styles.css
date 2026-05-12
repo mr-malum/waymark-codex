@@ -1100,6 +1100,17 @@ text-shadow:
   opacity: 0.72;
 }
 
+.codex-subheader {
+  margin: 0 0 -4px;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+
+  opacity: 0.72;
+}
+
 /* Themed scrollbars */
 #codex-content,
 #panel-content {
