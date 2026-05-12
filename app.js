@@ -1002,6 +1002,43 @@ function updatePoiFilterValueOptions(fieldSelectId, valueSelectId) {
   );
 }
 
+function bindCodexListControls(config) {
+  config.filters.forEach(filter => {
+
+    document.getElementById(filter.fieldId)?.addEventListener(
+      "change",
+      function () {
+        filter.updateOptions();
+        config.render();
+      }
+    );
+
+    document.getElementById(filter.valueId)?.addEventListener(
+      "change",
+      config.render
+    );
+
+  });
+
+  document.getElementById(config.sortId)?.addEventListener(
+    "change",
+    config.render
+  );
+
+  document.getElementById(config.directionId)?.addEventListener(
+    "click",
+    function () {
+      const current = this.dataset.direction || "asc";
+      const next = current === "asc" ? "desc" : "asc";
+
+      this.dataset.direction = next;
+      this.textContent = next === "asc" ? "↑ ASC" : "↓ DESC";
+
+      config.render();
+    }
+  );
+}
+
 function renderPoiListIntoContainer() {
   const listEl = document.getElementById("codex-poi-list");
 
