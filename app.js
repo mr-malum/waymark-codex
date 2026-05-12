@@ -922,12 +922,25 @@ function getNpcHomeLabel(npc) {
   return home?.Name || npc.Home_ID_Ref || "";
 }
 
+
 function getNpcFilterValue(npc, field) {
   if (field === "Race") return npc.Race || "";
   if (field === "Occupation") return npc.Occupation || "";
   if (field === "Organization") return npc?.Organization || "";
   if (field === "Home") return getNpcHomeLabel(npc);
+  return "";
+}
 
+function getPoiRegionLabel(poi) {
+  const hex = poi.Hex_ID_Ref ? db?.hexesById?.[poi.Hex_ID_Ref] : null;
+  const region = hex?.Region_ID_Ref ? db?.regionsById?.[hex.Region_ID_Ref] : null;
+  return region?.Region_Name || hex?.Region_ID_Ref || "";
+}
+
+function getPoiFilterValue(poi, field) {
+  if (field === "Type") return poi.POI_Type || "";
+  if (field === "Notoriety") return poi["Notoriety Tier"] || "";
+  if (field === "Region") return getPoiRegionLabel(poi);
   return "";
 }
 
@@ -939,27 +952,53 @@ function getUniqueValues(rows, getValue) {
   )].sort();
 }
 
-function getNpcFilterOptions(field) {
-  const npcs = db?.raw?.npcs || [];
-
+function getDynamicFilterOptions(rows, getValue) {
   return [
     { value: "all", label: "All" },
-    ...getUniqueValues(npcs, npc => getNpcFilterValue(npc, field)).map(value => ({
+    ...getUniqueValues(rows, getValue).map(value => ({
       value,
       label: value
     }))
   ];
 }
 
-function updateNpcFilterValueOptions(fieldSelectId, valueSelectId) {
-  const field = document.getElementById(fieldSelectId)?.value || "Race";
+function getNpcFilterOptions(field) {
+  const npcs = db?.raw?.npcs || [];
+  return getDynamicFilterOptions(npcs, npc => getNpcFilterValue(npc, field));
+}
+
+function getPoiFilterOptions(field) {
+  const pois = db?.raw?.pois || [];
+  return getDynamicFilterOptions(pois, poi => getPoiFilterValue(poi, field));
+}
+
+function updateDynamicFilterValueOptions(fieldSelectId, valueSelectId, getOptions, fallbackField) {
+  const field = document.getElementById(fieldSelectId)?.value || fallbackField;
   const valueSelect = document.getElementById(valueSelectId);
 
   if (!valueSelect) return;
 
   valueSelect.innerHTML = renderCodexSelectOptions(
-    getNpcFilterOptions(field),
+    getOptions(field),
     "all"
+  );
+}
+
+function updateNpcFilterValueOptions(fieldSelectId, valueSelectId) {
+  updateDynamicFilterValueOptions(
+    fieldSelectId,
+    valueSelectId,
+    getNpcFilterOptions,
+    "Race"
+  );
+}
+
+function updatePoiFilterValueOptions(fieldSelectId, valueSelectId) {
+  updateDynamicFilterValueOptions(
+    fieldSelectId,
+    valueSelectId,
+    getPoiFilterOptions,
+    "Type"
   );
 }
 
