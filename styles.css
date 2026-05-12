@@ -1343,8 +1343,12 @@ text-shadow:
   appearance: none;
   -webkit-appearance: none;
 
+  display: block;
+
   height: 34px;
   min-height: 0;
+
+  line-height: 34px;
 
   width: auto;
   min-width: 0;
