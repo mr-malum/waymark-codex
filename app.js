@@ -294,6 +294,13 @@ function panHexIntoInspectorView(hexId) {
   });
 }
 
+function resetMapToAtlasView() {
+  map.closePopup();
+  clearSelectedHex();
+  selectedHexId = null;
+  map.fitBounds(bounds, { animate: true, duration: 0.5 });
+}
+
 function centerHexInView(hexId) {
   const [xxx, yyy] = hexId.split(":").map(Number);
   const center = getHexCenter(xxx, yyy);
@@ -321,46 +328,36 @@ function setCodexTitle(title) {
   document.getElementById("codex-title").textContent = title;
 }
 
+function renderCodexBreadcrumbs(breadcrumbs = []) {
+  const breadcrumbsEl = document.getElementById("codex-breadcrumbs");
+  if (!breadcrumbsEl) return;
+
+  breadcrumbsEl.innerHTML = breadcrumbs.length ? `
+    <div id="codex-breadcrumbs-inner">
+      ${breadcrumbs.map((crumb, index) => {
+        const isLast = index === breadcrumbs.length - 1;
+
+        return `
+          ${crumb.clickable && !isLast
+            ? `<button class="codex-breadcrumb-button" type="button" onclick="${crumb.onclick}">
+                ${escapeHtml(crumb.label)}
+              </button>`
+            : `<span>${escapeHtml(crumb.label)}</span>`
+          }
+          ${!isLast ? `<span class="codex-breadcrumb-separator">/</span>` : ""}
+        `;
+      }).join("")}
+    </div>
+  ` : "";
+}
+
 function setCodexContent(html, breadcrumbs = []) {
   const content = document.getElementById("codex-content");
-
   content.className = "";
 
-  const breadcrumbHtml = breadcrumbs.length
-    ? `
-      <div id="codex-breadcrumbs">
-        ${breadcrumbs.map((crumb, index) => {
-          const isLast = index === breadcrumbs.length - 1;
+  renderCodexBreadcrumbs(breadcrumbs);
 
-          return `
-            ${
-              crumb.clickable && !isLast
-                ? `
-                  <button
-                    class="codex-breadcrumb-button"
-                    type="button"
-                    onclick="${crumb.onclick}"
-                  >
-                    ${escapeHtml(crumb.label)}
-                  </button>
-                `
-                : `
-                  <span>${escapeHtml(crumb.label)}</span>
-                `
-            }
-
-            ${
-              !isLast
-                ? `<span class="codex-breadcrumb-separator">/</span>`
-                : ""
-            }
-          `;
-        }).join("")}
-      </div>
-    `
-    : "";
-
-  content.innerHTML = breadcrumbHtml + html;
+  content.innerHTML = html;
 }
 
 function updateCodexBackButton() {
@@ -378,9 +375,8 @@ function updateCodexBackButton() {
 function openCodexPage(type = "index", id = null, options = {}) {
   const shouldPush = options.push !== false;
 
-  map.closePopup();
-  closePanel();
-
+  closePanel({ clearSelection: true });
+  resetMapToAtlasView();
   openCodex();
 
   if (shouldPush) {
@@ -1706,25 +1702,17 @@ document.getElementById("codex-button").addEventListener("click", function (even
   }
 
   codexButton.classList.remove("codex-label-visible");
-
+  resetMapToAtlasView();
   resetCodexToIndex();
 });
 
 document.getElementById("map-reset-button").addEventListener("click", function (event) {
   event.stopPropagation();
 
-  closePanel({
-    clearSelection: true
-  });
-
+  closePanel({ clearSelection: true });
   closeCodex();
-  map.closePopup();
-
-  map.fitBounds(bounds, {
-    animate: true,
-    duration: 0.5
+  resetMapToAtlasView();
   });
-});
 
 document.getElementById("codex-close").addEventListener("click", function () {
   closeCodex();
