@@ -440,6 +440,10 @@ function renderCodexIndex() {
   `;
 }
 
+// ======================
+// CODEX LABEL HELPERS
+// ======================
+
 function joinCodexLabel(title, meta = []) {
   return [
     title,
@@ -533,6 +537,24 @@ function buildSearchResultLabel(result) {
     result.title,
     result.meta || []
   );
+}
+
+// ======================
+// SORT / FILTER HELPERS
+// ======================
+
+function compareText(a, b) {
+  return String(a || "").localeCompare(String(b || ""));
+}
+
+function applySortDirection(result, direction) {
+  return direction === "desc" ? -result : result;
+}
+
+function sortRows(rows, compareFn, direction = "asc") {
+  return [...rows].sort((a, b) => {
+    return applySortDirection(compareFn(a, b), direction);
+  });
 }
 
 function renderCodexHexPage(hexId) {
