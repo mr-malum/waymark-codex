@@ -1375,6 +1375,17 @@ text-shadow:
   align-self: flex-start;
 }
 
+.codex-dynamic-filter select:not(.codex-filter-field-select) {
+  width: auto;
+  max-width: 220px;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  align-self: flex-start;
+}
+
 /* =========================================================
    CODEX DETAIL PAGE TYPOGRAPHY
    ========================================================= */
