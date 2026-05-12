@@ -600,9 +600,15 @@ function renderCodexListControls(config) {
             id="${escapeHtml(filter.fieldId || `${filter.id}-field`)}"
             class="codex-filter-field-select"
           >
-            <option value="${escapeHtml(filter.fieldValue || filter.id)}">
-              ${escapeHtml(filter.label)}
-            </option>
+              ${renderCodexSelectOptions(
+                filter.fieldOptions || [
+                  {
+                    value: filter.fieldValue || filter.id,
+                    label: filter.label
+                  }
+                ],
+                filter.fieldValue || filter.id
+              )}
           </select>
 
           <select id="${escapeHtml(filter.id)}">
@@ -934,18 +940,39 @@ pois = applyFilters(pois, [
   }
 ]);
 
-  let compareFn = null;
+let compareFn = null;
 
-  if (sortMode === "name") {
-    compareFn = (a, b) =>
-      String(a.Name || "").localeCompare(String(b.Name || ""));
-  }
+if (sortMode === "name") {
+  compareFn = (a, b) =>
+    compareText(a.Name, b.Name);
+}
 
-  if (sortMode === "type") {
-    compareFn = (a, b) => {
-      const primary =
-        compareText(a.POI_Type, b.POI_Type);
+if (sortMode === "type") {
+  compareFn = (a, b) => {
+    const primary =
+      compareText(a.POI_Type, b.POI_Type);
 
+    return primary !== 0
+      ? primary
+      : compareText(a.Name, b.Name);
+  };
+}
+
+if (sortMode === "population") {
+  compareFn = (a, b) => {
+    const aPop =
+      Number(String(a.Population || "").replace(/[^\d]/g, "")) || 0;
+
+    const bPop =
+      Number(String(b.Population || "").replace(/[^\d]/g, "")) || 0;
+
+    const primary = aPop - bPop;
+
+    return primary !== 0
+      ? primary
+      : compareText(a.Name, b.Name);
+  };
+}
       if (primary !== 0) return primary;
 
       return String(a.Name || "").localeCompare(String(b.Name || ""));
@@ -1088,6 +1115,7 @@ ${renderCodexListControls({
         { value: "name", label: "Name" },
         { value: "type", label: "Type" },
         { value: "notoriety", label: "Notoriety" }
+        { value: "population", label: "Population" }
       ],
       directionId: "codex-poi-direction",
       direction: "asc"
@@ -1174,57 +1202,71 @@ function renderCodexNpcsIndex() {
 
   setCodexTitle("NPCs");
 
-  setCodexContent(`
-    ${renderCodexListControls({
-      filters: [
-        {
-          id: "codex-npc-race-filter",
-          label: "Race",
-          selectedValue: "all",
-          options: [
-            { value: "all", label: "All" },
-            ...npcRaces.map(race => ({
-              value: race,
-              label: race
-            }))
-          ]
-        },
-    
-        {
-          id: "codex-npc-occupation-filter",
-          label: "Occupation",
-          selectedValue: "all",
-          options: [
-            { value: "all", label: "All" },
-            ...npcOccupations.map(occupation => ({
-              value: occupation,
-              label: occupation
-            }))
-          ]
-        }
-      ],
-      sortId: "codex-npc-sort",
-      selectedSort: "name",
-      sortOptions: [
-        { value: "name", label: "Name" },
-        { value: "race", label: "Race" },
-        { value: "occupation", label: "Occupation" }
-      ],
-      directionId: "codex-npc-direction",
-      direction: "asc"
-    })}
+setCodexContent(`
+  ${renderCodexListControls({
+    filters: [
+      {
+        id: "codex-npc-race-filter",
+        label: "Race",
+        fieldValue: "Race",
+        fieldOptions: [
+          { value: "Race", label: "Race" },
+          { value: "Occupation", label: "Occupation" },
+          { value: "Faction", label: "Faction" },
+          { value: "Home", label: "Home" }
+        ],
+        selectedValue: "all",
+        options: [
+          { value: "all", label: "All" },
+          ...npcRaces.map(race => ({
+            value: race,
+            label: race
+          }))
+        ]
+      },
 
-    <div id="codex-npc-list"></div>
-  `, [
-    {
-      label: "Codex",
-      clickable: true,
-      onclick: "resetCodexToIndex()"
-    },
-    {
-      label: "NPCs"
-    }
-  ]);
+      {
+        id: "codex-npc-occupation-filter",
+        label: "Occupation",
+        fieldValue: "Occupation",
+        fieldOptions: [
+          { value: "Race", label: "Race" },
+          { value: "Occupation", label: "Occupation" },
+          { value: "Faction", label: "Faction" },
+          { value: "Home", label: "Home" }
+        ],
+        selectedValue: "all",
+        options: [
+          { value: "all", label: "All" },
+          ...npcOccupations.map(occupation => ({
+            value: occupation,
+            label: occupation
+          }))
+        ]
+      }
+    ],
+    sortId: "codex-npc-sort",
+    selectedSort: "name",
+    sortOptions: [
+      { value: "name", label: "Name" },
+      { value: "race", label: "Race" },
+      { value: "occupation", label: "Occupation" }
+    ],
+    directionId: "codex-npc-direction",
+    direction: "asc"
+  })}
+
+  <div id="codex-npc-list"></div>
+`, [
+  {
+    label: "Codex",
+    clickable: true,
+    onclick: "resetCodexToIndex()"
+  },
+  {
+    label: "NPCs"
+  }
+]);
 
   document.getElementById("codex-npc-race-filter").addEventListener(
     "change",
