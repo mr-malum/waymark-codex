@@ -843,11 +843,12 @@ function renderCodexNpcPage(npcId) {
 
   setCodexContent(`
     ${
-    npc?.Title
-      ? `<p class="codex-superheader">${escapeHtml(npc.Title)}</p>`
-      : ""
-   }
-      <p>
+      npc?.Title
+        ? `<p class="codex-superheader">${escapeHtml(npc.Title)}</p>`
+        : ""
+    }
+
+    <p>
       <strong>Home:</strong>
       ${
         home
@@ -916,66 +917,103 @@ function getPoiNotorietyRank(value) {
   return fallbackOrder[clean] || 999;
 }
 
+function getNpcHomeLabel(npc) {
+  const home = npc.Home_ID_Ref
+    ? db?.poisById?.[npc.Home_ID_Ref]
+    : null;
+
+  return home?.Name || npc.Home_ID_Ref || "";
+}
+
+function getNpcFilterValue(npc, field) {
+  if (field === "Race") return npc.Race || "";
+  if (field === "Occupation") return npc.Occupation || "";
+  if (field === "Faction") return npc.Faction || "";
+  if (field === "Home") return getNpcHomeLabel(npc);
+
+  return "";
+}
+
+function getUniqueValues(rows, getValue) {
+  return [...new Set(
+    rows
+      .map(getValue)
+      .filter(Boolean)
+  )].sort();
+}
+
+function getNpcFilterOptions(field) {
+  const npcs = db?.raw?.npcs || [];
+
+  return [
+    { value: "all", label: "All" },
+    ...getUniqueValues(npcs, npc => getNpcFilterValue(npc, field)).map(value => ({
+      value,
+      label: value
+    }))
+  ];
+}
+
+function updateNpcFilterValueOptions(fieldSelectId, valueSelectId) {
+  const field = document.getElementById(fieldSelectId)?.value || "Race";
+  const valueSelect = document.getElementById(valueSelectId);
+
+  if (!valueSelect) return;
+
+  valueSelect.innerHTML = renderCodexSelectOptions(
+    getNpcFilterOptions(field),
+    "all"
+  );
+}
+
 function renderPoiListIntoContainer() {
   const listEl = document.getElementById("codex-poi-list");
   const typeFilter = document.getElementById("codex-poi-type-filter")?.value || "all";
-  const notorietyFilter =
-    document.getElementById("codex-poi-notoriety-filter")?.value || "all";
+  const notorietyFilter = document.getElementById("codex-poi-notoriety-filter")?.value || "all";
   const sortMode = document.getElementById("codex-poi-sort")?.value || "name";
   const directionButton = document.getElementById("codex-poi-direction");
-
-  const sortDirection =
-    directionButton?.dataset?.direction || "asc";
+  const sortDirection = directionButton?.dataset?.direction || "asc";
 
   let pois = [...(db?.raw?.pois || [])];
 
-pois = applyFilters(pois, [
-  {
-    field: "POI_Type",
-    value: typeFilter
-  },
-  {
-    field: "Notoriety Tier",
-    value: notorietyFilter
+  pois = applyFilters(pois, [
+    {
+      field: "POI_Type",
+      value: typeFilter
+    },
+    {
+      field: "Notoriety Tier",
+      value: notorietyFilter
+    }
+  ]);
+
+  let compareFn = null;
+
+  if (sortMode === "name") {
+    compareFn = (a, b) =>
+      compareText(a.Name, b.Name);
   }
-]);
 
-let compareFn = null;
+  if (sortMode === "type") {
+    compareFn = (a, b) => {
+      const primary = compareText(a.POI_Type, b.POI_Type);
 
-if (sortMode === "name") {
-  compareFn = (a, b) =>
-    compareText(a.Name, b.Name);
-}
+      return primary !== 0
+        ? primary
+        : compareText(a.Name, b.Name);
+    };
+  }
 
-if (sortMode === "type") {
-  compareFn = (a, b) => {
-    const primary =
-      compareText(a.POI_Type, b.POI_Type);
+  if (sortMode === "population") {
+    compareFn = (a, b) => {
+      const aPop = Number(String(a.Population || "").replace(/[^\d]/g, "")) || 0;
+      const bPop = Number(String(b.Population || "").replace(/[^\d]/g, "")) || 0;
 
-    return primary !== 0
-      ? primary
-      : compareText(a.Name, b.Name);
-  };
-}
+      const primary = aPop - bPop;
 
-if (sortMode === "population") {
-  compareFn = (a, b) => {
-    const aPop =
-      Number(String(a.Population || "").replace(/[^\d]/g, "")) || 0;
-
-    const bPop =
-      Number(String(b.Population || "").replace(/[^\d]/g, "")) || 0;
-
-    const primary = aPop - bPop;
-
-    return primary !== 0
-      ? primary
-      : compareText(a.Name, b.Name);
-  };
-}
-      if (primary !== 0) return primary;
-
-      return String(a.Name || "").localeCompare(String(b.Name || ""));
+      return primary !== 0
+        ? primary
+        : compareText(a.Name, b.Name);
     };
   }
 
@@ -985,19 +1023,15 @@ if (sortMode === "population") {
         getPoiNotorietyRank(a["Notoriety Tier"]) -
         getPoiNotorietyRank(b["Notoriety Tier"]);
 
-      if (primary !== 0) return primary;
-
-      return compareText(a.Name, b.Name);
+      return primary !== 0
+        ? primary
+        : compareText(a.Name, b.Name);
     };
   }
 
-      if (compareFn) {
-        pois = sortRows(
-          pois,
-          compareFn,
-          sortDirection
-        );
-      }
+  if (compareFn) {
+    pois = sortRows(pois, compareFn, sortDirection);
+  }
 
   listEl.innerHTML = renderCodexLinkedList(
     pois,
@@ -1010,9 +1044,13 @@ if (sortMode === "population") {
 
 function renderNpcListIntoContainer() {
   const listEl = document.getElementById("codex-npc-list");
-  const raceFilter = document.getElementById("codex-npc-race-filter")?.value || "all";
-  const occupationFilter =
-  document.getElementById("codex-npc-occupation-filter")?.value || "all";
+
+  const fieldOne = document.getElementById("codex-npc-filter-1-field")?.value || "Race";
+  const valueOne = document.getElementById("codex-npc-filter-1-value")?.value || "all";
+
+  const fieldTwo = document.getElementById("codex-npc-filter-2-field")?.value || "Occupation";
+  const valueTwo = document.getElementById("codex-npc-filter-2-value")?.value || "all";
+
   const sortMode = document.getElementById("codex-npc-sort")?.value || "name";
   const directionButton = document.getElementById("codex-npc-direction");
   const sortDirection = directionButton?.dataset?.direction || "asc";
@@ -1021,12 +1059,12 @@ function renderNpcListIntoContainer() {
 
   npcs = applyFilters(npcs, [
     {
-      field: "Race",
-      value: raceFilter
+      value: valueOne,
+      getValue: npc => getNpcFilterValue(npc, fieldOne)
     },
     {
-      field: "Occupation",
-      value: occupationFilter
+      value: valueTwo,
+      getValue: npc => getNpcFilterValue(npc, fieldTwo)
     }
   ]);
 
@@ -1073,48 +1111,58 @@ function renderCodexPoisIndex() {
   )].sort();
 
   const poiNotorietyTiers = [...new Set(
-  pois
-    .map(poi => poi["Notoriety Tier"])
-    .filter(Boolean)
+    pois
+      .map(poi => poi["Notoriety Tier"])
+      .filter(Boolean)
   )].sort();
-  
+
   setCodexTitle("Points of Interest");
 
   setCodexContent(`
-${renderCodexListControls({
-  filters: [
-    {
-      id: "codex-poi-type-filter",
-      label: "Type",
-      selectedValue: "all",
-      options: [
-        { value: "all", label: "All" },
-        ...poiTypes.map(type => ({
-          value: type,
-          label: type
-        }))
-      ]
-    },
+    ${renderCodexListControls({
+      filters: [
+        {
+          id: "codex-poi-type-filter",
+          label: "Type",
+          fieldValue: "Type",
+          fieldOptions: [
+            { value: "Type", label: "Type" },
+            { value: "Notoriety", label: "Notoriety" }
+          ],
+          selectedValue: "all",
+          options: [
+            { value: "all", label: "All" },
+            ...poiTypes.map(type => ({
+              value: type,
+              label: type
+            }))
+          ]
+        },
 
-    {
-      id: "codex-poi-notoriety-filter",
-      label: "Notoriety",
-      selectedValue: "all",
-      options: [
-        { value: "all", label: "All" },
-        ...poiNotorietyTiers.map(tier => ({
-          value: tier,
-          label: tier
-        }))
-      ]
-    }
-  ],
+        {
+          id: "codex-poi-notoriety-filter",
+          label: "Notoriety",
+          fieldValue: "Notoriety",
+          fieldOptions: [
+            { value: "Type", label: "Type" },
+            { value: "Notoriety", label: "Notoriety" }
+          ],
+          selectedValue: "all",
+          options: [
+            { value: "all", label: "All" },
+            ...poiNotorietyTiers.map(tier => ({
+              value: tier,
+              label: tier
+            }))
+          ]
+        }
+      ],
       sortId: "codex-poi-sort",
       selectedSort: "name",
       sortOptions: [
         { value: "name", label: "Name" },
         { value: "type", label: "Type" },
-        { value: "notoriety", label: "Notoriety" }
+        { value: "notoriety", label: "Notoriety" },
         { value: "population", label: "Population" }
       ],
       directionId: "codex-poi-direction",
@@ -1139,8 +1187,8 @@ ${renderCodexListControls({
   );
 
   document.getElementById("codex-poi-notoriety-filter").addEventListener(
-  "change",
-  renderPoiListIntoContainer
+    "change",
+    renderPoiListIntoContainer
   );
 
   document.getElementById("codex-poi-sort").addEventListener(
@@ -1168,107 +1216,91 @@ ${renderCodexListControls({
 }
 
 function renderCodexNpcsIndex() {
-  const npcs = db?.raw?.npcs || [];
-
-  const npcRaces = [...new Set(
-    npcs
-      .map(npc => npc.Race)
-      .filter(Boolean)
-  )].sort();
-
-  const npcOccupations = [...new Set(
-    npcs
-      .map(npc => npc.Occupation)
-      .filter(Boolean)
-  )].sort();
-
-  const npcFactions = [...new Set(
-  npcs
-    .map(npc => npc.Faction)
-    .filter(Boolean)
-)].sort();
-
-  const npcHomes = [...new Set(
-    npcs
-      .map(npc => {
-        const home = npc.Home_ID_Ref
-          ? db?.poisById?.[npc.Home_ID_Ref]
-          : null;
-
-      return home?.Name || npc.Home_ID_Ref;
-    })
-    .filter(Boolean)
-)].sort();
+  const npcFieldOptions = [
+    { value: "Race", label: "Race" },
+    { value: "Occupation", label: "Occupation" },
+    { value: "Faction", label: "Faction" },
+    { value: "Home", label: "Home" }
+  ];
 
   setCodexTitle("NPCs");
 
-setCodexContent(`
-  ${renderCodexListControls({
-    filters: [
-      {
-        id: "codex-npc-race-filter",
-        label: "Race",
-        fieldValue: "Race",
-        fieldOptions: [
-          { value: "Race", label: "Race" },
-          { value: "Occupation", label: "Occupation" },
-          { value: "Faction", label: "Faction" },
-          { value: "Home", label: "Home" }
-        ],
-        selectedValue: "all",
-        options: [
-          { value: "all", label: "All" },
-          ...npcRaces.map(race => ({
-            value: race,
-            label: race
-          }))
-        ]
-      },
+  setCodexContent(`
+    ${renderCodexListControls({
+      filters: [
+        {
+          id: "codex-npc-filter-1-value",
+          fieldId: "codex-npc-filter-1-field",
+          label: "Race",
+          fieldValue: "Race",
+          fieldOptions: npcFieldOptions,
+          selectedValue: "all",
+          options: getNpcFilterOptions("Race")
+        },
 
-      {
-        id: "codex-npc-occupation-filter",
-        label: "Occupation",
-        fieldValue: "Occupation",
-        fieldOptions: [
-          { value: "Race", label: "Race" },
-          { value: "Occupation", label: "Occupation" },
-          { value: "Faction", label: "Faction" },
-          { value: "Home", label: "Home" }
-        ],
-        selectedValue: "all",
-        options: [
-          { value: "all", label: "All" },
-          ...npcOccupations.map(occupation => ({
-            value: occupation,
-            label: occupation
-          }))
-        ]
-      }
-    ],
-    sortId: "codex-npc-sort",
-    selectedSort: "name",
-    sortOptions: [
-      { value: "name", label: "Name" },
-      { value: "race", label: "Race" },
-      { value: "occupation", label: "Occupation" }
-    ],
-    directionId: "codex-npc-direction",
-    direction: "asc"
-  })}
+        {
+          id: "codex-npc-filter-2-value",
+          fieldId: "codex-npc-filter-2-field",
+          label: "Occupation",
+          fieldValue: "Occupation",
+          fieldOptions: npcFieldOptions,
+          selectedValue: "all",
+          options: getNpcFilterOptions("Occupation")
+        }
+      ],
+      sortId: "codex-npc-sort",
+      selectedSort: "name",
+      sortOptions: [
+        { value: "name", label: "Name" },
+        { value: "race", label: "Race" },
+        { value: "occupation", label: "Occupation" }
+      ],
+      directionId: "codex-npc-direction",
+      direction: "asc"
+    })}
 
-  <div id="codex-npc-list"></div>
-`, [
-  {
-    label: "Codex",
-    clickable: true,
-    onclick: "resetCodexToIndex()"
-  },
-  {
-    label: "NPCs"
-  }
-]);
+    <div id="codex-npc-list"></div>
+  `, [
+    {
+      label: "Codex",
+      clickable: true,
+      onclick: "resetCodexToIndex()"
+    },
+    {
+      label: "NPCs"
+    }
+  ]);
 
-  document.getElementById("codex-npc-race-filter").addEventListener(
+  document.getElementById("codex-npc-filter-1-field").addEventListener(
+    "change",
+    function () {
+      updateNpcFilterValueOptions(
+        "codex-npc-filter-1-field",
+        "codex-npc-filter-1-value"
+      );
+
+      renderNpcListIntoContainer();
+    }
+  );
+
+  document.getElementById("codex-npc-filter-2-field").addEventListener(
+    "change",
+    function () {
+      updateNpcFilterValueOptions(
+        "codex-npc-filter-2-field",
+        "codex-npc-filter-2-value"
+      );
+
+      renderNpcListIntoContainer();
+    }
+  );
+
+  document.getElementById("codex-npc-filter-1-value").addEventListener(
+    "change",
+    renderNpcListIntoContainer
+  );
+
+  document.getElementById("codex-npc-filter-2-value").addEventListener(
     "change",
     renderNpcListIntoContainer
   );
@@ -1278,11 +1310,6 @@ setCodexContent(`
     renderNpcListIntoContainer
   );
 
-  document.getElementById("codex-npc-occupation-filter").addEventListener(
-    "change",
-    renderNpcListIntoContainer
-  );
-  
   document.getElementById("codex-npc-direction").addEventListener(
     "click",
     function () {
