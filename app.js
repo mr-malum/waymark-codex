@@ -855,7 +855,7 @@ function renderCodexNpcPage(npcId) {
 
     <p><strong>Occupation:</strong> ${escapeHtml(npc?.Occupation || "Unknown")}</p>
 
-    <p><strong>Faction:</strong> ${escapeHtml(npc?.Faction || "Unknown")}</p>
+    <p><strong>Organization:</strong> ${escapeHtml(npc?.Organization || "Unknown")}</p>
 
     <h3>DM Journal</h3>
     <p>${escapeHtml(npc?.DM_Journal || "No journal entries.")}</p>
@@ -914,7 +914,7 @@ function getNpcHomeLabel(npc) {
 function getNpcFilterValue(npc, field) {
   if (field === "Race") return npc.Race || "";
   if (field === "Occupation") return npc.Occupation || "";
-  if (field === "Faction") return npc.Faction || "";
+  if (field === "Organization") return npc?.Organization || "";
   if (field === "Home") return getNpcHomeLabel(npc);
 
   return "";
@@ -1205,7 +1205,7 @@ function renderCodexNpcsIndex() {
   const npcFieldOptions = [
     { value: "Race", label: "Race" },
     { value: "Occupation", label: "Occupation" },
-    { value: "Faction", label: "Faction" },
+    { value: "Organization", label: "Organization" },
     { value: "Home", label: "Home" }
   ];
 
@@ -1415,16 +1415,18 @@ function renderCodexSearchResults(query) {
     }
   });
 
-  (db?.raw?.npcs || []).forEach(npc => {
-    const haystack = [
-      npc.NPC_ID,
-      npc.Name,
-      npc.Race,
-      npc.Occupation,
-      npc.Home_ID_Ref,
-      npc.Lore,
-      npc.DM_Journal
-    ].join(" ").toLowerCase();
+      const haystack = [
+        npc.NPC_ID,
+        npc.Name,
+        npc.Title,
+        npc.Race,
+        npc.Organization,
+        npc.Occupation,
+        npc.Home_ID_Ref,
+        getNpcHomeLabel(npc),
+        npc.Lore,
+        npc.DM_Journal
+      ].join(" ").toLowerCase();
 
     if (haystack.includes(cleanQuery)) {
       results.push({
