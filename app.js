@@ -1002,6 +1002,20 @@ function updatePoiFilterValueOptions(fieldSelectId, valueSelectId) {
   );
 }
 
+function compareByTextThenName(getPrimary) {
+  return (a, b) => {
+    const primary = compareText(getPrimary(a), getPrimary(b));
+    return primary !== 0 ? primary : compareText(a.Name, b.Name);
+  };
+}
+
+function compareByNumberThenName(getPrimary) {
+  return (a, b) => {
+    const primary = getPrimary(a) - getPrimary(b);
+    return primary !== 0 ? primary : compareText(a.Name, b.Name);
+  };
+}
+
 function bindCodexListControls(config) {
   config.filters.forEach(filter => {
 
