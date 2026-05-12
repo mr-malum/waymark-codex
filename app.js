@@ -1206,13 +1206,37 @@ const poiCodexListConfig = {
   directionId: "codex-poi-direction",
   selectedSort: "name",
 
-  sortOptions: [
+sortOptions: [
     { value: "name", label: "Name" },
     { value: "type", label: "Type" },
     { value: "notoriety", label: "Notoriety" },
     { value: "population", label: "Population" },
     { value: "npc-count", label: "NPC Count" }
-  ]
+  ],
+
+  bindControls: () => bindCodexListControls({
+    filters: [
+      {
+        fieldId: "codex-poi-filter-1-field",
+        valueId: "codex-poi-filter-1-value",
+        updateOptions: () => updatePoiFilterValueOptions(
+          "codex-poi-filter-1-field",
+          "codex-poi-filter-1-value"
+        )
+      },
+      {
+        fieldId: "codex-poi-filter-2-field",
+        valueId: "codex-poi-filter-2-value",
+        updateOptions: () => updatePoiFilterValueOptions(
+          "codex-poi-filter-2-field",
+          "codex-poi-filter-2-value"
+        )
+      }
+    ],
+    sortId: "codex-poi-sort",
+    directionId: "codex-poi-direction",
+    render: renderPoiListIntoContainer
+  })
 };
 
 const npcCodexListConfig = {
@@ -1244,11 +1268,35 @@ const npcCodexListConfig = {
   directionId: "codex-npc-direction",
   selectedSort: "name",
 
-  sortOptions: [
+sortOptions: [
     { value: "name", label: "Name" },
     { value: "race", label: "Race" },
     { value: "occupation", label: "Occupation" }
-  ]
+  ],
+
+  bindControls: () => bindCodexListControls({
+    filters: [
+      {
+        fieldId: "codex-npc-filter-1-field",
+        valueId: "codex-npc-filter-1-value",
+        updateOptions: () => updateNpcFilterValueOptions(
+          "codex-npc-filter-1-field",
+          "codex-npc-filter-1-value"
+        )
+      },
+      {
+        fieldId: "codex-npc-filter-2-field",
+        valueId: "codex-npc-filter-2-value",
+        updateOptions: () => updateNpcFilterValueOptions(
+          "codex-npc-filter-2-field",
+          "codex-npc-filter-2-value"
+        )
+      }
+    ],
+    sortId: "codex-npc-sort",
+    directionId: "codex-npc-direction",
+    render: renderNpcListIntoContainer
+  })
 };
 
 function renderCodexPoisIndex() {
@@ -1274,29 +1322,7 @@ function renderCodexPoisIndex() {
     { label: "Points of Interest" }
   ]);
 
-bindCodexListControls({
-    filters: [
-      {
-        fieldId: "codex-poi-filter-1-field",
-        valueId: "codex-poi-filter-1-value",
-        updateOptions: () => updatePoiFilterValueOptions(
-          "codex-poi-filter-1-field",
-          "codex-poi-filter-1-value"
-        )
-      },
-      {
-        fieldId: "codex-poi-filter-2-field",
-        valueId: "codex-poi-filter-2-value",
-        updateOptions: () => updatePoiFilterValueOptions(
-          "codex-poi-filter-2-field",
-          "codex-poi-filter-2-value"
-        )
-      }
-    ],
-    sortId: "codex-poi-sort",
-    directionId: "codex-poi-direction",
-    render: renderPoiListIntoContainer
-  });
+    poiCodexListConfig.bindControls();
   
   renderPoiListIntoContainer();
 }
@@ -1331,29 +1357,7 @@ function renderCodexNpcsIndex() {
     }
   ]);
 
-bindCodexListControls({
-    filters: [
-      {
-        fieldId: "codex-npc-filter-1-field",
-        valueId: "codex-npc-filter-1-value",
-        updateOptions: () => updateNpcFilterValueOptions(
-          "codex-npc-filter-1-field",
-          "codex-npc-filter-1-value"
-        )
-      },
-      {
-        fieldId: "codex-npc-filter-2-field",
-        valueId: "codex-npc-filter-2-value",
-        updateOptions: () => updateNpcFilterValueOptions(
-          "codex-npc-filter-2-field",
-          "codex-npc-filter-2-value"
-        )
-      }
-    ],
-    sortId: "codex-npc-sort",
-    directionId: "codex-npc-direction",
-    render: renderNpcListIntoContainer
-  });
+    npcCodexListConfig.bindControls();
   
   renderNpcListIntoContainer();
 }
