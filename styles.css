@@ -1348,13 +1348,13 @@ text-shadow:
   height: 34px;
   min-height: 0;
 
-  line-height: 34px;
+  line-height: 1;
 
   width: auto;
   min-width: 0;
 
   padding: 0 24px 0 8px;
-  padding-top: 1px;
+  padding-top: 0;
 
   border-radius: 8px;
   border: 1px solid rgba(94, 55, 22, 0.32);
