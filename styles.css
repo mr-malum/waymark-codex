@@ -1624,7 +1624,8 @@ text-shadow:
   mask-image:
     linear-gradient(
       to bottom,
-      black 0,
+      transparent 0,
+      black 12px,
       black calc(100% - 10px),
       transparent 100%
     );
@@ -1632,7 +1633,8 @@ text-shadow:
   -webkit-mask-image:
     linear-gradient(
       to bottom,
-      black 0,
+      transparent 0,
+      black 12px,
       black calc(100% - 10px),
       transparent 100%
     );
