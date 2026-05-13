@@ -452,12 +452,6 @@ function goBackCodex() {
 
 function resetCodexToIndex() {
   codexHistory = [];
-
-  renderCodexBreadcrumbs([]);
-
-  const content = document.getElementById("codex-content");
-  content.classList.remove("codex-list-page");
-
   openCodexPage("index", null);
 }
 
@@ -482,9 +476,9 @@ function renderCodexPage(type, id) {
 
 function renderCodexIndex() {
   setCodexTitle("The Codex of Kadesh");
+  renderCodexBreadcrumbs([]);
 
   const content = document.getElementById("codex-content");
-
   content.className = "codex-home";
 
   content.innerHTML = `
