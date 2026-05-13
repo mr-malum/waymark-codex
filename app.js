@@ -854,12 +854,15 @@ function renderCodexPoiPage(poiId) {
 
   setCodexContent(`
     <div class="codex-detail-page-shell">
-      <div class="codex-detail-fixed">
+      <div class="codex-detail-fixed codex-detail-fixed-poi">
         <div class="codex-detail-portrait-slot"></div>
 
         <div class="codex-detail-meta">
           <p><strong>Type:</strong> ${escapeHtml(poi?.POI_Type || "Unknown")}</p>
-          <p><strong>Notoriety Tier:</strong> ${escapeHtml(poi?.["Notoriety Tier"] || "Unknown")}</p>
+
+          <p><strong>Notoriety Tier:</strong> ${escapeHtml(
+            poi?.["Notoriety Tier"] || "Unknown"
+          )}</p>
 
           ${
             hexId
@@ -869,33 +872,46 @@ function renderCodexPoiPage(poiId) {
 
           ${
             poi?.POI_Type === "Settlement"
-              ? `<p><strong>Population:</strong> ${escapeHtml(poi?.Population || "Unknown")}</p>`
+              ? `<p><strong>Population:</strong> ${escapeHtml(
+                  poi?.Population || "Unknown"
+                )}</p>`
               : ""
           }
-
-          <h3>NPCs</h3>
-          ${renderCodexLinkedList(
-            npcs,
-            "No known NPCs at this location.",
-            "npc",
-            "NPC_ID",
-            buildNpcListLabel
-          )}
         </div>
+
+        <section class="codex-detail-npc-panel">
+          <h3>NPCs</h3>
+
+          <div class="codex-detail-upper-scrollbox codex-scroll-fade">
+            ${renderCodexLinkedList(
+              npcs,
+              "No known NPCs at this location.",
+              "npc",
+              "NPC_ID",
+              buildNpcListLabel
+            )}
+          </div>
+        </section>
       </div>
 
       <div class="codex-detail-scroll-grid">
         <section class="codex-detail-scroll-panel">
           <h3>DM Journal</h3>
+
           <div class="codex-detail-scrollbox codex-scroll-fade">
-            <p>${escapeHtml(poi?.DM_Journal || "No journal entries.")}</p>
+            <p>${escapeHtml(
+              poi?.DM_Journal || "No journal entries."
+            )}</p>
           </div>
         </section>
 
         <section class="codex-detail-scroll-panel">
           <h3>Lore</h3>
+
           <div class="codex-detail-scrollbox codex-scroll-fade">
-            <p>${escapeHtml(poi?.Lore || "No lore recorded.")}</p>
+            <p>${escapeHtml(
+              poi?.Lore || "No lore recorded."
+            )}</p>
           </div>
         </section>
       </div>
@@ -916,31 +932,36 @@ function renderCodexPoiPage(poiId) {
     }
   ]);
 
-  document.getElementById("codex-content").classList.add("codex-detail-page");
+  document
+    .getElementById("codex-content")
+    .classList.add("codex-detail-page");
 }
 
 function renderCodexNpcPage(npcId) {
   const npc = db?.npcsById?.[npcId];
-  const home = npc?.Home_ID_Ref ? db?.poisById?.[npc.Home_ID_Ref] : null;
+  const home = npc?.Home_ID_Ref
+    ? db?.poisById?.[npc.Home_ID_Ref]
+    : null;
+
   const npcName = npc?.Name || npcId || "Unknown NPC";
 
-document.getElementById("codex-title").innerHTML = `
-  ${npc?.Title ? `
-    <div class="codex-superheader">
-      ${escapeHtml(npc.Title)}
-    </div>
-  ` : ""}
+  document.getElementById("codex-title").innerHTML = `
+    ${npc?.Title ? `
+      <div class="codex-superheader">
+        ${escapeHtml(npc.Title)}
+      </div>
+    ` : ""}
 
-  <div class="codex-mainheader">
-    ${escapeHtml(npcName)}
-  </div>
-
-  ${npc?.Organization ? `
-    <div class="codex-subheader">
-      ${escapeHtml(npc.Organization)}
+    <div class="codex-mainheader">
+      ${escapeHtml(npcName)}
     </div>
-  ` : ""}
-`;
+
+    ${npc?.Organization ? `
+      <div class="codex-subheader">
+        ${escapeHtml(npc.Organization)}
+      </div>
+    ` : ""}
+  `;
 
   setCodexContent(`
     <div class="codex-detail-page-shell">
@@ -954,34 +975,57 @@ document.getElementById("codex-title").innerHTML = `
               : escapeHtml(npc?.Home_ID_Ref || "Unknown")
           }</p>
 
-          <p><strong>Race:</strong> ${escapeHtml(npc?.Race || "Unknown")}</p>
-          <p><strong>Occupation:</strong> ${escapeHtml(npc?.Occupation || "Unknown")}</p>
+          <p><strong>Race:</strong> ${escapeHtml(
+            npc?.Race || "Unknown"
+          )}</p>
+
+          <p><strong>Occupation:</strong> ${escapeHtml(
+            npc?.Occupation || "Unknown"
+          )}</p>
         </div>
       </div>
 
       <div class="codex-detail-scroll-grid">
         <section class="codex-detail-scroll-panel">
           <h3>DM Journal</h3>
+
           <div class="codex-detail-scrollbox codex-scroll-fade">
-            <p>${escapeHtml(npc?.DM_Journal || "No journal entries.")}</p>
+            <p>${escapeHtml(
+              npc?.DM_Journal || "No journal entries."
+            )}</p>
           </div>
         </section>
 
         <section class="codex-detail-scroll-panel">
           <h3>Lore</h3>
+
           <div class="codex-detail-scrollbox codex-scroll-fade">
-            <p>${escapeHtml(npc?.Lore || "No lore recorded.")}</p>
+            <p>${escapeHtml(
+              npc?.Lore || "No lore recorded."
+            )}</p>
           </div>
         </section>
       </div>
     </div>
   `, [
-    { label: "Codex", clickable: true, onclick: "resetCodexToIndex()" },
-    { label: "NPCs", clickable: true, onclick: "openCodexPage('npcs')" },
-    { label: npcName }
+    {
+      label: "Codex",
+      clickable: true,
+      onclick: "resetCodexToIndex()"
+    },
+    {
+      label: "NPCs",
+      clickable: true,
+      onclick: "openCodexPage('npcs')"
+    },
+    {
+      label: npcName
+    }
   ]);
 
-  document.getElementById("codex-content").classList.add("codex-detail-page");
+  document
+    .getElementById("codex-content")
+    .classList.add("codex-detail-page");
 }
 
 function renderCodexRegionsIndex() {
