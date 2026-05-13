@@ -1,0 +1,481 @@
+/* Shared Panel Bottom Nav */
+.panel-nav {
+  display: flex;
+
+  margin-top: auto;
+  margin-left: 24px;
+  margin-right: 24px;
+  margin-bottom: 96px;
+
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+
+  padding: 12px 16px;
+
+  background: transparent;
+  border: none;
+  box-shadow: none;
+
+  z-index: 9999;
+}
+
+.panel-nav button {
+  appearance: none;
+  -webkit-appearance: none;
+
+  min-width: 56px;
+  min-height: 52px;
+
+  padding: 10px 18px;
+
+  border-radius: 12px;
+  border: 1px solid rgba(94, 55, 22, 0.36);
+
+  background:
+    linear-gradient(
+      rgba(255, 238, 204, 0.92),
+      rgba(214, 170, 108, 0.82)
+    );
+
+  color: #3a2614;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1;
+
+  cursor: pointer;
+
+  box-shadow:
+    inset 0 1px 3px rgba(255, 241, 202, 0.48),
+    0 3px 10px rgba(45, 25, 8, 0.22);
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
+
+  outline: none;
+}
+
+#codex-back,
+#mobile-panel-back {
+  width: 72px;
+  min-width: 72px;
+}
+
+.panel-nav button:hover {
+  background:
+    linear-gradient(
+      rgba(255, 236, 188, 0.92),
+      rgba(214, 170, 108, 0.84)
+    );
+
+  border-color: rgba(94, 55, 22, 0.55);
+
+  box-shadow:
+    inset 0 1px 3px rgba(255, 241, 202, 0.42),
+    0 3px 10px rgba(45, 25, 8, 0.20);
+}
+
+.panel-nav button:active {
+  transform: scale(0.96);
+}
+
+.panel-nav button:focus,
+.panel-nav button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.panel-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Codex Modal */
+
+#codex-overlay {
+  position: fixed;
+  inset: 0;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+
+  z-index: 2500;
+
+  background: rgba(12, 7, 3, 0.34);
+  backdrop-filter: blur(1.5px);
+
+  opacity: 0;
+  pointer-events: none;
+
+  transition: opacity 180ms ease;
+}
+
+#codex-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#codex-modal {
+  position: relative;
+
+  width: min(84vw, 1080px);
+  height: 100vh;
+
+  padding: 70px 90px;
+
+  color: #3a2614;
+
+  font-family: 'Spectral', Georgia, serif;
+
+  isolation: isolate;
+  overflow: hidden;
+  box-sizing: content-box;
+
+  display: flex;
+  flex-direction: column;
+}
+
+#codex-modal::before {
+  content: "";
+
+  position: absolute;
+  top: -120px;
+  bottom: -40px;
+
+  left: -140px;
+  right: -140px;
+
+  background-image: url("../assets/Parchment_Panel.png");
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  opacity: 0.98;
+
+  z-index: -1;
+  pointer-events: none;
+}
+
+#codex-header {
+  text-align: center;
+  margin-bottom: 34px;
+}
+
+#codex-title {
+  margin: 0;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 2.5rem;
+  letter-spacing: 1.5px;
+
+  color: #2f1d10;
+}
+
+#codex-header::after {
+  content: "";
+
+  display: block;
+
+  width: 72%;
+  max-width: 360px;
+  height: 1px;
+
+  margin: 16px auto 0;
+
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(72, 43, 18, 0.65),
+    transparent
+  );
+}
+
+#codex-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+
+  max-width: 620px;
+  margin: 0 auto;
+
+  overflow-y: auto;
+}
+
+.codex-section-button {
+  padding: 18px 20px;
+
+  border-radius: 14px;
+  border: 1px solid rgba(94, 55, 22, 0.22);
+
+  background: rgba(94, 55, 22, 0.08);
+  color: #3a2614;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.15rem;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.codex-section-button:hover {
+  background: rgba(94, 55, 22, 0.14);
+  border-color: rgba(94, 55, 22, 0.32);
+}
+
+.codex-section-button:active {
+  transform: scale(0.98);
+}
+
+/* =========================================================
+   CODEX PHASE 1 POLISH
+   ========================================================= */
+
+/* Make Codex detail pages behave like document pages, not the old home-button grid */
+#codex-content {
+  display: block;
+  width: min(100%, 860px);
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 18px 170px;
+  overflow-y: auto;
+  font-size: 21px;
+  line-height: 1.55;
+}
+
+/* Codex home/index can still use a grid */
+#codex-content.codex-home {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  max-width: 620px;
+}
+
+/* Headings inside Codex pages */
+#codex-content h3 {
+  margin: 30px 0 10px;
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.45rem;
+  letter-spacing: 0.04em;
+  color: #2f1d10;
+}
+
+#codex-content h3::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 1px;
+  margin-top: 7px;
+  background: linear-gradient(
+    to right,
+    rgba(72, 43, 18, 0.58),
+    rgba(72, 43, 18, 0.18),
+    transparent
+  );
+}
+
+#codex-content p {
+  margin: 0 0 14px;
+}
+
+#codex-content strong {
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-weight: 500;
+}
+
+/* Make all Codex buttons match the parchment UI */
+.codex-section-button,
+.codex-link-button,
+.popup-open-details {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(94, 55, 22, 0.36);
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      rgba(255, 231, 174, 0.46),
+      rgba(166, 108, 41, 0.18)
+    );
+  color: #3a2614;
+  font-family: 'Marcellus SC', Georgia, serif;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 3px rgba(255, 241, 202, 0.35),
+    0 2px 8px rgba(45, 25, 8, 0.14);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
+}
+
+.codex-section-button:hover,
+.codex-link-button:hover,
+.popup-open-details:hover {
+  background:
+    linear-gradient(
+      rgba(255, 236, 188, 0.58),
+      rgba(166, 108, 41, 0.26)
+    );
+  border-color: rgba(94, 55, 22, 0.55);
+  box-shadow:
+    inset 0 1px 3px rgba(255, 241, 202, 0.42),
+    0 3px 10px rgba(45, 25, 8, 0.20);
+}
+
+.codex-section-button:active,
+.codex-link-button:active,
+.popup-open-details:active {
+  transform: scale(0.985);
+}
+
+.codex-link-button {
+  display: inline-block;
+  padding: 5px 12px;
+  margin-left: 6px;
+  font-size: 1rem;
+  vertical-align: baseline;
+}
+
+.codex-superheader {
+  margin: 0 0 -4px;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+
+  opacity: 0.72;
+}
+
+.codex-subheader {
+  margin: 0 0 -4px;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+
+  opacity: 0.72;
+}
+
+/* =========================================================
+   CODEX BREADCRUMBS
+   ========================================================= */
+
+.codex-panel-nav {
+  align-items: center;
+}
+
+#codex-breadcrumbs {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  margin: 0;
+  padding: 0 12px;
+
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  text-align: center;
+
+  font-family: 'Spectral', Georgia, serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+
+  color: rgba(58, 38, 20, 0.72);
+}
+
+#codex-breadcrumbs-inner {
+  display: inline-block;
+  max-width: 100%;
+
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.codex-breadcrumbs-mobile {
+  display: none;
+}
+
+.codex-breadcrumb-ellipsis {
+  opacity: 0.7;
+}
+
+#codex-breadcrumbs .codex-breadcrumb-button,
+.panel-nav .codex-breadcrumb-button {
+  appearance: none;
+  -webkit-appearance: none;
+
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+
+  margin: 0;
+  padding: 0;
+
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+
+  color: rgba(58, 38, 20, 0.82);
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: inherit;
+
+  cursor: pointer;
+
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
+}
+
+.panel-nav .codex-breadcrumb-button:hover {
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: rgba(94, 55, 22, 1);
+}
+
+.panel-nav .codex-breadcrumb-button:active {
+  transform: none;
+}
+
+.codex-breadcrumb-separator {
+  margin: 0 8px;
+  opacity: 0.45;
+}
+
+.codex-scroll-fade {
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      black 12px,
+      black calc(100% - 10px),
+      transparent 100%
+    );
+
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      black 12px,
+      black calc(100% - 10px),
+      transparent 100%
+    );
+}

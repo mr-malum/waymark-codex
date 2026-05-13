@@ -1,0 +1,270 @@
+/* Codex Button */
+
+#codex-button {
+  position: fixed;
+
+  bottom: 28px;
+  left: 28px;
+
+  width: 144px;
+  height: 144px;
+
+  padding: 0;
+  border: none;
+
+  background-color: transparent;
+  background-image: url("../assets/Codex_Book_Button.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  z-index: 1500;
+  cursor: pointer;
+
+  touch-action: manipulation;
+
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+
+  user-select: none;
+
+  outline: none;
+  box-shadow: none;
+
+  transition:
+    transform 0.18s ease,
+    filter 0.18s ease;
+
+  filter:
+    drop-shadow(0 10px 18px rgba(0, 0, 0, 0.50))
+    drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35))
+    drop-shadow(0 0 12px rgba(255, 225, 160, 0.12));
+}
+
+#codex-button::before {
+  content: "CODEX";
+
+  position: absolute;
+  left: 50%;
+  top: 50%;
+
+  transform: translate(-50%, -50%);
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 2.25rem;
+  letter-spacing: 0.22em;
+  line-height: 1;
+
+  color: #f2dfb6;
+
+  text-shadow:
+    0 0 10px rgba(25, 12, 4, 0.96),
+    0 0 22px rgba(25, 12, 4, 0.88),
+    0 0 42px rgba(25, 12, 4, 0.76),
+    0 3px 6px rgba(0, 0, 0, 0.72),
+    0 0 6px rgba(255, 220, 150, 0.30);
+
+  opacity: 0;
+
+  pointer-events: none;
+
+  transition:
+    opacity 220ms ease;
+}
+
+#codex-button:focus,
+#codex-button:focus-visible,
+#codex-button:active {
+  outline: none;
+  box-shadow: none;
+  background-color: transparent;
+}
+
+#codex-button:hover {
+  transform: scale(1.045);
+
+  filter:
+    drop-shadow(0 12px 22px rgba(0, 0, 0, 0.56))
+    drop-shadow(0 5px 8px rgba(0, 0, 0, 0.38))
+    drop-shadow(0 0 16px rgba(255, 225, 160, 0.16));
+}
+
+#codex-button:hover::before {
+  opacity: 1;
+}
+
+#codex-button.codex-label-visible::before {
+  opacity: 1;
+}
+
+#codex-button.codex-label-visible {
+  transform: scale(1.045);
+
+  filter:
+    drop-shadow(0 12px 22px rgba(0, 0, 0, 0.56))
+    drop-shadow(0 5px 8px rgba(0, 0, 0, 0.38))
+    drop-shadow(0 0 16px rgba(255, 225, 160, 0.16));
+}
+
+#codex-button:active {
+  transform: scale(0.985);
+}
+
+/* Map Reset Button */
+
+#map-reset-button {
+  position: fixed;
+
+  bottom: 156px;
+  left: 42px;
+
+  width: 116px;
+  height: 116px;
+
+  padding: 0;
+  border: none;
+
+  background-color: transparent;
+  background-image: url("../assets/Atlas_Compass.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  z-index: 1500;
+  cursor: pointer;
+
+  touch-action: manipulation;
+
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+
+  user-select: none;
+
+  outline: none;
+  box-shadow: none;
+
+  transition:
+    transform 0.14s ease,
+    filter 0.14s ease;
+
+  filter:
+    drop-shadow(0 8px 14px rgba(0, 0, 0, 0.46))
+    drop-shadow(0 3px 5px rgba(0, 0, 0, 0.32))
+    drop-shadow(0 0 10px rgba(255, 225, 160, 0.10));
+}
+
+#map-reset-button:hover {
+  transform: scale(1.045);
+
+  filter:
+    drop-shadow(0 10px 18px rgba(0, 0, 0, 0.52))
+    drop-shadow(0 4px 7px rgba(0, 0, 0, 0.36))
+    drop-shadow(0 0 14px rgba(255, 225, 160, 0.14));
+}
+
+#map-reset-button:active {
+  transform: scale(0.94) rotate(-2deg);
+
+  filter:
+    drop-shadow(0 5px 10px rgba(0, 0, 0, 0.50))
+    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.36))
+    drop-shadow(0 0 8px rgba(255, 225, 160, 0.10));
+}
+
+#map-reset-button:focus,
+#map-reset-button:focus-visible {
+  outline: none;
+  box-shadow: none;
+  background-color: transparent;
+}
+
+/* Mobile Hex Popup */
+
+.leaflet-popup-content-wrapper {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+
+  padding: 0 !important;
+
+  overflow: visible !important;
+}
+
+.leaflet-popup-content {
+  position: relative;
+
+  margin: 0 !important;
+  padding: 26px 30px !important;
+
+  min-width: 180px;
+
+  color: #3a2614;
+
+  font-family: 'Spectral', Georgia, serif !important;
+  font-size: 18px;
+  line-height: 1.45;
+
+  text-align: center;
+
+  z-index: 1;
+}
+
+.leaflet-popup-content::before {
+  content: "";
+
+  position: absolute;
+
+  top: -24px;
+  bottom: -24px;
+  left: -24px;
+  right: -24px;
+
+  background-image: url("../assets/Parchment_Panel.png");
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  opacity: 0.97;
+
+  z-index: -1;
+  pointer-events: none;
+}
+
+.leaflet-popup-tip-container {
+  display: none !important;
+}
+
+.leaflet-popup-close-button {
+  display: none !important;
+}
+
+.leaflet-popup-content strong {
+  display: block;
+
+  margin-bottom: 6px;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.05rem;
+
+  letter-spacing: 0.04em;
+}
+
+.leaflet-popup-content button {
+  width: 100%;
+
+  margin-top: 10px;
+  padding: 10px 12px;
+
+  border: 1px solid rgba(94, 55, 22, 0.25);
+  border-radius: 10px;
+
+  background: rgba(94, 55, 22, 0.10);
+  color: #3a2614;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 0.95rem;
+
+  cursor: pointer;
+}

@@ -1,0 +1,235 @@
+/* Slideout parchment app panel */
+#app-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+
+  width: min(32vw, 405px);
+  height: 100vh;
+
+  padding: 70px 90px;
+
+  z-index: 2000;
+
+  display: flex;
+  flex-direction: column;
+
+  background: transparent;
+  color: #3a2614;
+
+  overflow: hidden;
+  isolation: isolate;
+
+  transform: translateX(120%);
+  transition: transform 220ms ease;
+
+  font-family: 'Spectral', Georgia, serif;
+
+  pointer-events: none;
+}
+
+#app-panel.open {
+  transform: translateX(0);
+}
+
+#app-panel-inner {
+  position: relative;
+
+  width: calc(100% + 50px);
+  height: 100%;
+
+  margin-left: -25px;
+
+  display: flex;
+  flex-direction: column;
+
+  pointer-events: auto;
+}
+
+#app-panel::before {
+  content: "";
+
+  position: absolute;
+  top: -120px;
+  bottom: -40px;
+  left: -20px;
+  right: -125px;
+
+  background-image: url('../assets/Parchment_Panel.png');
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.97;
+}
+
+#app-panel-,
+#panel-content {
+  position: relative;
+  z-index: 1;
+}
+
+/*  */
+#app-panel-header {
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  padding: 60px 18px 24px 64px;
+
+  text-align: center;
+
+  gap: 8px;
+
+  border-bottom: none;
+}
+
+/* Header divider */
+#app-panel-header::after {
+  content: "";
+
+  width: 72%;
+  max-width: 280px;
+  height: 1px;
+
+  margin-top: 10px;
+
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(72, 43, 18, 0.65),
+    transparent
+  );
+}
+
+/* Desktop corner close is replaced by bottom nav */
+#panel-close {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Subtitle */
+#panel-subtitle {
+  font-family: 'Marcellus SC', Georgia, serif;
+
+  font-size: 13px;
+  opacity: 0.7;
+
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Title */
+#panel-title {
+  margin: 0;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+
+  font-size: 2.1rem;
+  line-height: 1.1;
+  letter-spacing: 1.5px;
+
+  color: #2f1d10;
+}
+
+/* Content area */
+#panel-content {
+  flex: 1;
+
+  overflow-y: auto;
+
+  padding: 12px 90px 170px;
+
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+/* Content headings / labels */
+#panel-content h3,
+#panel-content strong {
+  font-family: 'Marcellus SC', Georgia, serif;
+}
+
+#panel-content h3 {
+  font-size: 1.55rem;
+}
+
+/* Interactive panel buttons/links */
+button.panel-link {
+  cursor: pointer !important;
+
+  width: 100%;
+  text-align: left;
+
+  background: rgba(94, 55, 22, 0.08);
+  border: 1px solid rgba(94, 55, 22, 0.18);
+
+  color: #3a2614;
+
+  font-size: 1.08rem;
+
+  padding: 10px 12px;
+  margin: 4px 0;
+
+  border-radius: 10px;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease;
+}
+
+button.panel-link:hover {
+  background: rgba(94, 55, 22, 0.14);
+  border-color: rgba(94, 55, 22, 0.3);
+}
+
+button.panel-link:active {
+  transform: scale(0.98);
+}
+
+button.panel-link.mobile-nav-back {
+  display: none;
+}
+
+.panel-text-block {
+  margin-left: 14px;
+
+  padding-left: 14px;
+
+  border-left: 1px solid rgba(72, 43, 18, 0.35);
+
+  opacity: 0.95;
+}
+
+#app-panel .panel-nav {
+  justify-content: center;
+}
+
+#mobile-panel-close {
+  display: block;
+
+  margin-left: calc(50% + 18px);
+  transform: translateX(-50%);
+}
+
+#panel-content .panel-journal-preview {
+  padding-left: 1.1em;
+
+  font-style: italic;
+  font-weight: 400;
+
+  font-size: 1.02rem;
+  line-height: 1.9;
+
+  letter-spacing: 0.01em;
+}
