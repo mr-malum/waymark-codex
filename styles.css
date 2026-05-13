@@ -1033,7 +1033,7 @@ text-shadow:
 
 .codex-search-shell {
   width: min(100%, 520px);
-  margin: 0 auto 28px;
+  margin: 0 auto 12px;
 }
 
 #codex-search-input {
@@ -1083,7 +1083,7 @@ text-shadow:
 .codex-search-controls-shell {
   flex: 0 0 auto;
 
-  padding-bottom: 16px;
+  padding-bottom: 6px;
 }
 
 .codex-search-results-shell {
@@ -1589,18 +1589,16 @@ text-shadow:
   mask-image:
     linear-gradient(
       to bottom,
-      transparent 0,
-      black 22px,
-      black calc(100% - 22px),
+      black 0,
+      black calc(100% - 10px),
       transparent 100%
     );
 
   -webkit-mask-image:
     linear-gradient(
       to bottom,
-      transparent 0,
-      black 22px,
-      black calc(100% - 22px),
+      black 0,
+      black calc(100% - 10px),
       transparent 100%
     );
 }
