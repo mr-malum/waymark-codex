@@ -1578,18 +1578,40 @@ function renderCodexSearchResults(query) {
 });
 
   if (!results.length) {
-    resultsEl.innerHTML = `<p>No matching records found.</p>`;
+    resultsEl.innerHTML = `
+      <p>No matching records found.</p>
+    `;
     return;
   }
 
-  resultsEl.innerHTML = renderCodexLinkedList(
-    results,
-    "No matching records found.",
-    null,
-    "id",
-    row => row.label,
-    row => row.type
-  );
+  const resultGroups = [
+    { type: "hex", label: "Hexes" },
+    { type: "region", label: "Regions" },
+    { type: "poi", label: "POIs" },
+    { type: "npc", label: "NPCs" }
+  ];
+
+  resultsEl.innerHTML = resultGroups
+    .map(group => {
+      const groupRows = results.filter(result => result.type === group.type);
+      if (!groupRows.length) return "";
+
+      return `
+        <div class="codex-search-result-group">
+          <h3 class="codex-search-result-heading">${escapeHtml(group.label)}</h3>
+
+          ${renderCodexLinkedList(
+            groupRows,
+            "No matching records found.",
+            null,
+            "id",
+            row => row.label,
+            row => row.type
+          )}
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function renderCodexLinkedList(
