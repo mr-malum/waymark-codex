@@ -1,22 +1,57 @@
+/* =========================================================
+   CODEX CORE / ROUTING / HISTORY
+   ========================================================= */
+
+function getCodexOverlay() {
+  return document.getElementById("codex-overlay");
+}
+
+function getCodexContent() {
+  return document.getElementById("codex-content");
+}
+
+function getCodexTitle() {
+  return document.getElementById("codex-title");
+}
+
 function openCodex() {
-  document.getElementById("codex-overlay").classList.add("open");
+  getCodexOverlay().classList.add("open");
 }
 
 function closeCodex() {
   codexSearchQuery = "";
 
-  document.getElementById("codex-overlay").classList.remove("open");
+  getCodexOverlay().classList.remove("open");
   map.closePopup();
   clearSelectedHex();
 }
 
 function setCodexTitle(title) {
-  document.getElementById("codex-title").textContent = title;
+  getCodexTitle().textContent = title;
 }
 
 function getCodexBreadcrumbLabel(label) {
   if (label === "Points of Interest") return "POIs";
   return label;
+}
+
+function normalizeCodexBreadcrumbs(breadcrumbs = []) {
+  return breadcrumbs.map(crumb => ({
+    ...crumb,
+    label: getCodexBreadcrumbLabel(crumb.label)
+  }));
+}
+
+function renderCodexBreadcrumbItem(crumb, isLast) {
+  return `
+    ${crumb.clickable && !isLast
+      ? `<button class="codex-breadcrumb-button" type="button" onclick="${crumb.onclick}">
+          ${escapeHtml(crumb.label)}
+        </button>`
+      : `<span>${escapeHtml(crumb.label)}</span>`
+    }
+    ${!isLast ? `<span class="codex-breadcrumb-separator">/</span>` : ""}
+  `;
 }
 
 function renderCodexBreadcrumbs(breadcrumbs = []) {
@@ -28,24 +63,14 @@ function renderCodexBreadcrumbs(breadcrumbs = []) {
     return;
   }
 
-  const displayCrumbs = breadcrumbs.map(crumb => ({
-    ...crumb,
-    label: getCodexBreadcrumbLabel(crumb.label)
-  }));
+  const displayCrumbs = normalizeCodexBreadcrumbs(breadcrumbs);
 
-  const desktopHtml = displayCrumbs.map((crumb, index) => {
-    const isLast = index === displayCrumbs.length - 1;
-
-    return `
-      ${crumb.clickable && !isLast
-        ? `<button class="codex-breadcrumb-button" type="button" onclick="${crumb.onclick}">
-            ${escapeHtml(crumb.label)}
-          </button>`
-        : `<span>${escapeHtml(crumb.label)}</span>`
-      }
-      ${!isLast ? `<span class="codex-breadcrumb-separator">/</span>` : ""}
-    `;
-  }).join("");
+  const desktopHtml = displayCrumbs
+    .map((crumb, index) => renderCodexBreadcrumbItem(
+      crumb,
+      index === displayCrumbs.length - 1
+    ))
+    .join("");
 
   const mobileCrumbs = displayCrumbs.slice(-2);
 
@@ -55,23 +80,12 @@ function renderCodexBreadcrumbs(breadcrumbs = []) {
       : ""
     }
 
-    ${mobileCrumbs.map((crumb, index) => {
-      const isLast = index === mobileCrumbs.length - 1;
-
-      return `
-        ${crumb.clickable && !isLast
-          ? `<button class="codex-breadcrumb-button" type="button" onclick="${crumb.onclick}">
-              ${escapeHtml(crumb.label)}
-            </button>`
-          : `<span>${escapeHtml(crumb.label)}</span>`
-        }
-
-        ${!isLast
-          ? `<span class="codex-breadcrumb-separator">/</span>`
-          : ""
-        }
-      `;
-    }).join("")}
+    ${mobileCrumbs
+      .map((crumb, index) => renderCodexBreadcrumbItem(
+        crumb,
+        index === mobileCrumbs.length - 1
+      ))
+      .join("")}
   `;
 
   breadcrumbsEl.innerHTML = `
@@ -86,7 +100,7 @@ function renderCodexBreadcrumbs(breadcrumbs = []) {
 }
 
 function setCodexContent(html, breadcrumbs = []) {
-  const content = document.getElementById("codex-content");
+  const content = getCodexContent();
   content.className = "";
   content.scrollTop = 0;
 
@@ -95,27 +109,41 @@ function setCodexContent(html, breadcrumbs = []) {
   content.innerHTML = html;
 }
 
+function getCurrentCodexPage() {
+  return codexHistory[codexHistory.length - 1] || null;
+}
+
+function pushCodexHistory(type, id) {
+  codexHistory.push({ type, id });
+}
+
+function popCodexHistory() {
+  codexHistory.pop();
+  return getCurrentCodexPage();
+}
+
 function updateCodexBackButton() {
   const backButton = document.getElementById("codex-back");
 
-  if (codexHistory.length <= 1) {
-    backButton.disabled = false;
-    backButton.textContent = "← Map";
-  } else {
-    backButton.disabled = false;
-    backButton.textContent = "← Back";
-  }
+  backButton.disabled = false;
+  backButton.textContent = codexHistory.length <= 1
+    ? "← Map"
+    : "← Back";
+}
+
+function prepareCodexNavigation() {
+  closePanel({ clearSelection: true });
+  resetMapToAtlasView();
+  openCodex();
 }
 
 function openCodexPage(type = "index", id = null, options = {}) {
   const shouldPush = options.push !== false;
 
-  closePanel({ clearSelection: true });
-  resetMapToAtlasView();
-  openCodex();
+  prepareCodexNavigation();
 
   if (shouldPush) {
-    codexHistory.push({ type, id });
+    pushCodexHistory(type, id);
   }
 
   renderCodexPage(type, id);
@@ -125,9 +153,10 @@ function openCodexPage(type = "index", id = null, options = {}) {
 function goBackCodex() {
   if (codexHistory.length <= 1) return;
 
-  codexHistory.pop();
+  const previous = popCodexHistory();
 
-  const previous = codexHistory[codexHistory.length - 1];
+  if (!previous) return;
+
   renderCodexPage(previous.type, previous.id);
   updateCodexBackButton();
 }
@@ -162,7 +191,7 @@ function renderCodexIndex() {
 
   codexSearchQuery = "";
 
-  const content = document.getElementById("codex-content");
+  const content = getCodexContent();
   content.className = "codex-home";
 
   content.innerHTML = `
