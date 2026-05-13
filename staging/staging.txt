@@ -1,74 +1,173 @@
-.codex-list-controls-shell {
-  display: none;
-}
+We are continuing development of the Kadesh Map / Codex web app.
 
-.codex-list-controls-shell.open {
-  position: fixed;
-  inset: 0;
+Current branch:
+"mobile-ux-refinement"
 
-  z-index: 5000;
+The first thing I will provide after this message is the CURRENT RAW CODE (primarily app.js and styles.css). Please analyze the actual existing implementation before proposing changes. Avoid assuming prior versions or abstract architecture that may no longer exist.
 
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
+Project overview:
 
-  padding: 24px;
+- Fantasy overworld hex map web app.
+- Leaflet-based map with parchment UI aesthetic.
+- The “Codex” acts as an in-world atlas/database browser for:
+  - Regions
+  - POIs
+  - NPCs
+  - Hexes
+- Heavy emphasis on immersive parchment UI, readable lore presentation, and app-like UX.
 
-  background: rgba(12, 7, 3, 0.38);
-}
+Current architecture/state:
 
-........ 
+- Codex uses shared rendering helpers:
+  - renderCodexLinkedList()
+  - renderCodexListControls()
+  - applyFilters()
+  - shared sort helpers
+  - shared label builders
+- Multi-filter AND logic implemented.
+- Dynamic filter-field selector system implemented.
+- Shared list-page architecture implemented.
+- Shared detail-page architecture implemented.
+- Search system implemented with grouped result sections:
+  - Hexes
+  - Regions
+  - POIs
+  - NPCs
+- Search caching/back-navigation behavior implemented.
+- Search now also returns:
+  - hexes containing matching NPCs/POIs
+  - hexes inside matching regions
+- Scroll fade masks implemented globally.
+- NPC/POI detail pages redesigned with:
+  - portrait slot area
+  - metadata area
+  - independent scroll regions
+  - lore/journal split panes
+- POI detail pages include compact NPC scrollbox in upper-right quadrant.
+- Mobile long-press easter egg implemented for Codex button.
+- “95” keyboard sequence toggles retro Win95 Codex icon on desktop.
 
-<div class="codex-list-controls-shell" id="codex-list-controls-shell">
-  <div class="codex-mobile-controls-panel">
+Outstanding broader roadmap (older long-term items NOT yet completed):
 
-....... 
+1. Region index redesign
+   
+   - archival/tiled presentation
+   - future thumbnail support
+   - improved atlas feel
+   - hard A-Z sorting
+   - possible continent/zone grouping later
 
+2. Search refinement
+   
+   - relevance weighting
+   - exact-match prioritization
+   - match highlighting
+   - result counts
+   - possible fuzzy matching
+   - possible collapsible mobile search groups
 
-</div>
-      </div>
+3. Hex detail enrichment
+   
+   - better summaries
+   - richer relational browsing
+   - region linkage improvements
+   - more “atlas entry” feel
 
-      <div class="codex-list-scroll-shell codex-scroll-fade">
+4. Thumbnail/image infrastructure
+   
+   - actual image rendering
+   - fallback art
+   - shared asset path conventions
+   - click-to-expand support later
 
-........ 
+5. Region relational browsing
+   
+   - grouped POIs
+   - grouped NPCs
+   - more dossier-style region pages
 
+6. Eventual code organization refactor
+   (deferred intentionally until UX stabilizes)
+   
+   - codex-core.js
+   - codex-pages.js
+   - codex-query.js
+   - map-ui.js
 
-.codex-list-controls-shell {
-  display: none;
-}
+Current immediate roadmap for "mobile-ux-refinement":
 
-.codex-list-controls-shell.open {
-  position: fixed;
-  inset: 0;
+1. Mobile real-estate optimization pass
+   
+   - reduce wasted vertical spacing
+   - improve content density
+   - preserve parchment readability
+   - optimize control sizing
+   - tighten card/list spacing
 
-  z-index: 5000;
+2. Mobile detail-page usability
+   
+   - Journal/Lore panes currently too shallow on some screens
+   - likely need hybrid scrolling approach:
+     - overall page scroll
+     - plus internal scroll regions
+   - improve portrait/meta spacing
+   - improve readability/truncation
 
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
+3. Mobile Search UX
+   
+   - currently grouped sections have internal scrollboxes
+   - overall page scrolling still needs refinement
+   - users cannot easily access all grouped results
+   - likely need:
+     - taller mobile result groups
+     - overall content scrolling
+     - maybe collapsible sections
 
-  padding: 24px;
+4. Mobile breadcrumb/button density pass
+   
+   - breadcrumb truncation
+   - avoid overlap/crowding
+   - preserve back/X usability
 
-  background: rgba(12, 7, 3, 0.38);
-}
+Important design direction:
 
-.codex-mobile-controls-panel {
-  width: min(100%, 420px);
-  max-height: calc(100dvh - 160px);
+- Desktop and mobile are intentionally diverging somewhat in layout.
+- Desktop favors immersive “atlas spread” layouts.
+- Mobile should feel more app-like and space-efficient.
+- Avoid breaking desktop UX while improving mobile.
 
-  overflow-y: auto;
+Important implementation philosophy:
 
-  padding: 24px;
+- Prefer surgical modifications over large rewrites.
+- Always inspect the existing live function/class before replacing.
+- Avoid duplicate IDs or duplicated control markup.
+- Avoid abstract assumptions about current code structure.
 
-  border-radius: 18px;
-  border: 1px solid rgba(94, 55, 22, 0.36);
+Current notable mobile implementation:
 
-  background:
-    linear-gradient(
-      rgba(245, 218, 164, 0.98),
-      rgba(225, 184, 117, 0.98)
-    );
+- Filter/sort controls on mobile are now a modal/popover opened via a “Filter & Sort” button.
+- The same controls shell is reused rather than duplicating controls.
+- Desktop behavior should remain unchanged.
 
-  box-shadow:
-    0 18px 40px rgba(20, 10, 2, 0.35);
-}
+Known recent bug fixes:
+
+- Breadcrumb return scroll-position contamination fixed via content.scrollTop reset.
+- Top fade masks restored.
+- Mobile filter popup duplicate-control issue resolved.
+- Search state reset behavior refined.
+- Codex detail-page overflow handling improved.
+
+UI style direction:
+
+- Parchment fantasy atlas
+- Marcellus SC typography
+- Soft gold/brown gradients
+- Atmospheric but readable
+- Avoid modern flat-design aesthetics
+
+Please prioritize:
+
+- reading the actual code first
+- maintaining existing architecture
+- giving precise replacement instructions with context
+- avoiding assumptions about surrounding code
