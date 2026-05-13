@@ -883,11 +883,14 @@ function renderCodexPoiPage(poiId) {
               "No known NPCs at this location.",
               "npc",
               "NPC_ID",
-              npc => joinCodexLabel(npc.Name, [
-                npc.Race,
-                npc.Occupation,
-                npc.Organization
-              ])
+              npc => joinCodexLabel(
+                [npc.Title, npc.Name].filter(Boolean).join(" "),
+                [
+                  npc.Race,
+                  npc.Occupation,
+                  npc.Organization
+                ]
+              )
             )}
           </div>
         </section>
