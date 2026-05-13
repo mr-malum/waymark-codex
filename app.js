@@ -859,10 +859,7 @@ function renderCodexPoiPage(poiId) {
 
         <div class="codex-detail-meta">
           <p><strong>Type:</strong> ${escapeHtml(poi?.POI_Type || "Unknown")}</p>
-
-          <p><strong>Notoriety Tier:</strong> ${escapeHtml(
-            poi?.["Notoriety Tier"] || "Unknown"
-          )}</p>
+          <p><strong>Notoriety Tier:</strong> ${escapeHtml(poi?.["Notoriety Tier"] || "Unknown")}</p>
 
           ${
             hexId
@@ -872,9 +869,7 @@ function renderCodexPoiPage(poiId) {
 
           ${
             poi?.POI_Type === "Settlement"
-              ? `<p><strong>Population:</strong> ${escapeHtml(
-                  poi?.Population || "Unknown"
-                )}</p>`
+              ? `<p><strong>Population:</strong> ${escapeHtml(poi?.Population || "Unknown")}</p>`
               : ""
           }
         </div>
@@ -899,9 +894,7 @@ function renderCodexPoiPage(poiId) {
           <h3>DM Journal</h3>
 
           <div class="codex-detail-scrollbox codex-scroll-fade">
-            <p>${escapeHtml(
-              poi?.DM_Journal || "No journal entries."
-            )}</p>
+            <p>${escapeHtml(poi?.DM_Journal || "No journal entries.")}</p>
           </div>
         </section>
 
@@ -909,9 +902,7 @@ function renderCodexPoiPage(poiId) {
           <h3>Lore</h3>
 
           <div class="codex-detail-scrollbox codex-scroll-fade">
-            <p>${escapeHtml(
-              poi?.Lore || "No lore recorded."
-            )}</p>
+            <p>${escapeHtml(poi?.Lore || "No lore recorded.")}</p>
           </div>
         </section>
       </div>
@@ -932,9 +923,7 @@ function renderCodexPoiPage(poiId) {
     }
   ]);
 
-  document
-    .getElementById("codex-content")
-    .classList.add("codex-detail-page");
+  document.getElementById("codex-content").classList.add("codex-detail-page");
 }
 
 function renderCodexNpcPage(npcId) {
