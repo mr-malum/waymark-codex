@@ -1,12 +1,47 @@
-if (retroCodexMode) {
-  codexButton.style.backgroundImage =
-    "url('assets/Win95SwordShield_Upscaled.png')";
+let codexLongPressTimer = null;
+let suppressNextCodexClick = false;
 
-  codexButton.style.backgroundSize = "75%";
+function isMobileCodexLongPressEnabled() {
+  return window.matchMedia("(max-width: 700px), (pointer: coarse)").matches;
 }
-else {
-  codexButton.style.backgroundImage =
-    "url('assets/Codex_Book_Button.png')";
 
-  codexButton.style.backgroundSize = "";
-}
+const codexLongPressButton = document.getElementById("codex-button");
+
+codexLongPressButton.addEventListener("pointerdown", event => {
+  if (!isMobileCodexLongPressEnabled()) return;
+
+  codexLongPressTimer = window.setTimeout(() => {
+    suppressNextCodexClick = true;
+    toggleRetroCodexMode();
+  }, 650);
+});
+
+codexLongPressButton.addEventListener("pointerup", () => {
+  window.clearTimeout(codexLongPressTimer);
+  codexLongPressTimer = null;
+});
+
+codexLongPressButton.addEventListener("pointercancel", () => {
+  window.clearTimeout(codexLongPressTimer);
+  codexLongPressTimer = null;
+});
+
+codexLongPressButton.addEventListener("pointerleave", () => {
+  window.clearTimeout(codexLongPressTimer);
+  codexLongPressTimer = null;
+});
+
+codexLongPressButton.addEventListener("click", event => {
+  if (!suppressNextCodexClick) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  suppressNextCodexClick = false;
+}, true);
+
+codexLongPressButton.addEventListener("contextmenu", event => {
+  if (!isMobileCodexLongPressEnabled()) return;
+
+  event.preventDefault();
+});
