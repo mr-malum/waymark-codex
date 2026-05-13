@@ -452,6 +452,12 @@ function goBackCodex() {
 
 function resetCodexToIndex() {
   codexHistory = [];
+
+  renderCodexBreadcrumbs([]);
+
+  const content = document.getElementById("codex-content");
+  content.classList.remove("codex-list-page");
+
   openCodexPage("index", null);
 }
 
