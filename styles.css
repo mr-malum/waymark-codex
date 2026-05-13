@@ -1388,6 +1388,11 @@ text-shadow:
   display: none;
 }
 
+  .codex-list-page-shell {
+  display: flex;
+  flex-direction: column;
+}
+
 .codex-mobile-filter-toggle {
   display: block !important;
 
