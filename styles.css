@@ -1072,6 +1072,18 @@ text-shadow:
   clear: both;
 }
 
+.codex-search-result-group {
+  margin: 0 0 28px;
+}
+
+.codex-search-result-group .codex-list {
+  margin-top: 10px;
+}
+
+.codex-search-result-heading {
+  margin-top: 26px;
+}
+
 /* Headings inside Codex pages */
 #codex-content h3 {
   margin: 30px 0 10px;
