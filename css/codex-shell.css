@@ -406,7 +406,7 @@
   padding: 0;
   overflow: hidden;
 
-  border: 1px solid rgba(94, 55, 22, 0.38);
+  border: 0;
   border-radius: 16px;
 
   background:
@@ -419,22 +419,16 @@
   color: #2f1d10;
   cursor: pointer;
 
-  box-shadow:
-    inset 0 1px 3px rgba(255, 241, 202, 0.32),
-    0 4px 14px rgba(45, 25, 8, 0.18);
+  box-shadow: none;
 
   transition:
     transform 0.14s ease,
-    border-color 0.14s ease,
     box-shadow 0.14s ease;
 }
 
 .codex-region-tile:hover {
   transform: translateY(-2px);
-  border-color: rgba(94, 55, 22, 0.58);
-  box-shadow:
-    inset 0 1px 3px rgba(255, 241, 202, 0.40),
-    0 7px 18px rgba(45, 25, 8, 0.24);
+  box-shadow: none;
 }
 
 .codex-region-tile:active {
@@ -500,16 +494,12 @@
   width: 100%;
 }
 
-.codex-region-detail-fixed {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) minmax(220px, 0.95fr);
-  gap: 22px;
-  align-items: start;
-
-  margin-bottom: 20px;
+.codex-detail-fixed-region {
+  align-items: stretch;
 }
 
 .codex-region-detail-image {
+  flex: 0 0 220px;
   width: 220px;
   height: 220px;
 
@@ -518,31 +508,162 @@
 }
 
 .codex-region-detail-summary {
-  min-width: 0;
+  min-width: 180px;
 }
 
 .codex-region-terrain-profile {
-  text-align: right;
+  align-self: center;
+  text-align: left;
   font-size: 0.95rem;
   line-height: 1.25;
 }
 
 #codex-content .codex-region-terrain-profile h3 {
-  margin-top: 0;
+  margin: 0 0 8px;
   font-size: 1.12rem;
 }
 
-#codex-content .codex-region-terrain-profile h3::after {
-  background: linear-gradient(
-    to left,
-    rgba(72, 43, 18, 0.58),
-    rgba(72, 43, 18, 0.18),
-    transparent
-  );
+.codex-region-terrain-list {
+  display: grid;
+  gap: 4px;
+
+  padding-right: 6px;
 }
 
-.codex-region-terrain-profile p {
-  margin: 0;
+.codex-region-terrain-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 0;
+
+  background: transparent;
+}
+
+.codex-region-terrain-row span {
+  min-width: 0;
+
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.codex-region-terrain-row strong {
+  flex: 0 0 auto;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-weight: 500;
+}
+
+.codex-region-detail-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.codex-region-list-scrollbox {
+  flex: 1 1 auto;
+  min-height: 0;
+
+  overflow-y: auto;
+
+  padding: 4px 8px 18px 0;
+}
+
+/* =========================================================
+   CODEX MAP TILES
+   ========================================================= */
+
+.codex-maps-panel {
+  margin-top: 20px;
+}
+
+.codex-map-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.codex-map-card {
+  position: relative;
+
+  width: 100%;
+  aspect-ratio: 1 / 1;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+
+  padding: 0;
+  overflow: hidden;
+
+  border: 0;
+  border-radius: 14px;
+
+  background:
+    var(--codex-map-image, none),
+    linear-gradient(
+      160deg,
+      rgba(255, 238, 196, 0.32),
+      rgba(85, 49, 19, 0.16)
+    );
+  background-size: cover;
+  background-position: center;
+
+  color: #2f1d10;
+  text-decoration: none;
+  cursor: pointer;
+
+  box-shadow: none;
+
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.codex-map-card[href]:hover {
+  transform: translateY(-2px);
+  box-shadow: none;
+}
+
+.codex-map-card[href]:active {
+  transform: scale(0.985);
+}
+
+.codex-map-card-disabled {
+  opacity: 0.64;
+  cursor: default;
+}
+
+.codex-map-card-info {
+  position: relative;
+  z-index: 2;
+
+  display: flex;
+  align-items: center;
+
+  min-height: 28%;
+  padding: 8px 10px;
+
+  background: rgba(246, 219, 164, 0.90);
+  border-top: 1px solid rgba(94, 55, 22, 0.26);
+}
+
+.codex-map-card-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: clamp(0.78rem, 0.95vw, 0.96rem);
+  line-height: 1.05;
+  letter-spacing: 0.03em;
 }
 
 /* =========================================================
@@ -655,4 +776,240 @@
       black calc(100% - 10px),
       transparent 100%
     );
+}
+
+/* =========================================================
+   PARCHMENT IMAGE EDGE TRANSPARENCY
+   ========================================================= */
+
+.codex-detail-portrait-slot {
+  -webkit-mask-image:
+    linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 78%,
+      rgba(0, 0, 0, 0.78) 88%,
+      rgba(0, 0, 0, 0.18) 96%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 78%,
+      rgba(0, 0, 0, 0.78) 88%,
+      rgba(0, 0, 0, 0.18) 96%,
+      transparent 100%
+    );
+  -webkit-mask-composite: source-in;
+
+  mask-image:
+    linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 78%,
+      rgba(0, 0, 0, 0.78) 88%,
+      rgba(0, 0, 0, 0.18) 96%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 78%,
+      rgba(0, 0, 0, 0.78) 88%,
+      rgba(0, 0, 0, 0.18) 96%,
+      transparent 100%
+    );
+  mask-composite: intersect;
+}
+
+/* =========================================================
+   TILE ART / TEXT SEPARATION
+   ========================================================= */
+
+.codex-region-tile,
+.codex-map-card {
+  background: transparent;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.codex-region-tile-image {
+  inset: 0;
+  z-index: 0;
+
+  background:
+    var(--codex-record-image, none),
+    radial-gradient(circle at center, rgba(255, 232, 174, 0.18), transparent 62%),
+    rgba(94, 55, 22, 0.08);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  -webkit-mask-image:
+    linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 78%,
+      rgba(0, 0, 0, 0.78) 88%,
+      rgba(0, 0, 0, 0.18) 96%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 58%,
+      rgba(0, 0, 0, 0.30) 72%,
+      transparent 84%,
+      transparent 100%
+    );
+  -webkit-mask-composite: source-in;
+
+  mask-image:
+    linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 78%,
+      rgba(0, 0, 0, 0.78) 88%,
+      rgba(0, 0, 0, 0.18) 96%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 58%,
+      rgba(0, 0, 0, 0.30) 72%,
+      transparent 84%,
+      transparent 100%
+    );
+  mask-composite: intersect;
+}
+
+.codex-region-tile-info,
+.codex-map-card-info {
+  z-index: 2;
+
+  align-items: center;
+  justify-content: flex-end;
+
+  background: transparent;
+  border-top: 0;
+
+  text-align: center;
+}
+
+.codex-region-tile-info {
+  padding: 12px 14px 14px;
+}
+
+.codex-region-tile-name,
+.codex-region-tile-details,
+.codex-map-card-title {
+  width: 100%;
+  text-align: center;
+}
+
+.codex-map-card {
+  background: transparent;
+}
+
+.codex-map-card::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+
+  pointer-events: none;
+
+  background:
+    var(--codex-map-image, none),
+    linear-gradient(
+      160deg,
+      rgba(255, 238, 196, 0.32),
+      rgba(85, 49, 19, 0.16)
+    );
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  opacity: 0.92;
+
+  -webkit-mask-image:
+    linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 78%,
+      rgba(0, 0, 0, 0.78) 88%,
+      rgba(0, 0, 0, 0.18) 96%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 58%,
+      rgba(0, 0, 0, 0.30) 72%,
+      transparent 84%,
+      transparent 100%
+    );
+  -webkit-mask-composite: source-in;
+
+  mask-image:
+    linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 78%,
+      rgba(0, 0, 0, 0.78) 88%,
+      rgba(0, 0, 0, 0.18) 96%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 4%,
+      rgba(0, 0, 0, 0.78) 12%,
+      black 22%,
+      black 58%,
+      rgba(0, 0, 0, 0.30) 72%,
+      transparent 84%,
+      transparent 100%
+    );
+  mask-composite: intersect;
+}
+
+.codex-map-card-info {
+  justify-content: center;
+  padding: 10px 10px 12px;
 }

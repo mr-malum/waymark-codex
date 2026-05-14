@@ -105,6 +105,29 @@ function createPoiGroupListRows(pois) {
   return rows;
 }
 
+function getCodexMapOwnerKey(ownerType, ownerId) {
+  if (!ownerType || !ownerId) return "";
+  return `${String(ownerType).toLowerCase()}:${ownerId}`;
+}
+
+function getMapsForOwner(ownerType, ownerId) {
+  const key = getCodexMapOwnerKey(ownerType, ownerId);
+  if (!key) return [];
+  return db?.mapsByOwnerKey?.[key] || [];
+}
+
+function getMapsForPoi(poiId) {
+  return getMapsForOwner("poi", poiId);
+}
+
+function getMapsForPoiGroup(groupId) {
+  return getMapsForOwner("poi-group", groupId);
+}
+
+function getMapsForRegion(regionId) {
+  return getMapsForOwner("region", regionId);
+}
+
 function getNpcHomeLabel(npc) {
   const home = npc.Home_ID_Ref
     ? db?.poisById?.[npc.Home_ID_Ref]

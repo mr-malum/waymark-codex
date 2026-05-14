@@ -67,11 +67,12 @@
 
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(230px, 1fr);
   gap: 18px;
 }
 
 .codex-search-result-panel {
-  min-height: 0;
+  min-height: 230px;
 
   display: flex;
   flex-direction: column;
@@ -87,7 +88,8 @@
 
 .codex-search-group-scroll {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 188px;
+  max-height: 260px;
 
   overflow-y: auto;
 
@@ -113,4 +115,147 @@
 
 .codex-search-group-scroll .codex-record-arrow {
   font-size: 1.2rem;
+}
+
+/* =========================================================
+   CODEX HOME LIVE SEARCH
+   ========================================================= */
+
+#codex-content.codex-home-search-page {
+  display: block;
+  max-width: 860px;
+}
+
+.codex-home-search-page-shell {
+  min-height: calc(100vh - 285px);
+
+  display: flex;
+  flex-direction: column;
+}
+
+.codex-home-search-controls-shell {
+  flex: 0 0 auto;
+
+  padding-top: 34px;
+  padding-bottom: 32px;
+
+  transition:
+    padding-top 220ms ease,
+    padding-bottom 220ms ease;
+}
+
+.codex-home-search-shell {
+  width: min(100%, 760px);
+  margin-bottom: 0;
+
+  transition:
+    width 220ms ease,
+    transform 220ms ease;
+}
+
+.codex-home-search-page #codex-search-input {
+  font-size: 1.38rem;
+  padding: 16px 20px;
+
+  transition:
+    font-size 220ms ease,
+    padding 220ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+.codex-home-section-buttons {
+  flex: 0 0 auto;
+
+  width: min(100%, 460px);
+  margin: 18px auto 0;
+
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 28px;
+
+  transition:
+    opacity 180ms ease,
+    transform 220ms ease,
+    max-height 220ms ease,
+    margin 220ms ease;
+}
+
+.codex-home-section-buttons .codex-section-button {
+  min-height: 64px;
+  font-size: 1.25rem;
+}
+
+.codex-home-search-page #codex-search-results {
+  flex: 1 1 auto;
+  min-height: 0;
+
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+
+  transition:
+    opacity 180ms ease,
+    transform 220ms ease;
+}
+
+.codex-home-search-active .codex-home-search-controls-shell {
+  padding-top: 0;
+  padding-bottom: 12px;
+}
+
+.codex-home-search-active .codex-home-search-shell {
+  width: min(100%, 620px);
+}
+
+.codex-home-search-active #codex-search-input {
+  font-size: 1.25rem;
+  padding: 13px 16px;
+}
+
+.codex-home-search-active .codex-home-section-buttons {
+  max-height: 0;
+  margin-top: 0;
+
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.codex-home-search-active #codex-search-results {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.codex-home-search-active .codex-search-results-shell {
+  align-content: start;
+  grid-auto-rows: minmax(230px, auto);
+}
+
+/* =========================================================
+   CODEX CONTENT SCROLL FADES
+   ========================================================= */
+
+#codex-content.codex-search-page,
+#codex-content.codex-home-search-page,
+#codex-content.codex-regions-index {
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      black 18px,
+      black calc(100% - 22px),
+      transparent 100%
+    );
+
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      black 18px,
+      black calc(100% - 22px),
+      transparent 100%
+    );
 }

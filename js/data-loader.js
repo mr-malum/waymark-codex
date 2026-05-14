@@ -3,7 +3,8 @@ const sheetUrls = {
   pois: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=1900621664&single=true&output=csv",
   npcs: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=603218189&single=true&output=csv",
   regions: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=30419630&single=true&output=csv",
-  poiGroups: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=1000348883&single=true&output=csv"
+  poiGroups: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=1000348883&single=true&output=csv",
+  maps: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=1435181261&single=true&output=csv"
 };
 
 function parseCSV(csvText) {
@@ -71,6 +72,14 @@ async function fetchSheet(url) {
   return parseCSV(csvText);
 }
 
+async function fetchOptionalSheet(url) {
+  if (!url) {
+    return [];
+  }
+
+  return fetchSheet(url);
+}
+
 function indexById(rows, idField) {
   const index = {};
 
@@ -103,13 +112,51 @@ function groupBy(rows, fieldName) {
   return groups;
 }
 
+function getMapOwnerKey(ownerType, ownerId) {
+  if (!ownerType || !ownerId) return "";
+  return `${String(ownerType).toLowerCase()}:${ownerId}`;
+}
+
+function groupMapsByOwner(rows) {
+  const groups = {};
+
+  rows.forEach(row => {
+    const key = getMapOwnerKey(row.Owner_Type, row.Owner_ID_Ref);
+
+    if (!key) return;
+
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+
+    groups[key].push(row);
+  });
+
+  Object.values(groups).forEach(group => {
+    group.sort((a, b) => {
+      const aOrder = Number(a.Sort_Order) || 9999;
+      const bOrder = Number(b.Sort_Order) || 9999;
+
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+
+      return String(a.Map_Name || a.Map_ID || "")
+        .localeCompare(String(b.Map_Name || b.Map_ID || ""));
+    });
+  });
+
+  return groups;
+}
+
 async function loadDatabase() {
-  const [hexes, pois, npcs, regions, poiGroups] = await Promise.all([
+  const [hexes, pois, npcs, regions, poiGroups, maps] = await Promise.all([
     fetchSheet(sheetUrls.hexes),
     fetchSheet(sheetUrls.pois),
     fetchSheet(sheetUrls.npcs),
     fetchSheet(sheetUrls.regions),
-    fetchSheet(sheetUrls.poiGroups)
+    fetchSheet(sheetUrls.poiGroups),
+    fetchOptionalSheet(sheetUrls.maps)
   ]);
 
   const appData = {
@@ -117,7 +164,8 @@ async function loadDatabase() {
     pois,
     npcs,
     regions,
-    poiGroups
+    poiGroups,
+    maps
   };
 
   const db = {
@@ -128,10 +176,12 @@ async function loadDatabase() {
     npcsById: indexById(appData.npcs, "NPC_ID"),
     regionsById: indexById(appData.regions, "Region_ID"),
     poiGroupsById: indexById(appData.poiGroups, "POI_Group_ID"),
+    mapsById: indexById(appData.maps, "Map_ID"),
 
     poisByHexId: groupBy(appData.pois, "Hex_ID_Ref"),
     npcsByHomeId: groupBy(appData.npcs, "Home_ID_Ref"),
-    poisByGroupId: groupBy(appData.pois, "POI_Group_ID")
+    poisByGroupId: groupBy(appData.pois, "POI_Group_ID"),
+    mapsByOwnerKey: groupMapsByOwner(appData.maps)
   };
 
   window.db = db;

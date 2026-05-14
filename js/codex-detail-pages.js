@@ -50,40 +50,59 @@ function buildCodexGroupedPoiBreadcrumbTrail(poiName, group) {
   ];
 }
 
+function getCodexImageUrl(record, fieldNames) {
+  return fieldNames
+    .map(fieldName => record?.[fieldName])
+    .find(Boolean) || "";
+}
+
 function getRegionImageUrl(region) {
-  return region?.Image ||
-    region?.Image_URL ||
-    region?.Region_Image ||
-    region?.Region_Image_URL ||
-    "";
+  return getCodexImageUrl(region, [
+    "Image",
+    "Image_URL",
+    "Region_Image",
+    "Region_Image_URL"
+  ]);
 }
 
 function getPoiImageUrl(poi) {
-  return poi?.Image ||
-    poi?.Image_URL ||
-    poi?.POI_Image ||
-    poi?.POI_Image_URL ||
-    "";
+  return getCodexImageUrl(poi, [
+    "Image",
+    "Image_URL",
+    "POI_Image",
+    "POI_Image_URL"
+  ]);
 }
 
 function getPoiGroupImageUrl(group) {
-  return group?.Image ||
-    group?.Image_URL ||
-    group?.POI_Group_Image ||
-    group?.POI_Group_Image_URL ||
-    group?.Group_Image ||
-    group?.Group_Image_URL ||
-    "";
+  return getCodexImageUrl(group, [
+    "Image",
+    "Image_URL",
+    "POI_Group_Image",
+    "POI_Group_Image_URL",
+    "Group_Image",
+    "Group_Image_URL"
+  ]);
 }
 
 function getNpcImageUrl(npc) {
-  return npc?.Image ||
-    npc?.Image_URL ||
-    npc?.NPC_Image ||
-    npc?.NPC_Image_URL ||
-    npc?.Portrait ||
-    npc?.Portrait_URL ||
-    "";
+  return getCodexImageUrl(npc, [
+    "Image",
+    "Image_URL",
+    "NPC_Image",
+    "NPC_Image_URL",
+    "Portrait",
+    "Portrait_URL"
+  ]);
+}
+
+function getCodexMapImageUrl(map) {
+  return getCodexImageUrl(map, [
+    "Image",
+    "Image_URL",
+    "Map_Image",
+    "Map_Image_URL"
+  ]);
 }
 
 function getPoiPlaceholderClass(record) {
@@ -103,7 +122,13 @@ function getPoiPlaceholderClass(record) {
 
 function renderImageStyle(imageUrl) {
   return imageUrl
-    ? `style="background-image: url('${escapeJsString(imageUrl)}')"`
+    ? `style="--codex-record-image: url('${escapeJsString(imageUrl)}')"`
+    : "";
+}
+
+function renderMapTileStyle(imageUrl) {
+  return imageUrl
+    ? `style="--codex-map-image: url('${escapeJsString(imageUrl)}')"`
     : "";
 }
 
@@ -116,6 +141,46 @@ function renderCodexInlineLink(type, id, label) {
     >
       ${escapeHtml(label)}
     </button>
+  `;
+}
+
+function renderCodexMapCard(map) {
+  const imageUrl = getCodexMapImageUrl(map);
+  const mapName = map.Map_Name || map.Map_ID || "Unnamed Map";
+  const content = `<span class="codex-map-card-title">${escapeHtml(mapName)}</span>`;
+
+  if (!imageUrl) {
+    return `
+      <div class="codex-map-card codex-map-card-disabled">
+        <span class="codex-map-card-info">${content}</span>
+      </div>
+    `;
+  }
+
+  return `
+    <a
+      class="codex-map-card"
+      href="${escapeHtml(imageUrl)}"
+      target="_blank"
+      rel="noopener noreferrer"
+      ${renderMapTileStyle(imageUrl)}
+    >
+      <span class="codex-map-card-info">${content}</span>
+    </a>
+  `;
+}
+
+function renderCodexMapsPanel(maps, fallback = "No maps recorded.") {
+  return `
+    <section class="codex-maps-panel">
+      <h3>Maps</h3>
+
+      ${
+        maps.length
+          ? `<div class="codex-map-tile-grid">${maps.map(renderCodexMapCard).join("")}</div>`
+          : `<p>${escapeHtml(fallback)}</p>`
+      }
+    </section>
   `;
 }
 
@@ -222,6 +287,7 @@ function renderCodexRegionPage(regionId) {
   const regionName = region?.Region_Name || regionId || "Unknown Region";
   const summary = getRegionSummary(regionId);
   const imageUrl = getRegionImageUrl(region);
+  const maps = getMapsForRegion(regionId);
 
   const pois = hexes.flatMap(hex => {
     return getPoisForHex(hex.Hex_ID);
@@ -239,16 +305,21 @@ function renderCodexRegionPage(regionId) {
     return counts;
   }, {});
 
-  const terrainSummary = Object.entries(terrainCounts)
+  const terrainRows = Object.entries(terrainCounts)
     .sort((a, b) => b[1] - a[1])
-    .map(([terrain, count]) => `${terrain}: ${count}`)
-    .join("<br>");
+    .map(([terrain, count]) => `
+      <div class="codex-region-terrain-row">
+        <span>${escapeHtml(terrain)}</span>
+        <strong>${count}</strong>
+      </div>
+    `)
+    .join("");
 
   setCodexTitle(regionName);
 
   setCodexContent(`
-    <div class="codex-region-detail-shell">
-      <div class="codex-region-detail-fixed">
+    <div class="codex-detail-page-shell codex-region-detail-shell">
+      <div class="codex-detail-fixed codex-detail-fixed-region">
         <div
           class="codex-detail-portrait-slot codex-region-detail-image codex-placeholder-region"
           ${renderImageStyle(imageUrl)}
@@ -263,50 +334,82 @@ function renderCodexRegionPage(regionId) {
               : ""
           }
           <p><strong>NPCs:</strong> ${summary.npcCount}</p>
+          ${maps.length ? `<p><strong>Maps:</strong> ${maps.length}</p>` : ""}
         </div>
 
-        <div class="codex-region-terrain-profile">
+        <section class="codex-detail-npc-panel codex-region-terrain-profile">
           <h3>Terrain Profile</h3>
-          <p>${terrainSummary || "No terrain data recorded."}</p>
-        </div>
+
+          <div class="codex-detail-upper-scrollbox codex-scroll-fade">
+            ${
+              terrainRows
+                ? `<div class="codex-region-terrain-list">${terrainRows}</div>`
+                : `<p>No terrain data recorded.</p>`
+            }
+          </div>
+        </section>
       </div>
 
-      <h3>Region Notes</h3>
-      <p>${escapeHtml(region?.Lore || region?.DM_Journal || "No region notes recorded.")}</p>
+      <div class="codex-region-detail-grid">
+        ${renderCodexDetailTextPanel(
+          "Region Notes",
+          region?.Lore || region?.DM_Journal,
+          "No region notes recorded."
+        )}
 
-      <h3>Points of Interest</h3>
-      ${renderCodexLinkedList(
-        poiListRows,
-        "No points of interest currently recorded in this region.",
-        "poi",
-        "POI_ID",
-        buildPoiListLabel
-      )}
+        <section class="codex-detail-scroll-panel">
+          <h3>Points of Interest</h3>
 
-      <h3>NPCs</h3>
-      ${renderCodexLinkedList(
-        npcs,
-        "No NPCs currently recorded in this region.",
-        "npc",
-        "NPC_ID",
-        buildNpcListLabel
-      )}
+          <div class="codex-region-list-scrollbox codex-scroll-fade">
+            ${renderCodexLinkedList(
+              poiListRows,
+              "No points of interest currently recorded in this region.",
+              "poi",
+              "POI_ID",
+              buildPoiListLabel
+            )}
+          </div>
+        </section>
 
-      <h3>Hexes</h3>
-      ${renderCodexLinkedList(
-        hexes,
-        "No hexes currently assigned to this region.",
-        "hex",
-        "Hex_ID",
-        buildHexListLabel
-      )}
+        <section class="codex-detail-scroll-panel">
+          <h3>NPCs</h3>
+
+          <div class="codex-region-list-scrollbox codex-scroll-fade">
+            ${renderCodexLinkedList(
+              npcs,
+              "No NPCs currently recorded in this region.",
+              "npc",
+              "NPC_ID",
+              buildNpcListLabel
+            )}
+          </div>
+        </section>
+
+        <section class="codex-detail-scroll-panel">
+          <h3>Hexes</h3>
+
+          <div class="codex-region-list-scrollbox codex-scroll-fade">
+            ${renderCodexLinkedList(
+              hexes,
+              "No hexes currently assigned to this region.",
+              "hex",
+              "Hex_ID",
+              buildHexListLabel
+            )}
+          </div>
+        </section>
+      </div>
+
+      ${renderCodexMapsPanel(maps, "No maps recorded for this region.")}
     </div>
   `, buildCodexBreadcrumbTrail(regionName, {
     label: "Regions",
     pageType: "regions"
   }));
 
-  document.getElementById("codex-content").classList.add("codex-region-detail-page");
+  document
+    .getElementById("codex-content")
+    .classList.add("codex-detail-page", "codex-region-detail-page");
 }
 
 function renderCodexPoiPage(poiId) {
@@ -318,6 +421,7 @@ function renderCodexPoiPage(poiId) {
   const population = getPoiEffectivePopulation(poi);
   const imageUrl = getPoiImageUrl(poi);
   const placeholderClass = getPoiPlaceholderClass(poi);
+  const maps = getMapsForPoi(poiId);
 
   setCodexTitle(poiName);
 
@@ -347,6 +451,8 @@ function renderCodexPoiPage(poiId) {
               ? `<p><strong>Population:</strong> ${escapeHtml(formatCodexPopulation(population) || "Unknown")}</p>`
               : ""
           }
+
+          ${maps.length ? `<p><strong>Maps:</strong> ${maps.length}</p>` : ""}
         </div>
 
         <section class="codex-detail-npc-panel">
@@ -377,6 +483,8 @@ function renderCodexPoiPage(poiId) {
           "No lore recorded."
         )}
       </div>
+
+      ${renderCodexMapsPanel(maps, "No maps recorded for this location.")}
     </div>
   `, buildCodexGroupedPoiBreadcrumbTrail(poiName, group));
 
@@ -391,6 +499,7 @@ function renderCodexPoiGroupPage(groupId) {
   const population = formatCodexPopulation(getPoiGroupPopulation(group));
   const imageUrl = getPoiGroupImageUrl(group);
   const placeholderClass = getPoiPlaceholderClass(group);
+  const maps = getMapsForPoiGroup(groupId);
 
   setCodexTitle(groupName);
 
@@ -409,6 +518,7 @@ function renderCodexPoiGroupPage(groupId) {
           }
 
           <p><strong>Mapped Areas:</strong> ${pois.length}</p>
+          ${maps.length ? `<p><strong>Maps:</strong> ${maps.length}</p>` : ""}
         </div>
 
         <section class="codex-detail-npc-panel">
@@ -448,6 +558,8 @@ function renderCodexPoiGroupPage(groupId) {
           "No lore recorded."
         )}
       </div>
+
+      ${renderCodexMapsPanel(maps, "No maps recorded for this place.")}
     </div>
   `, buildCodexBreadcrumbTrail(groupName, {
     label: "Points of Interest",

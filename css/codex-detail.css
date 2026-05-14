@@ -7,8 +7,7 @@
 }
 
 .codex-detail-page-shell {
-  height: calc(100vh - 285px);
-  min-height: 0;
+  min-height: calc(100vh - 285px);
 
   display: flex;
   flex-direction: column;
@@ -26,13 +25,18 @@
 }
 
 .codex-detail-portrait-slot {
+  position: relative;
+
   width: 220px;
   height: 220px;
 
+  overflow: hidden;
+
   border-radius: 14px;
-  border: 1px solid rgba(94, 55, 22, 0.26);
+  border: 0;
 
   background:
+    var(--codex-record-image, none),
     linear-gradient(
       rgba(255, 236, 188, 0.24),
       rgba(166, 108, 41, 0.14)
@@ -40,10 +44,9 @@
 
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
 
-  box-shadow:
-    inset 0 1px 3px rgba(255, 241, 202, 0.22),
-    0 2px 8px rgba(45, 25, 8, 0.10);
+  box-shadow: none;
 }
 
 .codex-placeholder-npc,
@@ -55,19 +58,39 @@
   background-repeat: no-repeat;
 }
 
-.codex-placeholder-npc {
+.codex-placeholder-npc::before,
+.codex-placeholder-settlement::before,
+.codex-placeholder-poi::before,
+.codex-placeholder-region::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  opacity: 0.90;
+
+  z-index: -1;
+}
+
+.codex-placeholder-npc::before {
   background-image: url("../assets/placeholder/Placeholder_NPC.png");
 }
 
-.codex-placeholder-settlement {
+.codex-placeholder-settlement::before {
   background-image: url("../assets/placeholder/Placeholder_Settlement.png");
 }
 
-.codex-placeholder-poi {
+.codex-placeholder-poi::before {
   background-image: url("../assets/placeholder/Placeholder_POI.png");
 }
 
-.codex-placeholder-region {
+.codex-placeholder-region::before {
   background-image: url("../assets/placeholder/Placeholder_Region.png");
 }
 
@@ -148,8 +171,7 @@
 }
 
 .codex-detail-scroll-grid {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
 
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -157,7 +179,8 @@
 }
 
 .codex-detail-scroll-panel {
-  min-height: 0;
+  min-height: 250px;
+  max-height: 320px;
 
   display: flex;
   flex-direction: column;
@@ -168,9 +191,11 @@
   margin-top: 0;
 }
 
-.codex-detail-scrollbox {
+.codex-detail-scrollbox,
+.codex-region-list-scrollbox {
   flex: 1 1 auto;
   min-height: 0;
+  max-height: 260px;
 
   overflow-y: auto;
 

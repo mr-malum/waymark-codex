@@ -1,0 +1,377 @@
+You are picking up work on the Kadesh Codex / Atlas web app.
+
+Repository:
+mr-malum/kadesh-codex
+
+New branch:
+ux-refinement-v2
+
+Context:
+The previous branch was ux-refinement, and it is being merged into main before this branch begins. Assume main now contains all ux-refinement changes unless proven otherwise.
+
+Working style request:
+Operate like the prior chat did during most of the ux-refinement branch:
+- Make small, targeted commits directly to the active GitHub branch when asked.
+- Before editing, fetch the relevant file from GitHub.
+- Preserve existing architecture and naming unless there is a strong reason to refactor.
+- Avoid broad rewrites unless explicitly requested.
+- Give concise commit summaries after changes.
+- Include quick test instructions after each commit.
+- Do not over-ask for confirmation when the request is clear.
+- Be careful with mobile/desktop distinctions.
+- Keep the user’s design intent primary: fantasy parchment atlas UI, readable, gameable, DM-friendly, not over-engineered.
+- When uncertain about UI interpretation, make the most conservative implementation and explain what assumption was made.
+- Avoid breaking established layout patterns, especially Codex detail page consistency.
+
+Project overview:
+This is a fantasy campaign atlas / codex app built on a Leaflet image map of Kadesh, with a Google Sheet backend. The map is the source of the geographic experience, and the Codex is the database/browser layer over that map. It is intended primarily as a DM-facing tool, with possible future expansion into controlled player-facing views only if account/access complexity becomes worth it.
+
+Important current architecture:
+- Data is loaded from published Google Sheets.
+- Codex pages include:
+  - Hex detail pages
+  - POI index/detail pages
+  - NPC index/detail pages
+  - Region index/detail pages
+  - Search page
+- POIs, NPCs, Regions, Hexes are linked through reference IDs.
+- POI groups were added to support large settlements/complexes spanning multiple hexes.
+
+Major changelog from ux-refinement branch:
+
+1. Mobile Codex UX
+- Fixed scroll/fade behavior around mobile Codex content.
+- Search results on mobile now use modal popovers rather than cramped internal nested scrollboxes.
+- Mobile search input now blurs on Enter/search so the mobile keyboard closes.
+- Mobile OS/back button behavior was improved:
+  - within Codex, OS back behaves like internal Codex back
+  - map side panel can close back to map
+  - no map-panel history stack was added
+- Back/close button sizing and glyph treatment were refined.
+- Mobile back/map button text was removed and replaced with icon-only behavior.
+- Mobile popup/hex tooltip now has a bottom action row:
+  - `Details` button on the left, about 2/3 width
+  - `×` close button on the right, about 1/3 width
+  - close clears selected hex and closes popup
+
+2. Search UX
+- Search results order was adjusted so Hexes and Regions positions were swapped as requested.
+- Mobile search results now use larger modal-style result panels matching filter/sort popup styling.
+- Search result modals overlay the bottom nav buttons.
+- Search buckets still include POIs, NPCs, Regions, Hexes.
+- POI group deduping was implemented in Search:
+  - grouped child POIs collapse into a single `poi-group` result under POIs
+  - group result opens the POI group detail page
+  - labels include total mapped area count, population, NPC count, and matching mapped area count
+  - direct search over POI_Groups fields was added:
+    - POI_Group_ID
+    - POI_Group_Name
+    - Group_Type
+    - Population
+    - Lore
+    - DM_Journal
+
+3. POI Groups
+Added a new Google Sheet tab / data source:
+
+POI_Groups:
+- POI_Group_ID
+- POI_Group_Name
+- Group_Type
+- Population
+- Lore
+- DM_Journal
+
+Known group rows created:
+- ERIKOL — City of Erikol — Population 50000
+- TORGOS — City of Torgos — Population 144816
+- GRANDABURG — Grandaburg City — Population 80365
+- MT_TEMPLE — Mountain Temple
+- TAINTED_CITY — The Tainted City
+
+Published link used for POI_Groups:
+https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pubhtml?gid=1000348883&single=true
+
+Data architecture additions:
+- `db.raw.poiGroups`
+- `db.poiGroupsById`
+- `db.poisByGroupId`
+
+Helper behavior:
+- POI groups allow large settlements / complexes to span multiple mapped POI rows without showing as duplicate major POIs.
+- Individual child POIs remain real records and still open as individual mapped areas.
+- Grouped child POIs show `Part of: [Group Name]`.
+- Group population overrides child POI population conceptually.
+- Child POI detail pages no longer show population if part of a group.
+- Hex POI lists do not show child population; instead they show:
+  - `Part of: [Group Name] • Pop. [formatted population]`
+- Population numbers are now formatted with commas.
+
+POI group UI:
+- Main POI index collapses grouped POIs into a single visible group entry.
+- Group detail pages show:
+  - type
+  - population
+  - mapped areas count
+  - NPCs associated with grouped POIs
+  - mapped areas list
+  - group lore/journal panels
+- Mapped Areas list on group detail pages now resembles POI list formatting, but excludes population and includes NPC count.
+- Grouped child POI breadcrumbs now show:
+  - Codex / Points of Interest / [Group Name] / [Mapped Area]
+- Group page breadcrumbs show:
+  - Codex / Points of Interest / [Group Name]
+
+POI group behavior intentionally preserved:
+- On Hex detail pages, clicking a grouped child POI still opens the child/mapped-area POI page, not the group page.
+- This was explicitly preferred because the hex contains the specific mapped area, while breadcrumb/Part of links provide upward navigation.
+
+4. Reference ID cleanup
+POI IDs were normalized:
+- SET-XXX style settlement IDs were converted to POI-XXXX style.
+- Existing POI-XXX entries also gained an additional leading zero.
+- Haunchrest Inn was assigned a uniform POI ID.
+- NPC Home_ID_Ref values were updated based on the new mapping.
+- The app should assume POI_IDs are now uniform POI-style IDs.
+- Future write capability should generate the next highest sequential POI ID.
+
+5. Backend/write-capability notes for later
+Future app-to-Google-Sheet write capability was discussed but deferred as a much later stage.
+Important guidance:
+- Required fields are mostly nailed down.
+- Reference IDs should be generated by checking the existing highest sequential value and incrementing.
+- Avoid committing generated IDs for unfinished records if possible.
+- Consider record states later, e.g. draft/finalized, but do not overbuild now.
+- DM-only write UI is preferred.
+- Player access control would probably require user accounts and is out-of-scope unless the project becomes much larger.
+- For grouped POIs, future creation UI should allow:
+  - no group
+  - choose existing group
+  - create new group
+  - if creating new group, dynamically generate/input group ID and group name
+- Group IDs are intentionally semantic, e.g. ERIKOL, TORGOS, GRANDABURG, not sequential. They are invisible on frontend and act as stable keys.
+
+6. Region index and region detail changes
+Regions are the next major focus.
+
+Already implemented:
+- Region index now renders as a 3-column desktop tile grid.
+- Region tiles are hard-sorted A–Z by Region_Name, fallback Region_ID.
+- Tiles are square.
+- Tile layout:
+  - top 2/3 image/placeholder thumbnail area
+  - bottom 1/3 mostly opaque info panel
+- Tile info includes:
+  - region name
+  - hex count
+  - deduped POI count
+  - mapped area count when relevant
+  - NPC count
+- Region tiles open the region detail page.
+- Region tile image support uses the same image helper as detail pages.
+
+Region detail page currently:
+- Restructured to roughly match NPC/POI detail pages.
+- Top header includes:
+  - square image thumbnail
+  - summary metadata
+  - terrain profile right-aligned
+- Bottom sections currently remain mostly as-is:
+  - Region Notes
+  - Points of Interest
+  - NPCs
+  - Hexes
+
+Important: Region detail still needs a lot of work. User explicitly said Region work is next.
+
+7. Detail thumbnail/image placeholder system
+Four placeholder assets were uploaded to GitHub:
+
+- `../assets/placeholder/Placeholder_NPC.png`
+- `../assets/placeholder/Placeholder_Settlement.png`
+- `../assets/placeholder/Placeholder_POI.png`
+- `../assets/placeholder/Placeholder_Region.png`
+
+Note: these paths are used from CSS files, hence `../assets/...`.
+
+Image helper pattern was generalized:
+- `getRegionImageUrl(region)`
+- `getPoiImageUrl(poi)`
+- `getPoiGroupImageUrl(group)`
+- `getNpcImageUrl(npc)`
+
+Supported likely sheet fields include:
+- Image
+- Image_URL
+- Region_Image
+- Region_Image_URL
+- POI_Image
+- POI_Image_URL
+- POI_Group_Image
+- POI_Group_Image_URL
+- Group_Image
+- Group_Image_URL
+- NPC_Image
+- NPC_Image_URL
+- Portrait
+- Portrait_URL
+
+Placeholder classes:
+- `codex-placeholder-npc`
+- `codex-placeholder-settlement`
+- `codex-placeholder-poi`
+- `codex-placeholder-region`
+
+POIs and POI Groups choose the settlement placeholder if type includes:
+- settlement
+- city
+- town
+- village
+
+Otherwise POI placeholder is used.
+
+All detail thumbnail slots were made square:
+- 220px x 220px
+- shared `.codex-detail-portrait-slot`
+- region thumbnail also 220px x 220px
+
+8. Region counts
+Region summaries now dedupe grouped POIs:
+- grouped child POIs count as one POI
+- mapped area count is also available separately
+- region detail POI lists collapse grouped POIs like main POI index
+
+9. Mobile/responsive caution
+The user has asked several times about avoiding discrepancies across different mobile devices.
+Guidance:
+- Use stable viewport-relative sizing carefully.
+- Avoid assumptions based solely on one mobile device.
+- Prefer CSS that allows safe overflow/scrolling.
+- Avoid nested scroll areas on mobile unless absolutely necessary.
+- Watch browser chrome / OS element effects on viewport height.
+- Consider mobile-specific overrides when desktop-first region layouts get too cramped.
+
+Current roadmap / next priorities:
+
+Immediate next focus: Region desktop detail/index refinement.
+
+Region work likely needed:
+1. Improve Region detail page layout
+- Current top header is only first-pass.
+- It should continue moving toward consistency with NPC/POI detail pages.
+- Keep image thumbnail square.
+- Keep summary metadata readable.
+- Terrain profile should remain useful but may need visual refinement.
+- Bottom sections probably need redesign:
+  - Region Notes
+  - Points of Interest
+  - NPCs
+  - Hexes
+- Consider making bottom lists more compact/structured.
+
+2. Region tile polish
+- Confirm 3 tiles per row desktop looks good.
+- Make sure long region names fit in bottom third.
+- Tile image placeholder should look good with uploaded Placeholder_Region.
+- Eventually region image URLs from sheet should populate both detail and tile.
+- May need hover/active polish.
+
+3. Region detail content strategy
+Potential improved region detail sections:
+- Overview / Lore
+- Summary metrics
+- Terrain profile
+- Major POIs
+- Mapped areas
+- NPCs
+- Hexes
+Need to avoid making it noisy.
+
+4. Region list/search consistency
+- Search region result labels should probably match improved region summary language.
+- Region detail POI list now collapses groups; verify behavior.
+- Region counts should remain deduped for POIs but expose mapped areas separately when useful.
+
+5. Mobile region work later
+- Region tile grid is desktop-first.
+- Mobile may need single-column or two-column tile behavior.
+- Do not spend too much time on mobile region layout until desktop region design stabilizes.
+
+Other outstanding / future roadmap items:
+
+A. Search and database “Atlas” function
+From earlier handoffs: The long-term goal is an AppSheet-like database layer on top of the map.
+- Search should become more atlas-like and database-like.
+- Data should remain simple to update from Google Sheets.
+- The map remains the conceptual source of truth.
+
+B. Backend write capability
+Deferred later.
+Needs:
+- add new Hex/POI/NPC/Region content from app
+- generate IDs safely
+- support grouped POI creation
+- probably DM-only auth or no-auth private deployment first
+- avoid dynamic player access complexity unless absolutely necessary
+
+C. Code architecture cleanup
+The user has repeatedly noticed repeated rendering logic and asked whether it can be centralized.
+There are already shared helpers:
+- renderCodexLinkedList()
+- list controls
+- filters
+- sorting helpers
+- label builders
+- POI group helpers
+Continue centralizing repeated display/label logic when it clearly reduces duplication, but avoid large risky rewrites.
+
+D. Side panel vs Codex architecture
+Earlier design direction:
+- Keep side panel more like a desktop equivalent of mobile tooltip.
+- Side panel should show compact map-context preview.
+- “Open Details” should open Codex detail.
+- Avoid developing separate full-featured side-panel and Codex systems in parallel.
+- Codex is the canonical detail/database UI.
+
+E. Mobile UI real estate
+Add to future revisions:
+- optimize mobile pages generally for limited vertical space
+- avoid too much dead space in headers/nav
+- use modals judiciously
+- avoid nested scroll traps
+
+F. POI Groups later polish, probably not urgent
+POI Groups are basically nailed.
+Possible tiny future items:
+- Replace fallback text `Grouped POI` with something nicer like `Place`
+- Add `Group_Type` values in sheet:
+  - Settlement
+  - Complex
+  - Ruined Settlement
+- Maybe add mapped area counts in certain labels if useful
+- Do not overbuild unless data scale grows
+
+G. Placeholder/image integration
+Next possible steps:
+- Add image columns to relevant sheets when ready.
+- Use URLs pointing to GitHub raw images or hosted images.
+- Use the same image field for both tile and detail pages.
+- Region images are likely stored/referenced from Region detail data, not a separate tile-only field.
+
+Important user preferences:
+- Fantasy parchment atlas aesthetic.
+- Old-school D&D / OSR-inspired ink thumbnail placeholders.
+- Consistency across NPC, POI, Region detail pages.
+- Practical DM usability over abstraction.
+- Simple Google Sheet modifications over complex normalized database design.
+- Avoid over-engineering player access/account systems.
+- Preserve current Hex behavior: clicking a hex shows map-context details first; Codex detail is opened intentionally.
+- Keep grouped POI child pages accessible for specific mapped areas.
+
+Suggested first task in ux-refinement-v2:
+Start by inspecting current `js/codex-detail-pages.js`, `css/codex-shell.css`, and `css/codex-detail.css` on the new branch after merge. Then continue Region detail polish, especially:
+- top header alignment
+- terrain profile presentation
+- bottom section layout
+- desktop readability
+- eventual mobile handling
