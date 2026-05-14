@@ -26,7 +26,7 @@
 }
 
 .codex-detail-portrait-slot {
-  width: 180px;
+  width: 220px;
   height: 220px;
 
   border-radius: 14px;
@@ -37,6 +37,9 @@
       rgba(255, 236, 188, 0.24),
       rgba(166, 108, 41, 0.14)
     );
+
+  background-size: cover;
+  background-position: center;
 
   box-shadow:
     inset 0 1px 3px rgba(255, 241, 202, 0.22),
