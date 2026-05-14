@@ -1,70 +1,149 @@
-for (let xxx = 300; xxx < 350; xxx++) {
-  for (let yyy = 300; yyy < 350; yyy++) {
-    const { x, y } = getHexCenter(xxx, yyy);
-    const hexId = `${xxx}:${yyy}`;
+/* =========================================================
+   APP EVENT WIRING
+   ========================================================= */
 
-    const hex = L.polygon(
-      makeHex(x, y, hexWidth, hexHeight),
-      defaultStyle
-    ).addTo(map);
+const HEX_GRID_MIN = 300;
+const HEX_GRID_MAX = 350;
 
-    hex.on("mouseover", function () {
-      if (!isTouchDevice && this !== selectedHex) {
-        this.setStyle(hoverStyle);
-      }
-    });
+let retroCodexSequence = "";
+let codexLongPressTimer = null;
+let suppressNextCodexClick = false;
 
-    hex.on("mouseout", function () {
-      if (!isTouchDevice && this !== selectedHex) {
-        this.setStyle(defaultStyle);
-      }
-    });
-
-    hex.on("click", function (e) {
-      L.DomEvent.stopPropagation(e);
-
-      document.getElementById("codex-button").classList.remove("codex-label-visible");
-
-      selectHex(this);
-      selectedHexId = hexId;
-
-      if (isTouchDevice) {
-        this.bindPopup(buildMobilePopupHtml(hexId)).openPopup();
-      } else {
-        renderHexPreview(hexId);
-      
-        const panelWidth =
-          document.getElementById("app-panel").offsetWidth;
-      
-        if (panelWidth / window.innerWidth > 0.32) {
-          panHexIntoInspectorView(hexId);
-        }
-      }
-    });
+function initializeHexGrid() {
+  for (let xxx = HEX_GRID_MIN; xxx < HEX_GRID_MAX; xxx++) {
+    for (let yyy = HEX_GRID_MIN; yyy < HEX_GRID_MAX; yyy++) {
+      createHexOverlay(xxx, yyy);
+    }
   }
 }
 
-map.on("click", function () {
-  closePanel();
+function createHexOverlay(xxx, yyy) {
+  const { x, y } = getHexCenter(xxx, yyy);
+  const hexId = `${xxx}:${yyy}`;
 
-  document.getElementById("codex-button").classList.remove("codex-label-visible");
+  const hex = L.polygon(
+    makeHex(x, y, hexWidth, hexHeight),
+    defaultStyle
+  ).addTo(map);
 
-  clearSelectedHex();
-});
+  bindHexEvents(hex, hexId);
+}
 
-document.getElementById("mobile-panel-close").addEventListener("click", function () {
-  closePanel({
-    clearSelection: true,
-    centerSelected: true
+function bindHexEvents(hex, hexId) {
+  hex.on("mouseover", function () {
+    if (!isTouchDevice && this !== selectedHex) {
+      this.setStyle(hoverStyle);
+    }
   });
-});
 
-map.on("popupclose", function () {
-  clearSelectedHex();
-});
+  hex.on("mouseout", function () {
+    if (!isTouchDevice && this !== selectedHex) {
+      this.setStyle(defaultStyle);
+    }
+  });
 
-document.getElementById("codex-button").addEventListener("click", function (event) {
+  hex.on("click", function (event) {
+    L.DomEvent.stopPropagation(event);
+
+    document
+      .getElementById("codex-button")
+      .classList.remove("codex-label-visible");
+
+    selectHex(this);
+    selectedHexId = hexId;
+
+    if (isTouchDevice) {
+      this.bindPopup(buildMobilePopupHtml(hexId)).openPopup();
+      return;
+    }
+
+    renderHexPreview(hexId);
+
+    const panelWidth =
+      document.getElementById("app-panel").offsetWidth;
+
+    if (panelWidth / window.innerWidth > 0.32) {
+      panHexIntoInspectorView(hexId);
+    }
+  });
+}
+
+function bindMapEvents() {
+  map.on("click", function () {
+    closePanel();
+
+    document
+      .getElementById("codex-button")
+      .classList.remove("codex-label-visible");
+
+    clearSelectedHex();
+  });
+
+  map.on("popupclose", function () {
+    clearSelectedHex();
+  });
+
+  document
+    .getElementById("map-reset-button")
+    .addEventListener("click", function (event) {
+      event.stopPropagation();
+
+      closePanel({ clearSelection: true });
+      closeCodex();
+      resetMapToAtlasView();
+    });
+}
+
+function bindPanelEvents() {
+  document
+    .getElementById("mobile-panel-close")
+    .addEventListener("click", function () {
+      closePanel({
+        clearSelection: true,
+        centerSelected: true
+      });
+    });
+}
+
+function bindCodexEvents() {
+  document
+    .getElementById("codex-button")
+    .addEventListener("click", handleCodexButtonClick);
+
+  document
+    .getElementById("codex-close")
+    .addEventListener("click", function () {
+      closeCodex();
+    });
+
+  document
+    .getElementById("codex-back")
+    .addEventListener("click", function () {
+      if (codexHistory.length <= 1) {
+        closeCodex();
+        return;
+      }
+
+      goBackCodex();
+    });
+
+  document
+    .getElementById("codex-overlay")
+    .addEventListener("click", function (event) {
+      if (event.target === this) {
+        closeCodex();
+      }
+    });
+}
+
+function handleCodexButtonClick(event) {
   event.stopPropagation();
+
+  if (suppressNextCodexClick) {
+    suppressNextCodexClick = false;
+    event.preventDefault();
+    return;
+  }
 
   const codexButton = document.getElementById("codex-button");
 
@@ -78,85 +157,62 @@ document.getElementById("codex-button").addEventListener("click", function (even
   codexButton.classList.remove("codex-label-visible");
   resetMapToAtlasView();
   resetCodexToIndex();
-});
+}
 
-document.getElementById("map-reset-button").addEventListener("click", function (event) {
-  event.stopPropagation();
+function bindKeyboardEasterEggEvents() {
+  window.addEventListener("keydown", event => {
+    retroCodexSequence += event.key.toLowerCase();
 
-  closePanel({ clearSelection: true });
-  closeCodex();
-  resetMapToAtlasView();
-});
+    if (retroCodexSequence.length > 2) {
+      retroCodexSequence = retroCodexSequence.slice(-2);
+    }
 
-document.getElementById("codex-close").addEventListener("click", function () {
-  closeCodex();
-});
-
-document.getElementById("codex-back").addEventListener("click", function () {
-  if (codexHistory.length <= 1) {
-    closeCodex();
-    return;
-  }
-
-  goBackCodex();
-});
-
-document.getElementById("codex-overlay").addEventListener("click", function (event) {
-  if (event.target === this) {
-    closeCodex();
-  }
-});
-
-let retroCodexSequence = "";
-
-window.addEventListener("keydown", event => {
-  retroCodexSequence += event.key.toLowerCase();
-
-  if (retroCodexSequence.length > 2) {
-    retroCodexSequence = retroCodexSequence.slice(-2);
-  }
-
-  if (retroCodexSequence === "95") {
-    toggleRetroCodexMode();
-    retroCodexSequence = "";
-  }
-});
-
-let codexLongPressTimer = null;
-let suppressNextCodexClick = false;
+    if (retroCodexSequence === "95") {
+      toggleRetroCodexMode();
+      retroCodexSequence = "";
+    }
+  });
+}
 
 function isMobileCodexLongPressEnabled() {
   return window.matchMedia("(max-width: 700px), (pointer: coarse)").matches;
 }
 
-const codexLongPressButton = document.getElementById("codex-button");
-
-codexLongPressButton.addEventListener("pointerdown", event => {
-  if (!isMobileCodexLongPressEnabled()) return;
-
-  codexLongPressTimer = window.setTimeout(() => {
-    suppressNextCodexClick = true;
-    toggleRetroCodexMode();
-  }, 650);
-});
-
-codexLongPressButton.addEventListener("pointerup", () => {
+function clearCodexLongPressTimer() {
   window.clearTimeout(codexLongPressTimer);
   codexLongPressTimer = null;
-});
+}
 
-codexLongPressButton.addEventListener("pointercancel", () => {
-  window.clearTimeout(codexLongPressTimer);
-  codexLongPressTimer = null;
-});
+function bindCodexLongPressEvents() {
+  const codexButton = document.getElementById("codex-button");
 
-codexLongPressButton.addEventListener("pointerleave", () => {
-  window.clearTimeout(codexLongPressTimer);
-  codexLongPressTimer = null;
-});
+  codexButton.addEventListener("pointerdown", () => {
+    if (!isMobileCodexLongPressEnabled()) return;
 
-codexLongPressButton.addEventListener("contextmenu", event => {
-  if (!isMobileCodexLongPressEnabled()) return;
+    codexLongPressTimer = window.setTimeout(() => {
+      suppressNextCodexClick = true;
+      toggleRetroCodexMode();
+    }, 650);
+  });
 
-  event.preventDefault();
-});
+  codexButton.addEventListener("pointerup", clearCodexLongPressTimer);
+  codexButton.addEventListener("pointercancel", clearCodexLongPressTimer);
+  codexButton.addEventListener("pointerleave", clearCodexLongPressTimer);
+
+  codexButton.addEventListener("contextmenu", event => {
+    if (!isMobileCodexLongPressEnabled()) return;
+
+    event.preventDefault();
+  });
+}
+
+function initializeAppEvents() {
+  initializeHexGrid();
+  bindMapEvents();
+  bindPanelEvents();
+  bindCodexEvents();
+  bindKeyboardEasterEggEvents();
+  bindCodexLongPressEvents();
+}
+
+initializeAppEvents();

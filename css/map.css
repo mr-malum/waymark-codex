@@ -51,6 +51,8 @@
 
   transform: translate(-50%, -50%);
 
+  z-index: 2;
+
   font-family: 'Marcellus SC', Georgia, serif;
   font-size: 2.25rem;
   letter-spacing: 0.22em;
@@ -70,7 +72,57 @@
   pointer-events: none;
 
   transition:
+    opacity 220ms ease,
+    color 220ms ease,
+    text-shadow 220ms ease;
+}
+
+#codex-button::after {
+  content: "";
+
+  position: absolute;
+  left: 50%;
+  top: 50%;
+
+  width: 118px;
+  height: 38px;
+
+  transform: translate(-50%, -50%);
+
+  z-index: 1;
+
+  border-radius: 999px;
+
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgba(20, 10, 3, 0.74) 0%,
+      rgba(20, 10, 3, 0.58) 48%,
+      rgba(20, 10, 3, 0.00) 74%
+    );
+
+  opacity: 0;
+
+  pointer-events: none;
+
+  transition:
     opacity 220ms ease;
+}
+
+#codex-button.codex-retro-mode::before {
+  color: #f2dfb6;
+
+  text-shadow:
+    0 0 12px rgba(0, 0, 0, 1),
+    0 0 26px rgba(0, 0, 0, 0.96),
+    0 0 48px rgba(0, 0, 0, 0.88),
+    0 3px 8px rgba(0, 0, 0, 0.90),
+    0 0 8px rgba(25, 12, 4, 0.78);
+}
+
+#codex-button.codex-retro-mode:hover::after,
+#codex-button.codex-retro-mode.codex-label-visible::after {
+  opacity: 1;
 }
 
 #codex-button:focus,

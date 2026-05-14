@@ -103,11 +103,18 @@ function groupBy(rows, fieldName) {
 }
 
 async function loadDatabase() {
+  const [hexes, pois, npcs, regions] = await Promise.all([
+    fetchSheet(sheetUrls.hexes),
+    fetchSheet(sheetUrls.pois),
+    fetchSheet(sheetUrls.npcs),
+    fetchSheet(sheetUrls.regions)
+  ]);
+
   const appData = {
-    hexes: await fetchSheet(sheetUrls.hexes),
-    pois: await fetchSheet(sheetUrls.pois),
-    npcs: await fetchSheet(sheetUrls.npcs),
-    regions: await fetchSheet(sheetUrls.regions)
+    hexes,
+    pois,
+    npcs,
+    regions
   };
 
   const db = {

@@ -111,7 +111,9 @@
 }
 
 .codex-mobile-filter-toggle,
-.codex-mobile-controls-overlay {
+.codex-mobile-controls-overlay,
+.codex-mobile-controls-heading,
+.codex-mobile-controls-apply {
   display: none;
 }
 
@@ -201,7 +203,7 @@
   overflow: visible;
 }
 
-.codex-filter-field-select {
+.codex-filter-row .codex-filter-field-select {
   appearance: none;
   -webkit-appearance: none;
 
@@ -210,29 +212,36 @@
   height: 34px;
   min-height: 0;
 
-  line-height: 1;
-
   width: auto;
   min-width: 0;
 
-  padding: 0 24px 2px 8px;
-  padding-top: 0;
+  padding: 0 28px 0 8px;
 
   border-radius: 8px;
   border: 1px solid rgba(94, 55, 22, 0.32);
 
-  background:
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1.2L4.5 4.8L8 1.2' fill='none' stroke='%233a2614' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"),
     linear-gradient(
       rgba(255, 231, 174, 0.78),
       rgba(166, 108, 41, 0.32)
     );
+  background-position:
+    calc(100% - 13px) center,
+    0 0;
+  background-size:
+    9px 6px,
+    100% 100%;
+  background-repeat: no-repeat;
 
   color: #3a2614;
 
   font-family: 'Marcellus SC', Georgia, serif;
-  font-size: 0.52rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: 0.68rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 
   cursor: pointer;
 

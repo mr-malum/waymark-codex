@@ -1,9 +1,32 @@
 let db = null;
+let databaseLoadError = null;
 
-loadDatabase().then(loadedDb => {
-  db = loadedDb;
-  console.log("Database loaded:", db);
-});
+function refreshOpenCodexAfterDatabaseLoad() {
+  const overlay = document.getElementById("codex-overlay");
+  const currentPage = codexHistory[codexHistory.length - 1];
+
+  if (!overlay?.classList.contains("open") || !currentPage) {
+    return;
+  }
+
+  renderCodexPage(currentPage.type, currentPage.id);
+  updateCodexBackButton();
+}
+
+loadDatabase()
+  .then(loadedDb => {
+    db = loadedDb;
+    databaseLoadError = null;
+
+    console.log("Database loaded:", db);
+    refreshOpenCodexAfterDatabaseLoad();
+  })
+  .catch(error => {
+    databaseLoadError = error;
+
+    console.error("Database failed to load:", error);
+    refreshOpenCodexAfterDatabaseLoad();
+  });
 
 const map = L.map("map", {
   crs: L.CRS.Simple,
