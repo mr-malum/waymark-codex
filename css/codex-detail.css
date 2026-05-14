@@ -164,6 +164,7 @@
 
 .codex-detail-scroll-panel {
   min-height: 250px;
+  max-height: 320px;
 
   display: flex;
   flex-direction: column;
@@ -174,9 +175,11 @@
   margin-top: 0;
 }
 
-.codex-detail-scrollbox {
+.codex-detail-scrollbox,
+.codex-region-list-scrollbox {
   flex: 1 1 auto;
   min-height: 0;
+  max-height: 260px;
 
   overflow-y: auto;
 
