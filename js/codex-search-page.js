@@ -441,7 +441,8 @@ function openCodexSearchResultsModal(type) {
           null,
           "id",
           row => row.label,
-          row => row.type
+          row => row.type,
+          row => getCodexSearchResultIcon(row.type)
         )}
       </div>
 
@@ -511,48 +512,16 @@ function getCodexSearchResultIcon(type) {
   return getCodexSearchGroupIcon(type);
 }
 
-function parseCodexSearchRowLabel(label) {
-  const parts = String(label || "").split(" — ").map(part => part.trim()).filter(Boolean);
-  const title = parts.shift() || "Unnamed Record";
-
-  return {
-    title,
-    meta: parts.join(" • ")
-  };
-}
-
 function renderCodexSearchRowList(rows, emptyText) {
-  if (!rows.length) {
-    return `<p>${escapeHtml(emptyText)}</p>`;
-  }
-
-  return `
-    <div class="codex-row-list codex-row-list-dense codex-search-row-list">
-      ${rows.map(row => renderCodexSearchResultRow(row)).join("")}
-    </div>
-  `;
-}
-
-function renderCodexSearchResultRow(row) {
-  const { title, meta } = parseCodexSearchRowLabel(row.label);
-  const icon = getCodexSearchResultIcon(row.type);
-
-  return `
-    <button
-      class="codex-row codex-search-result-row"
-      type="button"
-      onclick="openCodexPage('${escapeJsString(row.type)}', '${escapeJsString(row.id)}')"
-    >
-      <span class="codex-row-icon" aria-hidden="true">${escapeHtml(icon)}</span>
-
-      <span class="codex-row-main">
-        <span class="codex-row-title">${escapeHtml(title)}</span>
-        ${meta ? `<span class="codex-row-meta">${escapeHtml(meta)}</span>` : ""}
-      </span>
-
-      <span class="codex-row-arrow" aria-hidden="true">›</span>
-    </button>
-  `;
+  return renderCodexLinkedList(
+    rows,
+    emptyText,
+    null,
+    "id",
+    row => row.label,
+    row => row.type,
+    row => getCodexSearchResultIcon(row.type)
+  );
 }
 
 function renderCodexSearchCategoryRail(results) {
@@ -581,22 +550,15 @@ function renderCodexSearchCategoryButton(category) {
   const isActive = codexSearchActiveGroup === category.type;
   const isDisabled = category.count === 0;
 
-  return `
-    <button
-      class="codex-row codex-search-category-button ${isActive ? "codex-row-active active" : ""} ${isDisabled ? "codex-row-disabled" : ""}"
-      type="button"
-      onclick="setCodexSearchActiveGroup('${escapeJsString(category.type)}')"
-      ${isDisabled ? "disabled" : ""}
-    >
-      <span class="codex-row-icon" aria-hidden="true">${escapeHtml(getCodexSearchGroupIcon(category.type))}</span>
-
-      <span class="codex-row-main">
-        <span class="codex-row-title">${escapeHtml(category.label)}</span>
-      </span>
-
-      <span class="codex-row-count">${escapeHtml(String(category.count))}</span>
-    </button>
-  `;
+  return renderCodexRow({
+    title: category.label,
+    icon: getCodexSearchGroupIcon(category.type),
+    count: category.count,
+    active: isActive,
+    disabled: isDisabled,
+    classes: "codex-search-category-button",
+    onclick: `setCodexSearchActiveGroup('${escapeJsString(category.type)}')`
+  });
 }
 
 function renderCodexSearchMainPaneContent(results) {
