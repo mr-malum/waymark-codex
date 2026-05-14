@@ -86,6 +86,69 @@ function isMobileCodexSearchLayout() {
   return window.matchMedia("(max-width: 700px)").matches;
 }
 
+function isCodexHomeSearchActiveLayout() {
+  const content = document.getElementById("codex-content");
+
+  return Boolean(
+    content?.classList.contains("codex-home-search-page") &&
+    content?.classList.contains("codex-home-search-active")
+  );
+}
+
+function restoreCodexHomeSearchControlsFromRail() {
+  const shell = document.querySelector(".codex-home-search-page-shell");
+  const controls = document.querySelector(".codex-home-search-controls-shell");
+  const buttons = document.getElementById("codex-home-section-buttons");
+  const results = document.getElementById("codex-search-results");
+
+  if (!shell || !controls || controls.parentElement === shell) return;
+
+  shell.insertBefore(controls, buttons || results || null);
+}
+
+function ensureCodexHomeSearchRailLayout() {
+  const resultsEl = document.getElementById("codex-search-results");
+  if (!resultsEl) return false;
+
+  if (!document.getElementById("codex-home-search-rail-input-slot")) {
+    resultsEl.innerHTML = renderCodexSplitView({
+      className: "codex-home-search-split-view codex-search-split-view",
+      railHtml: `
+        <div id="codex-home-search-rail-input-slot" class="codex-home-search-rail-input-slot"></div>
+        <div id="codex-search-category-rail-slot" class="codex-search-category-rail-slot"></div>
+      `,
+      mainHtml: `<div id="codex-search-main-results-slot" class="codex-search-main-results-slot"></div>`
+    });
+  }
+
+  const controls = document.querySelector(".codex-home-search-controls-shell");
+  const inputSlot = document.getElementById("codex-home-search-rail-input-slot");
+
+  if (controls && inputSlot && controls.parentElement !== inputSlot) {
+    inputSlot.appendChild(controls);
+  }
+
+  return Boolean(
+    document.getElementById("codex-search-category-rail-slot") &&
+    document.getElementById("codex-search-main-results-slot")
+  );
+}
+
+function renderCodexHomeSearchRailResults(results) {
+  if (!ensureCodexHomeSearchRailLayout()) return;
+
+  const railSlot = document.getElementById("codex-search-category-rail-slot");
+  const mainSlot = document.getElementById("codex-search-main-results-slot");
+
+  if (railSlot) {
+    railSlot.innerHTML = renderCodexSearchCategoryRail(results);
+  }
+
+  if (mainSlot) {
+    mainSlot.innerHTML = renderCodexSearchMainPaneContent(results);
+  }
+}
+
 function renderCodexSearchResults(query) {
   const resultsEl = document.getElementById("codex-search-results");
   const cleanQuery = normalizeCodexSearchQuery(query);
@@ -95,14 +158,24 @@ function renderCodexSearchResults(query) {
   closeCodexSearchResultsModal();
 
   if (!cleanQuery) {
+    restoreCodexHomeSearchControlsFromRail();
     resultsEl.innerHTML = renderCodexEmptySearchMessage();
     return;
   }
 
   const results = buildCodexSearchResults(cleanQuery);
-  resultsEl.innerHTML = isMobileCodexSearchLayout()
-    ? renderMobileCodexSearchResultGroups(results)
-    : renderCodexSearchResultGroups(results);
+
+  if (isMobileCodexSearchLayout()) {
+    resultsEl.innerHTML = renderMobileCodexSearchResultGroups(results);
+    return;
+  }
+
+  if (isCodexHomeSearchActiveLayout()) {
+    renderCodexHomeSearchRailResults(results);
+    return;
+  }
+
+  resultsEl.innerHTML = renderCodexSearchResultGroups(results);
 }
 
 function normalizeCodexSearchQuery(query) {
@@ -610,3 +683,4 @@ window.closeCodexSearchResultsModal = closeCodexSearchResultsModal;
 window.handleCodexSearchModalBackdropClick = handleCodexSearchModalBackdropClick;
 window.setCodexSearchActiveGroup = setCodexSearchActiveGroup;
 window.scheduleCodexSearchResultsRender = scheduleCodexSearchResultsRender;
+window.restoreCodexHomeSearchControlsFromRail = restoreCodexHomeSearchControlsFromRail;
