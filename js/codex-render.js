@@ -79,11 +79,13 @@ function renderCodexLinkedList(
   return `
     <div class="codex-list">
       ${rows.map(row => {
-        const id = row?.[idField];
+        const id = row?.__codexRecordId || row?.[idField];
 
-        const resolvedType = getType
-          ? getType(row)
-          : type;
+        const resolvedType = row?.__codexRecordType || (
+          getType
+            ? getType(row)
+            : type
+        );
 
         const label = getLabel(row) || id || "Unnamed Record";
 
