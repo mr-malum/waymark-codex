@@ -1,7 +1,25 @@
+/* Shared Codex content width */
+:root {
+  --codex-content-max-width: 1080px;
+  --codex-home-content-max-width: 720px;
+}
+
+#codex-content {
+  width: min(100%, var(--codex-content-max-width));
+  max-width: var(--codex-content-max-width);
+  box-sizing: border-box;
+}
+
+#codex-content.codex-home:not(.codex-home-search-page) {
+  width: min(100%, var(--codex-home-content-max-width));
+  max-width: var(--codex-home-content-max-width);
+}
+
 /* Codex search page layout */
 #codex-content.codex-search-page {
   display: block;
-  max-width: 860px;
+  width: min(100%, var(--codex-content-max-width));
+  max-width: var(--codex-content-max-width);
   padding-bottom: 0;
   overflow: hidden;
 }
@@ -151,12 +169,15 @@
 
 #codex-content.codex-home-search-page {
   display: block;
-  max-width: 860px;
+  width: min(100%, var(--codex-home-content-max-width));
+  max-width: var(--codex-home-content-max-width);
   padding-bottom: 0;
   overflow: hidden;
 }
 
 #codex-content.codex-home-search-page.codex-home-search-active {
+  width: min(100%, var(--codex-content-max-width));
+  max-width: var(--codex-content-max-width);
   padding-bottom: 0;
   overflow: hidden;
 }
@@ -405,6 +426,11 @@
 }
 
 @media (max-width: 700px) {
+  #codex-content {
+    width: 100%;
+    max-width: none;
+  }
+
   #codex-content.codex-search-page,
   #codex-content.codex-home-search-page.codex-home-search-active {
     padding-bottom: 170px;
