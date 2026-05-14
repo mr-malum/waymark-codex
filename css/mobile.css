@@ -284,9 +284,8 @@
 
     background:
       linear-gradient(
-        rgba(238, 201, 130, 0.96),
-        rgba(238, 201, 130, 0.78),
-        rgba(238, 201, 130, 0)
+        rgba(238, 201, 130, 1),
+        rgba(238, 201, 130, 1)
       );
   }
 
@@ -298,6 +297,12 @@
   #codex-search-input {
     padding: 12px 14px;
     font-size: 1.08rem;
+
+    background:
+      linear-gradient(
+        rgba(255, 235, 184, 0.98),
+        rgba(214, 159, 82, 0.90)
+      );
   }
 
   .codex-search-results-shell {
