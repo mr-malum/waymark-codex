@@ -23,17 +23,17 @@ function buildPoiListLabel(row) {
   }
 
   if (group) {
-    const groupPopulation = getPoiGroupPopulation(group);
+    const groupPopulation = formatCodexPopulation(getPoiGroupPopulation(group));
     const groupLabel = [
       `Part of: ${group.POI_Group_Name || group.POI_Group_ID}`,
       groupPopulation ? `Pop. ${groupPopulation}` : ""
-    ].filter(Boolean).join(" ");
+    ].filter(Boolean).join(" • ");
 
     meta.push(groupLabel);
   }
 
   const npcCount = getNpcsForPoi(row.POI_ID).length;
-  const population = group ? "" : getPoiEffectivePopulation(row);
+  const population = group ? "" : formatCodexPopulation(getPoiEffectivePopulation(row));
 
   const populationNpcLine = [
     population ? `Population: ${population}` : "",
@@ -53,6 +53,7 @@ function buildPoiListLabel(row) {
 function buildPoiGroupListLabel(group) {
   const groupPois = group.__codexGroupPois || getPoisForGroup(group.POI_Group_ID);
   const npcs = getNpcsForPoiGroup(group.POI_Group_ID);
+  const population = formatCodexPopulation(group.Population);
 
   const meta = [];
 
@@ -66,7 +67,7 @@ function buildPoiGroupListLabel(group) {
   }
 
   const populationNpcLine = [
-    group.Population ? `Population: ${group.Population}` : "",
+    population ? `Population: ${population}` : "",
     npcs.length > 0 ? `${npcs.length} NPC${npcs.length !== 1 ? "s" : ""}` : ""
   ].filter(Boolean).join(" • ");
 
@@ -112,11 +113,18 @@ function buildNpcListLabel(row) {
 function buildRegionListLabel(row) {
   const summary = getRegionSummary(row.Region_ID);
 
+  const countLine = [
+    `${summary.hexCount} hexes`,
+    `${summary.poiCount} POIs`,
+    summary.mappedAreaCount > summary.poiCount
+      ? `${summary.mappedAreaCount} mapped areas`
+      : "",
+    `${summary.npcCount} NPCs`
+  ].filter(Boolean).join(" • ");
+
   return joinCodexLabel(
     row.Region_Name || row.Region_ID || "Unnamed Region",
-    [
-      `${summary.hexCount} hexes • ${summary.poiCount} POIs • ${summary.npcCount} NPCs`
-    ]
+    [countLine]
   );
 }
 
