@@ -198,6 +198,7 @@ function renderCodexPage(type, id) {
   if (type === "hex") return renderCodexHexPage(id);
   if (type === "region") return renderCodexRegionPage(id);
   if (type === "poi") return renderCodexPoiPage(id);
+  if (type === "poi-group") return renderCodexPoiGroupPage(id);
   if (type === "npc") return renderCodexNpcPage(id);
   if (type === "search") return renderCodexSearchPage();
   if (type === "regions") return renderCodexRegionsIndex();
