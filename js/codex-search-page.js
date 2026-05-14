@@ -9,6 +9,8 @@ const CODEX_SEARCH_GROUPS = [
   { type: "hex", label: "Hexes" }
 ];
 
+let codexSearchActiveGroup = "all";
+
 function renderCodexSearchPage() {
   setCodexTitle("Search the Codex");
 
@@ -53,6 +55,7 @@ function bindCodexSearchInput() {
 
   input.addEventListener("input", function () {
     codexSearchQuery = input.value;
+    codexSearchActiveGroup = "all";
     renderCodexSearchResults(input.value);
   });
 
@@ -365,6 +368,10 @@ function getCodexSearchGroupRows(group, results) {
   return results.filter(result => result.type === group.type);
 }
 
+function getCodexSearchGroupCount(group, results) {
+  return getCodexSearchGroupRows(group, results).length;
+}
+
 function getCodexSearchMatchLabel(count) {
   if (count === 1) return "1 match";
   return `${count} matches`;
@@ -381,7 +388,7 @@ function renderMobileCodexSearchResultGroups(results) {
 }
 
 function renderMobileCodexSearchSummaryButton(group, results) {
-  const count = getCodexSearchGroupRows(group, results).length;
+  const count = getCodexSearchGroupCount(group, results);
 
   return `
     <button
@@ -452,29 +459,132 @@ function handleCodexSearchModalBackdropClick(event) {
   closeCodexSearchResultsModal();
 }
 
-function renderCodexSearchResultGroups(results) {
-  return CODEX_SEARCH_GROUPS
-    .map(group => renderCodexSearchResultGroup(group, results))
-    .join("");
+function normalizeCodexSearchActiveGroup(results) {
+  if (codexSearchActiveGroup === "all") return;
+
+  const group = CODEX_SEARCH_GROUPS.find(item => item.type === codexSearchActiveGroup);
+
+  if (!group || getCodexSearchGroupCount(group, results) === 0) {
+    codexSearchActiveGroup = "all";
+  }
 }
 
-function renderCodexSearchResultGroup(group, results) {
-  const groupRows = getCodexSearchGroupRows(group, results);
+function setCodexSearchActiveGroup(type) {
+  codexSearchActiveGroup = type || "all";
+  renderCodexSearchResults(codexSearchQuery);
+}
+
+function getCodexSearchTotalCount(results) {
+  return results.length;
+}
+
+function renderCodexSearchResultGroups(results) {
+  normalizeCodexSearchActiveGroup(results);
 
   return `
-    <section class="codex-search-result-panel">
-      <h3 class="codex-search-result-heading">${escapeHtml(group.label)}</h3>
+    <div class="codex-search-split-view">
+      ${renderCodexSearchCategoryRail(results)}
+      ${renderCodexSearchMainPane(results)}
+    </div>
+  `;
+}
 
-      <div class="codex-search-group-scroll codex-scroll-fade">
+function renderCodexSearchCategoryRail(results) {
+  const totalCount = getCodexSearchTotalCount(results);
+
+  return `
+    <nav class="codex-search-category-rail" aria-label="Search result categories">
+      ${renderCodexSearchCategoryButton({
+        type: "all",
+        label: "All",
+        count: totalCount
+      })}
+
+      ${CODEX_SEARCH_GROUPS
+        .map(group => renderCodexSearchCategoryButton({
+          type: group.type,
+          label: group.label,
+          count: getCodexSearchGroupCount(group, results)
+        }))
+        .join("")}
+    </nav>
+  `;
+}
+
+function renderCodexSearchCategoryButton(category) {
+  const isActive = codexSearchActiveGroup === category.type;
+
+  return `
+    <button
+      class="codex-search-category-button ${isActive ? "active" : ""}"
+      type="button"
+      onclick="setCodexSearchActiveGroup('${escapeJsString(category.type)}')"
+      ${category.count === 0 ? "disabled" : ""}
+    >
+      <span class="codex-search-category-label">${escapeHtml(category.label)}</span>
+      <span class="codex-search-category-count">${escapeHtml(String(category.count))}</span>
+    </button>
+  `;
+}
+
+function renderCodexSearchMainPane(results) {
+  const activeGroup = CODEX_SEARCH_GROUPS.find(group => group.type === codexSearchActiveGroup);
+
+  if (!activeGroup) {
+    return renderCodexSearchAllResultsPane(results);
+  }
+
+  const groupRows = getCodexSearchGroupRows(activeGroup, results);
+
+  return `
+    <main class="codex-search-main-pane codex-scroll-fade">
+      <section class="codex-search-focused-section">
+        <div class="codex-search-focused-heading">
+          <h3>${escapeHtml(activeGroup.label)}</h3>
+          <p>${escapeHtml(getCodexSearchMatchLabel(groupRows.length))}</p>
+        </div>
+
         ${renderCodexLinkedList(
           groupRows,
-          `No matching ${group.label}.`,
+          `No matching ${activeGroup.label}.`,
           null,
           "id",
           row => row.label,
           row => row.type
         )}
+      </section>
+    </main>
+  `;
+}
+
+function renderCodexSearchAllResultsPane(results) {
+  return `
+    <main class="codex-search-main-pane codex-scroll-fade">
+      ${CODEX_SEARCH_GROUPS
+        .map(group => renderCodexSearchAllResultSection(group, results))
+        .join("")}
+    </main>
+  `;
+}
+
+function renderCodexSearchAllResultSection(group, results) {
+  const groupRows = getCodexSearchGroupRows(group, results);
+
+  return `
+    <section class="codex-search-all-section">
+      <div class="codex-search-focused-heading">
+        <h3>${escapeHtml(group.label)}</h3>
+        <p>${escapeHtml(getCodexSearchMatchLabel(groupRows.length))}</p>
       </div>
+
+      ${renderCodexLinkedList(
+        groupRows,
+        `No matching ${group.label}.`,
+        null,
+        "id",
+        row => row.label,
+        row => row.type
+      )}
     </section>
   `;
 }
@@ -482,3 +592,4 @@ function renderCodexSearchResultGroup(group, results) {
 window.openCodexSearchResultsModal = openCodexSearchResultsModal;
 window.closeCodexSearchResultsModal = closeCodexSearchResultsModal;
 window.handleCodexSearchModalBackdropClick = handleCodexSearchModalBackdropClick;
+window.setCodexSearchActiveGroup = setCodexSearchActiveGroup;
