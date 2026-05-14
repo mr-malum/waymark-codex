@@ -144,6 +144,11 @@ function toggleRetroCodexMode() {
   }
 }
 
+function closeMobileHexPopup() {
+  map.closePopup();
+  clearSelectedHex();
+}
+
 function buildMobilePopupHtml(hexId) {
   const data = db?.hexesById?.[hexId];
   const counts = getHexCounts(hexId);
@@ -168,15 +173,26 @@ function buildMobilePopupHtml(hexId) {
         : ""
     }
 
-    <br>
-    <button
-      class="popup-open-details"
-      type="button"
-      onclick="openCodexPage('hex', '${escapeJsString(hexId)}')"
-    >
-      Open Details
-    </button>
+    <div class="popup-action-row">
+      <button
+        class="popup-open-details"
+        type="button"
+        onclick="openCodexPage('hex', '${escapeJsString(hexId)}')"
+      >
+        Details
+      </button>
+
+      <button
+        class="popup-close-details"
+        type="button"
+        aria-label="Close hex preview"
+        onclick="closeMobileHexPopup()"
+      >
+        ×
+      </button>
+    </div>
   `;
 }
 
 window.openPanelForHex = openPanelForHex;
+window.closeMobileHexPopup = closeMobileHexPopup;
