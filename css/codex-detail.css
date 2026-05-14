@@ -2,8 +2,27 @@
    CODEX DETAIL PAGE LAYOUT
    ========================================================= */
 
-#codex-content.codex-detail-page {
+#codex-content.codex-detail-page,
+#codex-content.codex-region-detail-page {
   overflow-y: auto;
+
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      black 18px,
+      black calc(100% - 22px),
+      transparent 100%
+    );
+
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      black 18px,
+      black calc(100% - 22px),
+      transparent 100%
+    );
 }
 
 .codex-detail-page-shell {
