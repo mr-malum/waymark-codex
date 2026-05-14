@@ -50,43 +50,50 @@ function buildCodexGroupedPoiBreadcrumbTrail(poiName, group) {
   ];
 }
 
+function getCodexImageUrl(record, fieldNames) {
+  return fieldNames
+    .map(fieldName => record?.[fieldName])
+    .find(Boolean) || "";
+}
+
 function getRegionImageUrl(region) {
-  return region?.Image ||
-    region?.Image_URL ||
-    region?.Region_Image ||
-    region?.Region_Image_URL ||
-    "";
+  return getCodexImageUrl(region, [
+    "Image",
+    "Image_URL",
+    "Region_Image",
+    "Region_Image_URL"
+  ]);
 }
 
 function getPoiImageUrl(poi) {
-  return poi?.Image ||
-    poi?.Image_URL ||
-    poi?.POI_Image ||
-    poi?.POI_Image_URL ||
-    "";
+  return getCodexImageUrl(poi, [
+    "Image",
+    "Image_URL",
+    "POI_Image",
+    "POI_Image_URL"
+  ]);
 }
 
 function getPoiGroupImageUrl(group) {
-  return group?.Image ||
-    group?.Image_URL ||
-    group?.POI_Group_Image ||
-    group?.POI_Group_Image_URL ||
-    group?.Group_Image ||
-    group?.Group_Image_URL ||
-    "";
+  return getCodexImageUrl(group, [
+    "Image",
+    "Image_URL",
+    "POI_Group_Image",
+    "POI_Group_Image_URL",
+    "Group_Image",
+    "Group_Image_URL"
+  ]);
 }
 
 function getNpcImageUrl(npc) {
-  return [
-    npc?.Image,
-    npc?.Image_URL,
-    npc?.NPC_Image,
-    npc?.NPC_Image_URL,
-    npc?.Portrait,
-    npc?.Portrait_URL
-  ]
-    .map(value => String(value || "").trim())
-    .find(Boolean) || "";
+  return getCodexImageUrl(npc, [
+    "Image",
+    "Image_URL",
+    "NPC_Image",
+    "NPC_Image_URL",
+    "Portrait",
+    "Portrait_URL"
+  ]);
 }
 
 function getPoiPlaceholderClass(record) {
