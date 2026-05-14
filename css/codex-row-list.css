@@ -185,7 +185,39 @@
   text-align: center;
 }
 
-/* Linked lists do not currently render left-side icons. */
+.codex-row-has-kicker {
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+}
+
+.codex-row-kicker {
+  align-self: center;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+
+  color: rgba(47, 29, 16, 0.76);
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 0.72rem;
+  line-height: 1;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+
+  opacity: 0.92;
+}
+
+.codex-row-kicker-icon {
+  font-size: 1.02rem;
+  line-height: 1;
+}
+
+.codex-row-type-label {
+  transform: translateY(0.04em);
+}
+
+/* Linked lists now share the row renderer with search and future rails. */
 .codex-linked-row-list {
   margin: 4px 0 14px;
 }
@@ -197,13 +229,23 @@
   padding: 8px 6px;
 }
 
-.codex-linked-row .codex-row-title {
+.codex-linked-record-row {
+  gap: 10px;
+
+  padding: 8px 6px;
+}
+
+.codex-linked-row .codex-row-title,
+.codex-linked-record-row .codex-row-title {
   font-weight: 600;
 }
 
 .codex-detail-upper-scrollbox .codex-linked-row,
 .codex-detail-scrollbox .codex-linked-row,
-.codex-region-list-scrollbox .codex-linked-row {
+.codex-region-list-scrollbox .codex-linked-row,
+.codex-detail-upper-scrollbox .codex-linked-record-row,
+.codex-detail-scrollbox .codex-linked-record-row,
+.codex-region-list-scrollbox .codex-linked-record-row {
   padding-top: 7px;
   padding-bottom: 7px;
 }
@@ -253,6 +295,18 @@
     padding: 11px 6px;
   }
 
+  .codex-row-has-kicker {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+  }
+
+  .codex-row-kicker {
+    font-size: 0.68rem;
+  }
+
+  .codex-row-kicker-icon {
+    font-size: 0.96rem;
+  }
+
   .codex-linked-row-list {
     margin: 4px 0 12px;
   }
@@ -260,6 +314,10 @@
   .codex-linked-row {
     grid-template-columns: minmax(0, 1fr) auto;
 
+    padding: 9px 6px;
+  }
+
+  .codex-linked-record-row {
     padding: 9px 6px;
   }
 
