@@ -99,8 +99,10 @@ function renderPoiListIntoContainer() {
     sortDirection
   );
 
+  const listRows = createPoiGroupListRows(pois);
+
   listEl.innerHTML = renderCodexLinkedList(
-    pois,
+    listRows,
     "No points of interest match these filters.",
     "poi",
     "POI_ID",
