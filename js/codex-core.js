@@ -124,6 +124,22 @@ function setCodexContent(html, breadcrumbs = []) {
   content.innerHTML = html;
 }
 
+function renderCodexSplitView({ railHtml = "", mainHtml = "", className = "" } = {}) {
+  return `
+    <div class="codex-split-view ${className}">
+      <aside class="codex-split-rail">
+        <div class="codex-split-rail-inner">
+          ${railHtml}
+        </div>
+      </aside>
+
+      <main class="codex-split-main codex-scroll-fade">
+        ${mainHtml}
+      </main>
+    </div>
+  `;
+}
+
 function getCurrentCodexPage() {
   return codexHistory[codexHistory.length - 1] || null;
 }
