@@ -70,7 +70,20 @@
   pointer-events: none;
 
   transition:
-    opacity 220ms ease;
+    opacity 220ms ease,
+    color 220ms ease,
+    text-shadow 220ms ease;
+}
+
+#codex-button.codex-retro-mode::before {
+  color: #1a0d04;
+
+  text-shadow:
+    0 0 10px rgba(255, 220, 150, 0.96),
+    0 0 22px rgba(255, 220, 150, 0.82),
+    0 0 42px rgba(242, 223, 182, 0.66),
+    0 3px 6px rgba(255, 238, 204, 0.45),
+    0 0 6px rgba(25, 12, 4, 0.30);
 }
 
 #codex-button:focus,
