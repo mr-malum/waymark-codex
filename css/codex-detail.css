@@ -25,13 +25,18 @@
 }
 
 .codex-detail-portrait-slot {
+  position: relative;
+
   width: 220px;
   height: 220px;
+
+  overflow: hidden;
 
   border-radius: 14px;
   border: 1px solid rgba(94, 55, 22, 0.26);
 
   background:
+    var(--codex-record-image, none),
     linear-gradient(
       rgba(255, 236, 188, 0.24),
       rgba(166, 108, 41, 0.14)
@@ -39,6 +44,7 @@
 
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
 
   box-shadow:
     inset 0 1px 3px rgba(255, 241, 202, 0.22),
@@ -54,28 +60,40 @@
   background-repeat: no-repeat;
 }
 
-.codex-placeholder-npc {
-  background-image:
-    var(--codex-record-image, none),
-    url("../assets/placeholder/Placeholder_NPC.png");
+.codex-placeholder-npc::before,
+.codex-placeholder-settlement::before,
+.codex-placeholder-poi::before,
+.codex-placeholder-region::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  opacity: 0.90;
+
+  z-index: -1;
 }
 
-.codex-placeholder-settlement {
-  background-image:
-    var(--codex-record-image, none),
-    url("../assets/placeholder/Placeholder_Settlement.png");
+.codex-placeholder-npc::before {
+  background-image: url("../assets/placeholder/Placeholder_NPC.png");
 }
 
-.codex-placeholder-poi {
-  background-image:
-    var(--codex-record-image, none),
-    url("../assets/placeholder/Placeholder_POI.png");
+.codex-placeholder-settlement::before {
+  background-image: url("../assets/placeholder/Placeholder_Settlement.png");
 }
 
-.codex-placeholder-region {
-  background-image:
-    var(--codex-record-image, none),
-    url("../assets/placeholder/Placeholder_Region.png");
+.codex-placeholder-poi::before {
+  background-image: url("../assets/placeholder/Placeholder_POI.png");
+}
+
+.codex-placeholder-region::before {
+  background-image: url("../assets/placeholder/Placeholder_Region.png");
 }
 
 .codex-detail-meta {
