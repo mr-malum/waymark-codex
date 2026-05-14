@@ -113,6 +113,8 @@ function toggleRetroCodexMode() {
 
   const codexButton = document.getElementById("codex-button");
 
+  codexButton.classList.toggle("codex-retro-mode", retroCodexMode);
+
   if (retroCodexMode) {
     codexButton.style.backgroundImage =
       "url('assets/Win95SwordShield_Upscaled.png')";
