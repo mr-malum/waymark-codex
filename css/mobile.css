@@ -236,6 +236,15 @@
   #mobile-panel-back {
     width: 62px;
     min-width: 62px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding-left: 0;
+    padding-right: 0;
+
+    text-align: center;
   }
 
   .codex-link-button {
