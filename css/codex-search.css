@@ -285,6 +285,17 @@
   transform: translateY(24px) scale(1);
 }
 
+.codex-home-search-rail-input-slot .codex-home-search-controls-shell {
+  padding-top: 0;
+  padding-bottom: 10px;
+}
+
+.codex-home-search-rail-input-slot .codex-home-search-shell {
+  width: 100%;
+  margin: 0;
+  transform: none;
+}
+
 .codex-home-search-active .codex-home-section-buttons {
   flex: 0 0 auto;
   max-height: 0;
@@ -328,6 +339,10 @@
 
   display: flex;
   align-items: center;
+}
+
+.codex-home-search-split-view .codex-split-rail {
+  align-items: flex-start;
 }
 
 .codex-split-rail-inner {
@@ -457,6 +472,17 @@
   .codex-home-search-active .codex-home-search-shell {
     width: min(100%, 500px);
     margin: 0 auto;
+  }
+
+  .codex-home-search-rail-input-slot .codex-home-search-controls-shell {
+    padding-top: 0;
+    padding-bottom: 10px;
+  }
+
+  .codex-home-search-rail-input-slot .codex-home-search-shell {
+    width: 100%;
+    margin: 0;
+    transform: none;
   }
 
   .codex-search-results-shell {
