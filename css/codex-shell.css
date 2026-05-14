@@ -1028,13 +1028,20 @@
     margin-bottom: 26px;
   }
 
-  #codex-content {
+  #codex-content:not(.codex-home-search-page):not(.codex-search-page) {
     width: min(100%, 980px);
     max-width: 980px;
   }
 
-  #codex-content.codex-home {
+  #codex-content.codex-home:not(.codex-home-search-page) {
     max-width: 720px;
+  }
+
+  #codex-content.codex-home.codex-home-search-page,
+  #codex-content.codex-search-page {
+    display: block;
+    width: min(100%, 860px);
+    max-width: 860px;
   }
 
   #codex-content.codex-regions-index,
