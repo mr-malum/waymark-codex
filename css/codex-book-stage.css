@@ -234,7 +234,30 @@
     left: calc(var(--codex-left-utility-x) / 2800 * 100%);
     top: calc(var(--codex-left-utility-y) / 1400 * 100%);
     width: calc(var(--codex-left-utility-width) / 2800 * 100%);
-    height: calc(84 / 1400 * 100%);
+    height: calc(100 / 1400 * 100%);
+  }
+
+  #codex-desktop-persistent-search::after {
+    content: "⌾";
+    position: absolute;
+    top: 0;
+    right: calc(12 * var(--codex-book-scale));
+    bottom: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    color: rgba(47, 29, 16, 0.64);
+    font-family: 'Marcellus SC', Georgia, serif;
+    font-size: clamp(0.98rem, calc(22 * var(--codex-book-scale)), 1.35rem);
+    line-height: 1;
+
+    pointer-events: none;
+  }
+
+  #codex-desktop-persistent-search:has(#codex-desktop-search-input:not(:placeholder-shown))::after {
+    display: none;
   }
 
   #codex-desktop-search-input {
@@ -242,9 +265,14 @@
     -webkit-appearance: none;
 
     width: 100%;
+    height: calc(52 * var(--codex-book-scale));
     box-sizing: border-box;
 
-    padding: calc(10 * var(--codex-book-scale)) calc(34 * var(--codex-book-scale));
+    padding:
+      0
+      calc(34 * var(--codex-book-scale))
+      0
+      calc(12 * var(--codex-book-scale));
 
     border-radius: calc(4 * var(--codex-book-scale));
     border: 1px solid rgba(72, 43, 18, 0.22);
@@ -255,7 +283,7 @@
     font-family: 'Spectral', Georgia, serif;
     font-size: clamp(0.78rem, calc(15 * var(--codex-book-scale)), 0.96rem);
     line-height: 1.15;
-    text-align: center;
+    text-align: left;
 
     box-shadow:
       inset 0 1px 0 rgba(255, 245, 220, 0.26),
@@ -264,7 +292,7 @@
 
   #codex-desktop-search-input::placeholder {
     color: rgba(47, 29, 16, 0.62);
-    text-align: center;
+    text-align: left;
   }
 
   #codex-desktop-search-input::-webkit-search-cancel-button {
@@ -273,7 +301,7 @@
 
     width: calc(18 * var(--codex-book-scale));
     height: calc(18 * var(--codex-book-scale));
-    margin-right: calc(-22 * var(--codex-book-scale));
+    margin-right: 0;
 
     cursor: pointer;
 
