@@ -273,6 +273,13 @@
   font-size: 1.02rem;
 }
 
+.codex-overview-side-label {
+  flex: 0 0 auto;
+  margin: 0 0 5px;
+  font-size: 1.02rem;
+  line-height: 1.35;
+}
+
 .codex-detail-npc-panel .codex-record-button {
   padding: 8px 11px;
 }
@@ -360,6 +367,40 @@
 #codex-content.codex-regions-index .codex-region-tile-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+}
+
+#codex-content.codex-regions-index .codex-region-tile {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+#codex-content.codex-regions-index .codex-region-tile:hover {
+  transform: none;
+}
+
+#codex-content.codex-regions-index .codex-region-tile-image {
+  image-rendering: auto;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+#codex-content.codex-regions-index .codex-region-tile-info {
+  width: calc(100% - 14px);
+  min-height: auto;
+
+  margin: 0 auto 8px;
+  padding: 9px 9px 10px;
+
+  border-radius: 10px;
+
+  background: rgba(238, 211, 158, 0.82);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+
+  box-shadow:
+    0 0 0 1px rgba(246, 229, 190, 0.34),
+    0 0 14px 7px rgba(238, 211, 158, 0.50),
+    inset 0 1px 0 rgba(255, 244, 218, 0.34);
 }
 
 /* =========================================================
