@@ -204,7 +204,7 @@
     grid-template-columns: 1fr;
     gap: 14px;
 
-    padding: 12px 24px calc(150px + env(safe-area-inset-bottom)) 24px;
+    padding: 12px 24px calc(170px + env(safe-area-inset-bottom)) 24px;
 
     font-size: 18px;
   }
@@ -218,8 +218,25 @@
     margin-top: 24px;
   }
 
-  #codex-overlay .panel-nav {
-    margin-bottom: calc(68px + env(safe-area-inset-bottom));
+  #codex-overlay .panel-nav,
+  #codex-overlay .codex-panel-nav {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: calc(26px + env(safe-area-inset-bottom));
+
+    display: block;
+
+    margin: 0;
+    padding: 0;
+
+    pointer-events: none;
+  }
+
+  #codex-overlay .codex-control-cluster {
+    width: max-content;
+    margin-left: auto;
+    pointer-events: auto;
   }
 
   .panel-nav {
@@ -719,7 +736,34 @@
   }
 
   #codex-breadcrumbs {
-    padding: 0 8px;
-    font-size: 0.95rem;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(48px + env(safe-area-inset-bottom));
+
+    display: block;
+    width: 100%;
+    max-width: 100%;
+
+    box-sizing: border-box;
+
+    padding: 0 4px;
+
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+    text-align: center;
+
+    font-size: 0.9rem;
+    line-height: 1.2;
+
+    pointer-events: auto;
+  }
+
+  #codex-breadcrumbs .codex-breadcrumb-button,
+  #codex-breadcrumbs span {
+    font-size: inherit;
+    line-height: inherit;
   }
 }
