@@ -15,7 +15,7 @@
    - Right content: x 1480-2640, y 290-1280
 */
 
-@media (min-width: 1100px) {
+@media (min-width: 1100px) and (min-height: 700px) {
   #codex-overlay {
     align-items: stretch;
     justify-content: center;
@@ -25,6 +25,8 @@
   #codex-modal {
     --codex-book-anchor-x: 66%;
     --codex-book-debug-display: block;
+    --codex-book-max-height: 1400px;
+    --codex-visible-min-ratio: 1.16;
 
     /*
       One shared rendered-book size.
@@ -32,15 +34,19 @@
       these same dimensions so everything scales together as the window changes.
 
       The book is 2800 x 1400, so width is always 2x height.
-      Desktop scaling is height-first on normal/wide windows, but width-capped
-      on narrow desktop windows so the useful safe regions start shrinking
-      before either side clips badly.
+      Desktop scaling is height-first on normal/wide windows, capped on very
+      tall/high-density displays, and width-aware on narrow desktop windows so
+      the useful safe regions start shrinking before either side clips badly.
 
-      1.18 is an intentional practical ratio, not the full book ratio. It lets
-      the far-left decoration overflow while preserving the left utility strip,
-      gutter, and right safe page near the 1100px desktop breakpoint.
+      The visible-min ratio is practical rather than the full book ratio. It
+      lets far-left decoration overflow while preserving the left utility strip,
+      gutter, and right safe page near the desktop breakpoint.
     */
-    --codex-book-height: min(100dvh, calc(100vw / 1.18));
+    --codex-book-height: min(
+      100dvh,
+      var(--codex-book-max-height),
+      calc(100vw / var(--codex-visible-min-ratio))
+    );
     --codex-book-width: calc(var(--codex-book-height) * 2);
 
     width: 100vw;
