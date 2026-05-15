@@ -3,13 +3,9 @@
    =========================================================
 
    Loaded after codex-book-stage.css.
-   Keeps layout guides hidden by default, exposes a small click-only toggle,
+   Keeps layout guides hidden by default, toggled by the tilde/backtick hotkey,
    and tightens/boldens header flourishes without increasing their size.
 */
-
-#codex-debug-guides-toggle {
-  display: none;
-}
 
 @media (min-width: 1100px) and (min-height: 700px) {
   #codex-modal {
@@ -18,47 +14,6 @@
 
   #codex-modal.codex-debug-guides-visible {
     --codex-book-debug-display: block;
-  }
-
-  #codex-debug-guides-toggle {
-    position: absolute;
-    left: calc(40 / 2800 * 100%);
-    top: calc(40 / 1400 * 100%);
-
-    display: block;
-    z-index: 4;
-
-    padding: calc(5 * var(--codex-book-scale)) calc(8 * var(--codex-book-scale));
-
-    border: 1px solid rgba(72, 43, 18, 0.28);
-    border-radius: calc(6 * var(--codex-book-scale));
-
-    background: rgba(235, 214, 170, 0.66);
-    color: rgba(47, 29, 16, 0.82);
-
-    font-family: 'Marcellus SC', Georgia, serif;
-    font-size: clamp(0.58rem, calc(11 * var(--codex-book-scale)), 0.72rem);
-    line-height: 1;
-    letter-spacing: 0.04em;
-
-    cursor: pointer;
-    pointer-events: none;
-
-    box-shadow:
-      inset 0 1px 0 rgba(255, 245, 220, 0.28),
-      0 2px 8px rgba(45, 25, 8, 0.10);
-
-    opacity: 0.42;
-  }
-
-  #codex-overlay.open #codex-debug-guides-toggle {
-    pointer-events: auto;
-  }
-
-  #codex-debug-guides-toggle:hover,
-  #codex-debug-guides-toggle[aria-pressed="true"] {
-    opacity: 0.86;
-    background: rgba(246, 232, 196, 0.78);
   }
 
   #codex-header {
