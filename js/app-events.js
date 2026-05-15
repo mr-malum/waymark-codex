@@ -123,7 +123,6 @@ function bindCodexEvents() {
     .addEventListener("click", openCodexGlobalSearchModal);
 
   bindCodexDesktopPersistentSearch();
-  bindCodexDebugGuidesToggle();
 
   document
     .getElementById("codex-back")
@@ -154,21 +153,24 @@ function isDesktopCodexBookLayout() {
   return window.matchMedia("(min-width: 1100px) and (min-height: 700px)").matches;
 }
 
-function bindCodexDebugGuidesToggle() {
-  const toggle = document.getElementById("codex-debug-guides-toggle");
+function isTypingInEditableField(event) {
+  const target = event.target;
+  if (!target) return false;
+
+  const tagName = String(target.tagName || "").toLowerCase();
+
+  return tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    Boolean(target.isContentEditable);
+}
+
+function toggleCodexDebugGuides() {
   const modal = document.getElementById("codex-modal");
+  if (!modal) return;
 
-  if (!toggle || !modal) return;
-
-  toggle.addEventListener("click", function (event) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const shouldShow = !modal.classList.contains("codex-debug-guides-visible");
-
-    modal.classList.toggle("codex-debug-guides-visible", shouldShow);
-    toggle.setAttribute("aria-pressed", String(shouldShow));
-  });
+  const shouldShow = !modal.classList.contains("codex-debug-guides-visible");
+  modal.classList.toggle("codex-debug-guides-visible", shouldShow);
 }
 
 function bindCodexDesktopPersistentSearch() {
@@ -265,7 +267,17 @@ function handleCodexButtonClick(event) {
 
 function bindKeyboardEasterEggEvents() {
   window.addEventListener("keydown", event => {
-    retroCodexSequence += event.key.toLowerCase();
+    const key = event.key;
+
+    if (key === "`" || key === "~") {
+      if (isCodexOpen() && isDesktopCodexBookLayout() && !isTypingInEditableField(event)) {
+        event.preventDefault();
+        toggleCodexDebugGuides();
+        return;
+      }
+    }
+
+    retroCodexSequence += key.toLowerCase();
 
     if (retroCodexSequence.length > 2) {
       retroCodexSequence = retroCodexSequence.slice(-2);
