@@ -225,6 +225,17 @@
   box-shadow: none;
 }
 
+.codex-list-control-rail .codex-dynamic-filter select:not(.codex-filter-field-select):hover,
+.codex-list-control-rail .codex-dynamic-filter select:not(.codex-filter-field-select):focus-visible,
+.codex-list-control-rail .codex-sort-label select:hover,
+.codex-list-control-rail .codex-sort-label select:focus-visible {
+  background: rgba(246, 232, 196, 0.74);
+  border-color: rgba(72, 43, 18, 0.44);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 220, 0.32),
+    0 2px 8px rgba(45, 25, 8, 0.12);
+}
+
 .codex-sort-direction {
   appearance: none;
   -webkit-appearance: none;
@@ -284,11 +295,43 @@
   box-shadow: none;
 }
 
+.codex-list-control-rail .codex-filter-field-select {
+  width: 70%;
+  max-width: 70%;
+  align-self: flex-start;
+
+  padding: 0 19px 0 6px;
+
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1L4 4L7 1' fill='none' stroke='%233a2614' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-color: rgba(246, 232, 196, 0.46);
+  background-position: calc(100% - 7px) center;
+  background-size: 8px 5px;
+  background-repeat: no-repeat;
+
+  font-size: 0.56rem;
+  letter-spacing: 0.035em;
+}
+
 .codex-sort-direction:hover,
 .codex-list-control-rail select:hover,
 .codex-list-control-rail .codex-sort-direction:hover {
   background: rgba(94, 55, 22, 0.10);
   border-color: rgba(72, 43, 18, 0.38);
+}
+
+.codex-list-control-rail .codex-filter-field-select:hover,
+.codex-list-control-rail .codex-filter-field-select:focus-visible {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1L4 4L7 1' fill='none' stroke='%233a2614' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-color: rgba(246, 232, 196, 0.74);
+  background-position: calc(100% - 7px) center;
+  background-size: 8px 5px;
+  background-repeat: no-repeat;
+  border-color: rgba(72, 43, 18, 0.44);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 220, 0.32),
+    0 2px 8px rgba(45, 25, 8, 0.12);
 }
 
 .codex-sort-direction:active {
@@ -352,7 +395,22 @@
 }
 
 .codex-dynamic-filter .codex-filter-field-select {
+  width: 70%;
+  max-width: 70%;
   align-self: flex-start;
+
+  padding-left: 6px;
+  padding-right: 19px;
+
+  background-position:
+    calc(100% - 7px) center,
+    0 0;
+  background-size:
+    8px 5px,
+    100% 100%;
+
+  font-size: 0.61rem;
+  letter-spacing: 0.035em;
 }
 
 .codex-filter-field-select,
