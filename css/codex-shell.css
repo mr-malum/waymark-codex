@@ -307,9 +307,8 @@
   font-weight: 500;
 }
 
-/* Make all Codex buttons match the parchment UI */
+/* Make main action buttons match the parchment UI */
 .codex-section-button,
-.codex-link-button,
 .popup-open-details {
   appearance: none;
   -webkit-appearance: none;
@@ -334,7 +333,6 @@
 }
 
 .codex-section-button:hover,
-.codex-link-button:hover,
 .popup-open-details:hover {
   background:
     linear-gradient(
@@ -348,17 +346,57 @@
 }
 
 .codex-section-button:active,
-.codex-link-button:active,
 .popup-open-details:active {
   transform: scale(0.985);
 }
 
 .codex-link-button {
-  display: inline-block;
-  padding: 5px 12px;
-  margin-left: 6px;
-  font-size: 1rem;
+  appearance: none;
+  -webkit-appearance: none;
+
+  display: inline;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+
+  margin: 0 0.08em;
+  padding: 0 0.18em 0.05em;
+
+  border: 0;
+  border-bottom: 1px solid rgba(72, 43, 18, 0.34);
+  border-radius: 0;
+
+  background: transparent;
+  color: #2f1d10;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 0.94em;
+  font-weight: 500;
+  line-height: inherit;
+  letter-spacing: 0.025em;
+
+  box-shadow: none;
+  cursor: pointer;
+
   vertical-align: baseline;
+
+  transition:
+    color 0.14s ease,
+    border-color 0.14s ease,
+    background 0.14s ease;
+}
+
+.codex-link-button:hover,
+.codex-link-button:focus-visible {
+  background: rgba(94, 55, 22, 0.08);
+  border-color: rgba(72, 43, 18, 0.62);
+  color: #241409;
+  outline: none;
+}
+
+.codex-link-button:active {
+  transform: none;
+  background: rgba(94, 55, 22, 0.12);
 }
 
 .codex-superheader {
