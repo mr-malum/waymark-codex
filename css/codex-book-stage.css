@@ -213,47 +213,20 @@
     left: 50%;
     bottom: calc(-15 * var(--codex-book-scale));
 
-    width: min(132%, calc(560 * var(--codex-book-scale)));
-    height: calc(6 * var(--codex-book-scale));
+    width: min(118%, calc(480 * var(--codex-book-scale)));
+    height: 1px;
 
     pointer-events: none;
 
-    background:
-      linear-gradient(
-        to right,
-        transparent 0%,
-        rgba(42, 24, 11, 0.10) 7%,
-        rgba(42, 24, 11, 0.56) 18%,
-        rgba(42, 24, 11, 0.42) 48%,
-        rgba(42, 24, 11, 0.64) 72%,
-        rgba(42, 24, 11, 0.12) 93%,
-        transparent 100%
-      );
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(72, 43, 18, 0.65),
+      transparent
+    );
 
-    border-radius: 999px;
-    filter: blur(0.18px);
-    opacity: 0.78;
-
-    transform: translateX(-50%) rotate(-0.22deg);
-
-    mask-image:
-      linear-gradient(to right, transparent, black 9%, black 91%, transparent),
-      repeating-linear-gradient(
-        to right,
-        black 0 11px,
-        rgba(0, 0, 0, 0.35) 11px 14px,
-        black 14px 31px
-      );
-    -webkit-mask-image:
-      linear-gradient(to right, transparent, black 9%, black 91%, transparent),
-      repeating-linear-gradient(
-        to right,
-        black 0 11px,
-        rgba(0, 0, 0, 0.35) 11px 14px,
-        black 14px 31px
-      );
-    mask-composite: intersect;
-    -webkit-mask-composite: source-in;
+    opacity: 1;
+    transform: translateX(-50%);
   }
 
   #codex-desktop-persistent-search {
