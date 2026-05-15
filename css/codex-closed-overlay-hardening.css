@@ -1,0 +1,20 @@
+/* =========================================================
+   CLOSED CODEX OVERLAY POINTER HARDENING
+   =========================================================
+
+   Diagnostic/fix pass: when the Codex is closed, no overlay descendant or
+   pseudo-element should be able to participate in hit-testing over the map.
+*/
+
+#codex-overlay.closed,
+#codex-overlay.closed *,
+#codex-overlay.closed::before,
+#codex-overlay.closed::after,
+#codex-overlay.closed *::before,
+#codex-overlay.closed *::after {
+  pointer-events: none !important;
+}
+
+#codex-overlay.open {
+  pointer-events: auto;
+}
