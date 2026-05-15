@@ -10,6 +10,7 @@ let codexLongPressTimer = null;
 let suppressNextCodexClick = false;
 let appBrowserHistoryDepth = 0;
 let appBrowserHistoryReleaseCount = 0;
+let codexDesktopLiveSearchTimer = null;
 
 function initializeHexGrid() {
   for (let xxx = HEX_GRID_MIN; xxx < HEX_GRID_MAX; xxx++) {
@@ -177,16 +178,26 @@ function bindCodexDesktopPersistentSearch() {
   const input = document.getElementById("codex-desktop-search-input");
   if (!input) return;
 
+  input.addEventListener("input", function () {
+    window.clearTimeout(codexDesktopLiveSearchTimer);
+
+    const cleanQuery = String(input.value || "").trim();
+
+    codexDesktopLiveSearchTimer = window.setTimeout(() => {
+      if (cleanQuery) {
+        startCodexLiveSearch(cleanQuery);
+        return;
+      }
+
+      restoreCodexLiveSearchReturnPage();
+    }, 90);
+  });
+
   input.addEventListener("keydown", function (event) {
     if (event.key !== "Enter") return;
 
     event.preventDefault();
-
-    const cleanQuery = String(input.value || "").trim();
-    if (!cleanQuery) return;
-
     input.blur();
-    openCodexSearchResults(cleanQuery);
   });
 }
 
