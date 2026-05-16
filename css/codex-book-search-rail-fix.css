@@ -112,6 +112,8 @@
     font-weight: 700;
     line-height: 1;
 
+    transform: scaleX(-1);
+
     box-shadow:
       inset 1px 1px 0 rgba(255, 244, 218, 0.28),
       inset 0 -1px 0 rgba(72, 43, 18, 0.12),
@@ -124,16 +126,9 @@
     cursor: pointer;
   }
 
-  #codex-desktop-search-action.codex-search-action-mirrored {
-    transform: scaleX(-1);
-  }
-
-  #codex-desktop-search-action.has-query.codex-search-action-mirrored {
-    transform: none;
-  }
-
   #codex-desktop-search-action.has-query {
     font-size: clamp(0.98rem, calc(21 * var(--codex-book-scale)), 1.30rem);
+    transform: none;
   }
 
   #codex-desktop-search-action:hover,
