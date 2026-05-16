@@ -80,8 +80,23 @@ function getHexRegionFilterOptions() {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+function getHexRegionCheckboxes() {
+  return [...document.querySelectorAll("[data-codex-hex-region-filter]")];
+}
+
+function updateHexRegionAllCheckbox() {
+  const allCheckbox = document.getElementById("codex-hex-region-filter-all");
+  const checkboxes = getHexRegionCheckboxes();
+  if (!allCheckbox || !checkboxes.length) return;
+
+  const checkedCount = checkboxes.filter(checkbox => checkbox.checked).length;
+
+  allCheckbox.checked = checkedCount === checkboxes.length;
+  allCheckbox.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+}
+
 function readCheckedHexRegionIds() {
-  const checkboxes = [...document.querySelectorAll("[data-codex-hex-region-filter]")];
+  const checkboxes = getHexRegionCheckboxes();
 
   if (!checkboxes.length) {
     return new Set(getHexRegionFilterOptions().map(region => region.id));
@@ -102,6 +117,17 @@ function renderHexRegionChecklist() {
       <div class="codex-hex-region-filter-heading">Regions</div>
 
       <div class="codex-hex-region-checklist codex-scroll-fade">
+        ${regions.length ? `
+          <label class="codex-hex-region-check-row codex-hex-region-check-all-row">
+            <input
+              id="codex-hex-region-filter-all"
+              type="checkbox"
+              checked
+            >
+            <span>(ALL)</span>
+          </label>
+        ` : ""}
+
         ${regions.map(region => `
           <label class="codex-hex-region-check-row">
             <input
@@ -167,9 +193,26 @@ function bindHexListControls() {
     }
   );
 
-  document.querySelectorAll("[data-codex-hex-region-filter]").forEach(checkbox => {
-    checkbox.addEventListener("change", renderHexListIntoContainer);
+  document.getElementById("codex-hex-region-filter-all")?.addEventListener(
+    "change",
+    function () {
+      getHexRegionCheckboxes().forEach(checkbox => {
+        checkbox.checked = this.checked;
+      });
+
+      this.indeterminate = false;
+      renderHexListIntoContainer();
+    }
+  );
+
+  getHexRegionCheckboxes().forEach(checkbox => {
+    checkbox.addEventListener("change", function () {
+      updateHexRegionAllCheckbox();
+      renderHexListIntoContainer();
+    });
   });
+
+  updateHexRegionAllCheckbox();
 }
 
 function renderPoiListIntoContainer() {
