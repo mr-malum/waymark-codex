@@ -1,0 +1,72 @@
+#codex-left-manuscript {
+  display: none;
+}
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  #codex-left-manuscript {
+    position: absolute;
+    left: calc(610 / 2800 * 100%);
+    top: calc(185 / 1400 * 100%);
+    width: calc(365 / 2800 * 100%);
+    height: calc(1010 / 1400 * 100%);
+
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: calc(18 * var(--codex-book-scale));
+
+    box-sizing: border-box;
+    padding: calc(10 * var(--codex-book-scale)) calc(12 * var(--codex-book-scale));
+
+    pointer-events: none;
+    user-select: none;
+    z-index: 1;
+
+    color: rgba(72, 43, 18, 0.58);
+    font-family: 'Marcellus SC', Georgia, serif;
+    font-size: clamp(0.62rem, calc(16 * var(--codex-book-scale)), 1rem);
+    line-height: 1.46;
+    letter-spacing: 0.115em;
+    text-align: left;
+
+    opacity: 0.145;
+    filter: blur(0.18px) contrast(0.92);
+    transform: rotate(-1.15deg);
+    transform-origin: center center;
+    mix-blend-mode: multiply;
+
+    mask-image: linear-gradient(to bottom, transparent 0%, black 9%, black 88%, transparent 100%), linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%);
+    mask-composite: intersect;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 9%, black 88%, transparent 100%), linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%);
+    -webkit-mask-composite: source-in;
+  }
+
+  #codex-left-manuscript .codex-manuscript-block {
+    display: grid;
+    gap: calc(6 * var(--codex-book-scale));
+  }
+
+  #codex-left-manuscript .codex-manuscript-line {
+    display: block;
+    white-space: pre;
+  }
+
+  #codex-left-manuscript .codex-manuscript-line-short {
+    width: 68%;
+  }
+
+  #codex-left-manuscript .codex-manuscript-line-mid {
+    width: 84%;
+  }
+
+  #codex-left-manuscript .codex-manuscript-line-indent {
+    padding-left: calc(28 * var(--codex-book-scale));
+  }
+
+  #codex-left-manuscript .codex-manuscript-rule {
+    height: 1px;
+    width: 72%;
+    margin: calc(4 * var(--codex-book-scale)) 0;
+    background: linear-gradient(to right, transparent, rgba(72, 43, 18, 0.74), transparent);
+  }
+}
