@@ -26,21 +26,52 @@ function isLikelyGoogleDriveFileId(value) {
 }
 
 function getGoogleDriveImageSrc(fileId) {
-  return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(fileId)}`;
+  return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1600`;
+}
+
+function getGoogleDrivePreviewUrl(fileId) {
+  return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
+}
+
+function getCodexAssetInfo(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return {
+      raw: "",
+      src: "",
+      href: "",
+      driveId: "",
+      isDrive: false
+    };
+  }
+
+  const driveId = extractGoogleDriveFileId(raw) || (isLikelyGoogleDriveFileId(raw) ? raw : "");
+
+  if (driveId) {
+    return {
+      raw,
+      src: getGoogleDriveImageSrc(driveId),
+      href: getGoogleDrivePreviewUrl(driveId),
+      driveId,
+      isDrive: true
+    };
+  }
+
+  return {
+    raw,
+    src: raw,
+    href: raw,
+    driveId: "",
+    isDrive: false
+  };
 }
 
 function resolveCodexAssetUrl(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
+  return getCodexAssetInfo(value).src;
+}
 
-  const driveId = extractGoogleDriveFileId(raw);
-  if (driveId) return getGoogleDriveImageSrc(driveId);
-
-  if (isLikelyGoogleDriveFileId(raw)) {
-    return getGoogleDriveImageSrc(raw);
-  }
-
-  return raw;
+function resolveCodexAssetHref(value) {
+  return getCodexAssetInfo(value).href;
 }
 
 function getCodexRawAssetValue(record, fieldNames) {
@@ -51,6 +82,10 @@ function getCodexRawAssetValue(record, fieldNames) {
 
 function getCodexImageUrl(record, fieldNames) {
   return resolveCodexAssetUrl(getCodexRawAssetValue(record, fieldNames));
+}
+
+function getCodexImageHref(record, fieldNames) {
+  return resolveCodexAssetHref(getCodexRawAssetValue(record, fieldNames));
 }
 
 function getRegionImageUrl(region) {
@@ -103,8 +138,8 @@ function getNpcImageUrl(npc) {
   ]);
 }
 
-function getCodexMapImageUrl(map) {
-  return getCodexImageUrl(map, [
+function getCodexMapImageValue(map) {
+  return getCodexRawAssetValue(map, [
     "Map_Image_File_ID",
     "Image_File_ID",
     "Map_Image",
@@ -112,6 +147,14 @@ function getCodexMapImageUrl(map) {
     "Image",
     "Image_URL"
   ]);
+}
+
+function getCodexMapImageUrl(map) {
+  return resolveCodexAssetUrl(getCodexMapImageValue(map));
+}
+
+function getCodexMapImageHref(map) {
+  return resolveCodexAssetHref(getCodexMapImageValue(map));
 }
 
 function getCodexAssetAttrs(imageUrl, assetKind = "record") {
@@ -141,6 +184,7 @@ function renderCodexImageStateLabel(label = "Image unavailable") {
 
 function renderCodexMapCard(map) {
   const imageUrl = getCodexMapImageUrl(map);
+  const mapHref = getCodexMapImageHref(map);
   const mapName = map.Map_Name || map.Map_ID || "Unnamed Map";
   const content = `<span class="codex-map-card-title">${escapeHtml(mapName)}</span>`;
 
@@ -156,7 +200,7 @@ function renderCodexMapCard(map) {
   return `
     <a
       class="codex-map-card"
-      href="${escapeHtml(imageUrl)}"
+      href="${escapeHtml(mapHref || imageUrl)}"
       target="_blank"
       rel="noopener noreferrer"
       ${renderMapTileStyle(imageUrl)}
@@ -284,3 +328,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
 window.hydrateCodexImageAssets = hydrateCodexImageAssets;
 window.resolveCodexAssetUrl = resolveCodexAssetUrl;
+window.resolveCodexAssetHref = resolveCodexAssetHref;
