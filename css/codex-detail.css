@@ -394,8 +394,30 @@
   backface-visibility: hidden;
 }
 
+#codex-content.codex-regions-index .codex-region-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+
+  pointer-events: none;
+
+  background: rgba(24, 13, 5, 0);
+
+  transition: background 0.14s ease;
+}
+
 #codex-content.codex-regions-index .codex-region-tile:hover {
   transform: none;
+}
+
+#codex-content.codex-regions-index .codex-region-tile:hover::after,
+#codex-content.codex-regions-index .codex-region-tile:focus-visible::after {
+  background: rgba(24, 13, 5, 0.18);
+}
+
+#codex-content.codex-regions-index .codex-region-tile:active::after {
+  background: rgba(24, 13, 5, 0.28);
 }
 
 #codex-content.codex-regions-index .codex-region-tile-image {
@@ -405,6 +427,7 @@
 }
 
 #codex-content.codex-regions-index .codex-region-tile-info {
+  z-index: 2;
   min-height: 33.333%;
   padding: 12px 14px 14px;
 
@@ -418,15 +441,18 @@
   text-shadow:
     0 0 1px rgba(238, 211, 158, 1),
     0 0 2px rgba(238, 211, 158, 1),
-    0 0 3px rgba(238, 211, 158, 0.96),
-    0 0 5px rgba(238, 211, 158, 0.88),
-    0 0 8px rgba(238, 211, 158, 0.72),
-    0 1px 2px rgba(47, 29, 16, 0.42);
+    0 0 3px rgba(238, 211, 158, 1),
+    0 0 5px rgba(238, 211, 158, 0.96),
+    0 0 7px rgba(238, 211, 158, 0.90),
+    0 0 10px rgba(238, 211, 158, 0.78),
+    0 0 13px rgba(238, 211, 158, 0.62),
+    0 1px 2px rgba(47, 29, 16, 0.48),
+    0 2px 4px rgba(47, 29, 16, 0.36);
 }
 
 #codex-content.codex-regions-index .codex-region-tile-name,
 #codex-content.codex-regions-index .codex-region-tile-details {
-  -webkit-text-stroke: 0.45px rgba(238, 211, 158, 0.88);
+  -webkit-text-stroke: 0.65px rgba(238, 211, 158, 0.96);
   paint-order: stroke fill;
 }
 
