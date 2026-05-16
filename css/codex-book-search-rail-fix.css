@@ -124,6 +124,14 @@
     cursor: pointer;
   }
 
+  #codex-desktop-search-action.codex-search-action-mirrored {
+    transform: scaleX(-1);
+  }
+
+  #codex-desktop-search-action.has-query.codex-search-action-mirrored {
+    transform: none;
+  }
+
   #codex-desktop-search-action.has-query {
     font-size: clamp(0.98rem, calc(21 * var(--codex-book-scale)), 1.30rem);
   }
