@@ -4,6 +4,7 @@
 
 let codexLiveSearchActive = false;
 let codexLiveSearchReturnPage = null;
+let codexLastManuscriptPageType = null;
 
 function getCodexOverlay() {
   return document.getElementById("codex-overlay");
@@ -32,6 +33,7 @@ function closeCodex(options = {}) {
   codexSearchQuery = "";
   codexLiveSearchActive = false;
   codexLiveSearchReturnPage = null;
+  codexLastManuscriptPageType = null;
   syncCodexDesktopPersistentSearchInput("");
 
   closeCodexGlobalSearchModal?.();
@@ -324,10 +326,19 @@ function resetCodexToIndex() {
   openCodexPage("index", null);
 }
 
-function renderCodexPage(type, id) {
-  if (typeof renderCodexLeftManuscript === "function") {
-    renderCodexLeftManuscript();
+function maybeRefreshCodexLeftManuscript(type) {
+  if (typeof renderCodexLeftManuscript !== "function") return;
+
+  if (type === "search" && codexLastManuscriptPageType === "search") {
+    return;
   }
+
+  codexLastManuscriptPageType = type;
+  renderCodexLeftManuscript();
+}
+
+function renderCodexPage(type, id) {
+  maybeRefreshCodexLeftManuscript(type);
 
   if (databaseLoadError) {
     setCodexTitle("The Codex of Kadesh");
