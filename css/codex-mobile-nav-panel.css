@@ -2,8 +2,9 @@
    MOBILE CODEX NAV PANEL OVERRIDES
    =========================================================
 
-   Keeps breadcrumbs static above the bottom controls and reserves a
-   bottom-left page-control slot for Category / Filter & Sort / Sections.
+   Keeps breadcrumbs static above the bottom controls and turns the bottom
+   action row into a full-width mobile control bar:
+   page tool / utility-or-debug / Back / Search / Close.
 */
 
 @media (max-width: 1099px), (max-height: 699px) {
@@ -52,24 +53,12 @@
     flex: 0 0 auto;
 
     display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 10px;
+    align-items: stretch;
+    justify-content: stretch;
+    gap: 8px;
 
     width: 100%;
     min-width: 0;
-
-    pointer-events: none;
-  }
-
-  .codex-mobile-page-control-slot {
-    flex: 1 1 auto;
-    min-width: 0;
-
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
 
     pointer-events: none;
   }
@@ -80,28 +69,60 @@
     transform: none !important;
 
     pointer-events: auto;
-    min-width: 58px;
-    min-height: 40px;
-    height: 40px;
+    min-height: 52px;
+    height: 52px;
+    box-sizing: border-box;
+
     padding: 0 10px;
-    font-size: 0.78rem;
+    font-size: 0.82rem;
     line-height: 1;
-    opacity: 0.88;
+    opacity: 0.9;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  #codex-mobile-page-control {
+    flex: 0 0 clamp(132px, 34%, 198px);
+    min-width: 0;
   }
 
   #codex-mobile-page-control[hidden] {
-    display: none !important;
+    display: inline-flex !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  #codex-mobile-debug-toggle {
+    flex: 1 1 auto;
+    min-width: 44px;
   }
 
   .codex-control-cluster {
     flex: 0 0 auto;
     pointer-events: auto;
+
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .codex-control-cluster #codex-back,
+  .codex-control-cluster #codex-search-button,
+  .codex-control-cluster #codex-close {
+    height: 52px;
+    min-height: 52px;
   }
 }
 
 @media (min-width: 1100px) and (min-height: 700px) {
   .codex-mobile-action-row,
-  .codex-mobile-page-control-slot,
   #codex-mobile-page-control,
   #codex-mobile-debug-toggle {
     display: none !important;
@@ -109,10 +130,30 @@
 }
 
 @media (max-width: 420px) {
+  .codex-mobile-action-row {
+    gap: 6px;
+  }
+
   #codex-mobile-page-control,
   #codex-mobile-debug-toggle {
-    min-width: 48px;
+    min-height: 50px;
+    height: 50px;
     padding-inline: 8px;
     font-size: 0.72rem;
+  }
+
+  #codex-mobile-page-control {
+    flex-basis: clamp(112px, 31%, 150px);
+  }
+
+  .codex-control-cluster {
+    gap: 6px;
+  }
+
+  .codex-control-cluster #codex-back,
+  .codex-control-cluster #codex-search-button,
+  .codex-control-cluster #codex-close {
+    height: 50px;
+    min-height: 50px;
   }
 }
