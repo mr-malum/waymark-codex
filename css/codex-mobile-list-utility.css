@@ -7,13 +7,57 @@
     display: none !important;
   }
 
+  #codex-content.codex-list-page .codex-list-page-shell {
+    height: 100% !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .codex-mobile-list-summary {
+    flex: 0 0 auto;
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 10px;
+
+    margin: 0 0 2px;
+    padding: 4px 2px 8px;
+
+    font-family: 'Marcellus SC', Georgia, serif;
+    font-size: clamp(0.78rem, 3.15vw, 0.92rem);
+    line-height: 1.2;
+    letter-spacing: 0.035em;
+    color: #3a2614;
+    opacity: 0.86;
+
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .codex-mobile-list-summary-filters {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-align: left;
+  }
+
+  .codex-mobile-list-summary-sort {
+    white-space: nowrap;
+    text-align: right;
+  }
+
   #codex-content.codex-list-page .codex-list-control-rail {
     display: none !important;
   }
 
   #codex-content.codex-list-page .codex-list-control-split-view {
     display: block !important;
-    overflow: visible !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
   }
 
   #codex-content.codex-list-page .codex-list-scroll-shell {
