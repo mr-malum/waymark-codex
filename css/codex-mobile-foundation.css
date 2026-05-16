@@ -237,10 +237,10 @@
     height: var(--codex-mobile-nav-h);
 
     display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     align-items: end;
-    gap: 6px 8px;
+    gap: 6px;
 
     margin: 0 !important;
     padding: 0 !important;
@@ -254,7 +254,7 @@
     right: auto !important;
     bottom: auto !important;
 
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 1;
     align-self: end;
 
@@ -291,42 +291,51 @@
     text-overflow: ellipsis;
   }
 
-  #codex-mobile-debug-toggle {
-    position: absolute;
-    left: 50%;
-    bottom: 0;
-    transform: translateX(-50%);
-
-    pointer-events: auto;
-    min-width: 58px;
-    min-height: 40px;
-    height: 40px;
-    padding: 0 10px;
-    font-size: 0.78rem;
-    line-height: 1;
-    opacity: 0.82;
-    z-index: 2;
-  }
-
   .codex-control-cluster {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
 
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: stretch;
     gap: 10px;
 
-    width: auto;
+    width: 100%;
     margin: 0;
 
     pointer-events: auto;
   }
 
-  .codex-panel-nav button,
+  #codex-mobile-page-control {
+    flex: 0 0 clamp(132px, 34%, 198px);
+    min-width: 0;
+  }
+
+  #codex-mobile-page-control[hidden] {
+    display: inline-flex !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  #codex-mobile-debug-toggle {
+    position: static !important;
+    transform: none !important;
+    flex: 1 1 auto;
+    min-width: 48px;
+  }
+
   #codex-back,
   #codex-search-button,
   #codex-close {
+    flex: 0 0 auto;
+  }
+
+  .codex-panel-nav button,
+  #codex-back,
+  #codex-search-button,
+  #codex-close,
+  #codex-mobile-page-control,
+  #codex-mobile-debug-toggle {
     min-width: 52px;
     min-height: 52px;
     height: 52px;
@@ -415,6 +424,7 @@
 }
 
 @media (min-width: 1100px) and (min-height: 700px) {
+  #codex-mobile-page-control,
   #codex-mobile-debug-toggle {
     display: none !important;
   }
@@ -526,7 +536,9 @@
   .codex-panel-nav button,
   #codex-back,
   #codex-search-button,
-  #codex-close {
+  #codex-close,
+  #codex-mobile-page-control,
+  #codex-mobile-debug-toggle {
     min-height: 50px;
     height: 50px;
   }
@@ -534,6 +546,12 @@
   #codex-search-button {
     min-width: 78px;
     padding-inline: 12px;
+  }
+
+  #codex-mobile-page-control {
+    flex-basis: clamp(112px, 31%, 150px);
+    padding-inline: 8px;
+    font-size: 0.72rem;
   }
 
   #codex-mobile-debug-toggle {
