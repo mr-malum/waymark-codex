@@ -208,6 +208,7 @@ function prepareCodexNavigation() {
 function openCodexPage(type = "index", id = null, options = {}) {
   const shouldPush = options.push !== false;
   const state = options.state || {};
+  const wasOpen = getCodexOverlay().classList.contains("open");
 
   prepareCodexNavigation();
 
@@ -223,6 +224,14 @@ function openCodexPage(type = "index", id = null, options = {}) {
   applyCodexHistoryEntryState(currentPage);
   renderCodexPage(type, id);
   updateCodexBackButton();
+
+  if (
+    wasOpen &&
+    shouldPush &&
+    typeof pushAppBrowserHistoryStep === "function"
+  ) {
+    pushAppBrowserHistoryStep();
+  }
 }
 
 function openCodexSearchResults(query, options = {}) {
