@@ -130,7 +130,8 @@ function renderMapTileStyle(imageUrl) {
   return imageUrl
     ? `style="--codex-map-image: url('${escapeJsString(imageUrl)}')"`
     : "";
-}\n
+}
+
 function renderCodexInlineLink(type, id, label) {
   return `
     <button
