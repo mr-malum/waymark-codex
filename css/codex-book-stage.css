@@ -308,19 +308,19 @@
     appearance: none;
     -webkit-appearance: none;
 
-    width: calc(22 * var(--codex-book-scale));
-    height: calc(22 * var(--codex-book-scale));
-    margin-right: calc(-2 * var(--codex-book-scale));
+    width: calc(24 * var(--codex-book-scale));
+    height: calc(24 * var(--codex-book-scale));
+    margin-right: calc(-3 * var(--codex-book-scale));
 
     cursor: pointer;
 
     background-color: transparent;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Ctext x='11' y='16' text-anchor='middle' font-family='Georgia, Times New Roman, serif' font-size='17' font-weight='700' fill='%233a2614'%3E%E2%9C%95%3C/text%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ctext x='12' y='17' text-anchor='middle' font-family='Georgia, Times New Roman, serif' font-size='19' font-weight='700' fill='%233a2614'%3E%E2%9C%95%3C/text%3E%3C/svg%3E");
     background-position: center;
     background-repeat: no-repeat;
     background-size: contain;
 
-    opacity: 0.88;
+    opacity: 0.92;
   }
 
   #codex-desktop-search-input::-webkit-search-cancel-button:hover {
