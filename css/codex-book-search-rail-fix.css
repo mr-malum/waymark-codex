@@ -1,0 +1,211 @@
+/* =========================================================
+   DESKTOP CODEX SEARCH RAIL ALIGNMENT PATCH
+   =========================================================
+
+   Loaded after codex-book-stage.css.
+   The search results rail is nested more deeply than list/detail rails, so it
+   needs a search-specific offset to account for the right-page content padding.
+*/
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  #codex-content.codex-search-page #codex-search-results,
+  #codex-content.codex-search-page .codex-search-results-shell,
+  #codex-content.codex-search-page .codex-search-split-view {
+    position: relative;
+    overflow: visible;
+  }
+
+  #codex-content.codex-search-page .codex-search-split-view > .codex-split-rail {
+    position: absolute;
+
+    /*
+      Search results are nested inside the padded right-page content box.
+      Subtract the right-page content padding so the category rail lands on the
+      same left utility x-coordinate as list filters and detail rails.
+    */
+    left: calc(
+      (
+        var(--codex-left-utility-x)
+        - var(--codex-right-content-x)
+        - 32
+      ) * var(--codex-book-scale)
+    );
+    top: calc((360 - var(--codex-right-content-y)) * var(--codex-book-scale));
+
+    width: calc(var(--codex-left-utility-width) * var(--codex-book-scale));
+    height: calc(520 * var(--codex-book-scale));
+
+    display: flex;
+    align-items: center;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  #codex-content.codex-search-page .codex-search-split-view > .codex-split-rail .codex-split-rail-inner,
+  #codex-content.codex-search-page .codex-search-category-rail {
+    width: 100%;
+  }
+
+  #codex-content.codex-search-page .codex-search-split-view > .codex-split-main {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    padding: 0 calc(10 * var(--codex-book-scale)) calc(24 * var(--codex-book-scale)) 0;
+    box-sizing: border-box;
+  }
+
+  #codex-desktop-persistent-search::after {
+    display: none;
+  }
+
+  #codex-desktop-search-input {
+    padding-right: calc(60 * var(--codex-book-scale));
+  }
+
+  #codex-desktop-search-input::-webkit-search-cancel-button {
+    appearance: none;
+    -webkit-appearance: none;
+    display: none;
+  }
+
+  #codex-desktop-search-action {
+    appearance: none;
+    -webkit-appearance: none;
+
+    position: absolute;
+    top: calc(5 * var(--codex-book-scale));
+    right: calc(5 * var(--codex-book-scale));
+
+    width: calc(42 * var(--codex-book-scale));
+    height: calc(42 * var(--codex-book-scale));
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    margin: 0;
+    padding: 0;
+
+    border: 1px solid rgba(72, 43, 18, 0.26);
+    border-radius: calc(4 * var(--codex-book-scale));
+
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 244, 215, 0.36), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(238, 214, 169, 0.94),
+        rgba(209, 166, 95, 0.70)
+      );
+
+    color: rgba(47, 29, 16, 0.82);
+
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(1.02rem, calc(22 * var(--codex-book-scale)), 1.34rem);
+    font-weight: 700;
+    line-height: 1;
+
+    transform: scaleX(-1);
+
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 244, 218, 0.28),
+      inset 0 -1px 0 rgba(72, 43, 18, 0.12),
+      0 1px 4px rgba(45, 25, 8, 0.10);
+
+    text-shadow:
+      0 0 0.4px rgba(47, 29, 16, 0.70),
+      0 0 0.8px rgba(47, 29, 16, 0.45);
+
+    cursor: pointer;
+  }
+
+  #codex-desktop-search-action.has-query {
+    font-size: clamp(0.98rem, calc(21 * var(--codex-book-scale)), 1.30rem);
+    transform: none;
+  }
+
+  #codex-desktop-search-action:hover,
+  #codex-desktop-search-action:focus-visible {
+    outline: none;
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 246, 222, 0.42), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(244, 224, 184, 0.98),
+        rgba(216, 175, 105, 0.78)
+      );
+  }
+
+  #codex-desktop-search-action:active {
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 244, 215, 0.25), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(202, 158, 87, 0.78),
+        rgba(235, 208, 160, 0.92)
+      );
+  }
+
+  .codex-panel-nav button {
+    border-color: rgba(72, 43, 18, 0.26);
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 244, 215, 0.36), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(238, 214, 169, 0.94),
+        rgba(209, 166, 95, 0.70)
+      );
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 244, 218, 0.28),
+      inset 0 -1px 0 rgba(72, 43, 18, 0.12),
+      0 1px 4px rgba(45, 25, 8, 0.10);
+  }
+
+  .codex-panel-nav button:hover,
+  .codex-panel-nav button:focus-visible {
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 246, 222, 0.42), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(244, 224, 184, 0.98),
+        rgba(216, 175, 105, 0.78)
+      );
+    border-color: rgba(72, 43, 18, 0.34);
+  }
+
+  .codex-panel-nav button:active {
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 244, 215, 0.25), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(202, 158, 87, 0.78),
+        rgba(235, 208, 160, 0.92)
+      );
+  }
+}
+
+@media (max-width: 700px), (pointer: coarse) {
+  .codex-panel-nav button,
+  #mobile-panel-back,
+  #codex-search-button {
+    border-color: rgba(72, 43, 18, 0.26);
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 244, 215, 0.36), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(238, 214, 169, 0.94),
+        rgba(209, 166, 95, 0.70)
+      );
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 244, 218, 0.28),
+      inset 0 -1px 0 rgba(72, 43, 18, 0.12),
+      0 1px 4px rgba(45, 25, 8, 0.10);
+  }
+}

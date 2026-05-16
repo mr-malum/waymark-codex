@@ -1,24 +1,25 @@
-/* Codex Button */
+/* =========================================================
+   MAIN MAP CONTROLS
+   ========================================================= */
 
-#codex-button {
+:root {
+  --map-control-z-index: 2400;
+  --map-control-hitbox-outline: transparent;
+}
+
+#codex-button,
+#map-reset-button {
   position: fixed;
-
-  bottom: 28px;
-  left: 28px;
-
-  width: 144px;
-  height: 144px;
 
   padding: 0;
   border: none;
 
   background-color: transparent;
-  background-image: url("../assets/Codex_Book_Button.png");
-  background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
 
-  z-index: 1500;
+  z-index: var(--map-control-z-index);
+  pointer-events: auto;
   cursor: pointer;
 
   touch-action: manipulation;
@@ -29,8 +30,24 @@
 
   user-select: none;
 
-  outline: none;
+  outline: 1px solid var(--map-control-hitbox-outline);
+  outline-offset: -1px;
   box-shadow: none;
+
+  will-change: transform, filter;
+}
+
+/* Codex Button */
+
+#codex-button {
+  bottom: 23px;
+  left: 23px;
+
+  width: 154px;
+  height: 154px;
+
+  background-image: url("../assets/Codex_Book_Button.png");
+  background-size: 144px 144px;
 
   transition:
     transform 0.18s ease,
@@ -128,13 +145,14 @@
 #codex-button:focus,
 #codex-button:focus-visible,
 #codex-button:active {
-  outline: none;
+  outline: 1px solid var(--map-control-hitbox-outline);
+  outline-offset: -1px;
   box-shadow: none;
   background-color: transparent;
 }
 
 #codex-button:hover {
-  transform: scale(1.045);
+  transform: scale(1.035);
 
   filter:
     drop-shadow(0 12px 22px rgba(0, 0, 0, 0.56))
@@ -151,7 +169,7 @@
 }
 
 #codex-button.codex-label-visible {
-  transform: scale(1.045);
+  transform: scale(1.035);
 
   filter:
     drop-shadow(0 12px 22px rgba(0, 0, 0, 0.56))
@@ -166,36 +184,14 @@
 /* Map Reset Button */
 
 #map-reset-button {
-  position: fixed;
+  bottom: 202px;
+  left: 37px;
 
-  bottom: 156px;
-  left: 42px;
+  width: 126px;
+  height: 126px;
 
-  width: 116px;
-  height: 116px;
-
-  padding: 0;
-  border: none;
-
-  background-color: transparent;
   background-image: url("../assets/Atlas_Compass.png");
-  background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-
-  z-index: 1500;
-  cursor: pointer;
-
-  touch-action: manipulation;
-
-  -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-
-  user-select: none;
-
-  outline: none;
-  box-shadow: none;
+  background-size: 116px 116px;
 
   transition:
     transform 0.14s ease,
@@ -208,7 +204,7 @@
 }
 
 #map-reset-button:hover {
-  transform: scale(1.045);
+  transform: scale(1.035);
 
   filter:
     drop-shadow(0 10px 18px rgba(0, 0, 0, 0.52))
@@ -217,7 +213,7 @@
 }
 
 #map-reset-button:active {
-  transform: scale(0.94) rotate(-2deg);
+  transform: scale(0.95) rotate(-2deg);
 
   filter:
     drop-shadow(0 5px 10px rgba(0, 0, 0, 0.50))
@@ -227,7 +223,8 @@
 
 #map-reset-button:focus,
 #map-reset-button:focus-visible {
-  outline: none;
+  outline: 1px solid var(--map-control-hitbox-outline);
+  outline-offset: -1px;
   box-shadow: none;
   background-color: transparent;
 }

@@ -20,10 +20,11 @@ function renderCodexListControls(config) {
   return `
     <div class="codex-filter-row">
       ${filters.map(filter => `
-        <label class="codex-dynamic-filter">
+        <div class="codex-dynamic-filter">
           <select
             id="${escapeHtml(filter.fieldId || `${filter.id}-field`)}"
             class="codex-filter-field-select"
+            aria-label="${escapeHtml(filter.label)} filter field"
           >
               ${renderCodexSelectOptions(
                 filter.fieldOptions || [
@@ -36,15 +37,18 @@ function renderCodexListControls(config) {
               )}
           </select>
 
-          <select id="${escapeHtml(filter.id)}">
+          <select
+            id="${escapeHtml(filter.id)}"
+            aria-label="${escapeHtml(filter.label)} filter value"
+          >
             ${renderCodexSelectOptions(filter.options, filter.selectedValue)}
           </select>
-        </label>
+        </div>
       `).join("")}
 
-      <label class="codex-sort-label">
-        <span class="codex-sort-topline">
-          Sort
+      <div class="codex-sort-label">
+        <div class="codex-sort-topline">
+          <span>Sort</span>
 
           <button
             id="${escapeHtml(config.directionId)}"
@@ -54,12 +58,15 @@ function renderCodexListControls(config) {
           >
             ${config.direction === "desc" ? "↓ DESC" : "↑ ASC"}
           </button>
-        </span>
+        </div>
 
-        <select id="${escapeHtml(config.sortId)}">
+        <select
+          id="${escapeHtml(config.sortId)}"
+          aria-label="Sort records by"
+        >
           ${renderCodexSelectOptions(config.sortOptions, config.selectedSort)}
         </select>
-      </label>
+      </div>
     </div>
   `;
 }
@@ -80,19 +87,19 @@ function getCodexRecordTypeIcon(type) {
   switch (type) {
     case "poi":
     case "poi-group":
-      return "✦";
+      return getCodexIcon("poi");
 
     case "npc":
-      return "♟";
+      return getCodexIcon("npc");
 
     case "region":
-      return "◇";
+      return getCodexIcon("region");
 
     case "hex":
-      return "⬡";
+      return getCodexIcon("hex");
 
     default:
-      return "•";
+      return getCodexIcon("fallback");
   }
 }
 
@@ -116,6 +123,10 @@ function getCodexRecordTypeLabel(type) {
   }
 }
 
+function getCodexRowIconClass(icon) {
+  return icon === getCodexIcon("hex") ? " codex-row-icon-hex" : "";
+}
+
 function renderCodexRow(options) {
   const title = options?.title || "Unnamed Record";
   const meta = options?.meta || "";
@@ -132,6 +143,7 @@ function renderCodexRow(options) {
   const hasKicker = Boolean(typeLabel);
   const noIconClass = !icon && !hasKicker ? "codex-linked-row" : "";
   const kickerClass = hasKicker ? "codex-row-has-kicker" : "";
+  const iconClass = getCodexRowIconClass(icon);
 
   return `
     <button
@@ -144,12 +156,12 @@ function renderCodexRow(options) {
         hasKicker
           ? `
             <span class="codex-row-kicker" aria-hidden="true">
-              ${icon ? `<span class="codex-row-kicker-icon">${escapeHtml(icon)}</span>` : ""}
+              ${icon ? `<span class="codex-row-kicker-icon${iconClass}">${escapeHtml(icon)}</span>` : ""}
               <span class="codex-row-type-label">${escapeHtml(typeLabel)}</span>
             </span>
           `
           : icon
-            ? `<span class="codex-row-icon" aria-hidden="true">${escapeHtml(icon)}</span>`
+            ? `<span class="codex-row-icon${iconClass}" aria-hidden="true">${escapeHtml(icon)}</span>`
             : ""
       }
 
@@ -167,6 +179,11 @@ function renderCodexRow(options) {
   `;
 }
 
+function getCodexLinkedRowOnclick(resolvedType, id, options = {}) {
+  const handler = options.onclickHandler || "openCodexPage";
+  return `${handler}('${escapeJsString(resolvedType)}', '${escapeJsString(id)}')`;
+}
+
 function renderCodexLinkedList(
   rows,
   emptyText,
@@ -174,7 +191,8 @@ function renderCodexLinkedList(
   idField,
   getLabel,
   getType = null,
-  getIcon = null
+  getIcon = null,
+  options = {}
 ) {
   if (!rows.length) {
     return `<p>${escapeHtml(emptyText)}</p>`;
@@ -204,7 +222,7 @@ function renderCodexLinkedList(
           icon,
           typeLabel,
           classes: "codex-linked-record-row",
-          onclick: `openCodexPage('${escapeJsString(resolvedType)}', '${escapeJsString(id)}')`
+          onclick: getCodexLinkedRowOnclick(resolvedType, id, options)
         });
       }).join("")}
     </div>

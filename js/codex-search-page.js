@@ -3,10 +3,10 @@
    ========================================================= */
 
 const CODEX_SEARCH_GROUPS = [
-  { type: "poi", label: "POIs", icon: "✦" },
-  { type: "npc", label: "NPCs", icon: "♟" },
-  { type: "region", label: "Regions", icon: "◇" },
-  { type: "hex", label: "Hexes", icon: "⬡" }
+  { type: "poi", label: "POIs", iconKey: "poi" },
+  { type: "npc", label: "NPCs", iconKey: "npc" },
+  { type: "region", label: "Regions", iconKey: "region" },
+  { type: "hex", label: "Hexes", iconKey: "hex" }
 ];
 
 let codexSearchActiveGroup = "all";
@@ -267,7 +267,7 @@ function buildPoiGroupSearchLabel(group, matchingPois) {
 
   const typeLine = [
     group.Group_Type || "Grouped POI",
-    `${allMappedAreas.length} mapped area${allMappedAreas.length !== 1 ? "s" : ""}`
+    `${allMappedAreas.length} Area${allMappedAreas.length !== 1 ? "s" : ""}`
   ].filter(Boolean).join(" • ");
 
   if (typeLine) {
@@ -275,7 +275,7 @@ function buildPoiGroupSearchLabel(group, matchingPois) {
   }
 
   const matchLine = matchingPois.length > 0
-    ? `${matchingPois.length} matching mapped area${matchingPois.length !== 1 ? "s" : ""}`
+    ? `${matchingPois.length} matching Area${matchingPois.length !== 1 ? "s" : ""}`
     : "Group match";
 
   const populationNpcLine = [
@@ -464,7 +464,8 @@ function openCodexSearchResultsModal(type) {
           "id",
           row => row.label,
           row => row.type,
-          row => getCodexSearchResultIcon(row.type)
+          row => getCodexSearchResultIcon(row.type),
+          { onclickHandler: "openCodexSearchResult" }
         )}
       </div>
 
@@ -523,10 +524,10 @@ function renderCodexSearchResultGroups(results) {
 }
 
 function getCodexSearchGroupIcon(type) {
-  if (type === "all") return "✧";
+  if (type === "all") return getCodexIcon("all");
 
   const group = CODEX_SEARCH_GROUPS.find(item => item.type === type);
-  return group?.icon || "•";
+  return getCodexIcon(group?.iconKey || "fallback");
 }
 
 function getCodexSearchResultIcon(type) {
@@ -542,7 +543,8 @@ function renderCodexSearchRowList(rows, emptyText) {
     "id",
     row => row.label,
     row => row.type,
-    row => getCodexSearchResultIcon(row.type)
+    row => getCodexSearchResultIcon(row.type),
+    { onclickHandler: "openCodexSearchResult" }
   );
 }
 

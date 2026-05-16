@@ -1,0 +1,143 @@
+/* =========================================================
+   DESKTOP CODEX DEBUG + HEADER POLISH
+   =========================================================
+
+   Loaded after codex-book-stage.css.
+   Keeps layout guides hidden by default, toggled by the tilde/backtick hotkey,
+   and tightens/boldens header flourishes without increasing their size.
+*/
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  #codex-modal {
+    --codex-book-debug-display: none;
+  }
+
+  #codex-modal.codex-debug-guides-visible {
+    --codex-book-debug-display: block;
+  }
+
+  #codex-header {
+    column-gap: calc(2 * var(--codex-book-scale));
+  }
+
+  #codex-header::before,
+  #codex-header::after {
+    opacity: 0.98;
+    filter:
+      contrast(1.32)
+      saturate(1.12)
+      drop-shadow(0 0 0.6px rgba(47, 29, 16, 0.62))
+      drop-shadow(0 0 0.6px rgba(47, 29, 16, 0.46));
+  }
+
+  #codex-title::after {
+    bottom: calc(-15 * var(--codex-book-scale));
+
+    width: min(118%, calc(480 * var(--codex-book-scale)));
+    height: 1px;
+
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(72, 43, 18, 0.65),
+      transparent
+    );
+
+    opacity: 1;
+  }
+
+  #codex-content.codex-home {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #codex-home-section-buttons {
+    width: min(100%, calc(820 * var(--codex-book-scale)));
+    margin: 0 auto;
+  }
+
+  #codex-home-section-buttons .codex-home-section-row {
+    min-height: calc(92 * var(--codex-book-scale));
+    padding:
+      calc(18 * var(--codex-book-scale))
+      calc(18 * var(--codex-book-scale));
+    grid-template-columns:
+      calc(48 * var(--codex-book-scale))
+      minmax(0, 1fr)
+      auto;
+    gap: calc(16 * var(--codex-book-scale));
+  }
+
+  #codex-home-section-buttons .codex-row-icon {
+    width: calc(48 * var(--codex-book-scale));
+    min-width: calc(48 * var(--codex-book-scale));
+    font-size: clamp(1.35rem, calc(32 * var(--codex-book-scale)), 2rem);
+  }
+
+  #codex-home-section-buttons .codex-row-title {
+    font-size: clamp(1.05rem, calc(24 * var(--codex-book-scale)), 1.45rem);
+  }
+
+  #codex-home-section-buttons .codex-row-meta {
+    font-size: clamp(0.82rem, calc(18 * var(--codex-book-scale)), 1.05rem);
+  }
+
+  #codex-content.codex-hexes-index-page .codex-hex-list-control-rail {
+    top: calc((300 - var(--codex-right-content-y)) * var(--codex-book-scale));
+    height: calc(660 * var(--codex-book-scale));
+  }
+
+  #codex-overlay.open .codex-panel-nav .codex-control-cluster {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(5 * var(--codex-book-scale));
+    padding: calc(5 * var(--codex-book-scale));
+  }
+
+  #codex-overlay.open .codex-panel-nav #codex-back,
+  #codex-overlay.open .codex-panel-nav #codex-close {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    border-color: rgba(72, 43, 18, 0.26);
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 244, 215, 0.36), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(238, 214, 169, 0.94),
+        rgba(209, 166, 95, 0.70)
+      );
+    color: rgba(47, 29, 16, 0.86);
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 244, 218, 0.28),
+      inset 0 -1px 0 rgba(72, 43, 18, 0.12),
+      0 1px 4px rgba(45, 25, 8, 0.10);
+  }
+
+  #codex-overlay.open .codex-panel-nav #codex-back:hover,
+  #codex-overlay.open .codex-panel-nav #codex-back:focus-visible,
+  #codex-overlay.open .codex-panel-nav #codex-close:hover,
+  #codex-overlay.open .codex-panel-nav #codex-close:focus-visible {
+    border-color: rgba(72, 43, 18, 0.34);
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 246, 222, 0.42), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(244, 224, 184, 0.98),
+        rgba(216, 175, 105, 0.78)
+      );
+  }
+
+  #codex-overlay.open .codex-panel-nav #codex-back:active,
+  #codex-overlay.open .codex-panel-nav #codex-close:active {
+    background:
+      radial-gradient(circle at 38% 26%, rgba(255, 244, 215, 0.25), transparent 44%),
+      linear-gradient(
+        to bottom,
+        rgba(202, 158, 87, 0.78),
+        rgba(235, 208, 160, 0.92)
+      );
+  }
+}

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Marcellus+SC&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Marcellus+SC&family=Macondo&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
   <meta charset="utf-8" />
   <title>Kadesh Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,6 +15,11 @@
   <link rel="stylesheet" href="css/codex-search.css">
   <link rel="stylesheet" href="css/codex-lists.css">
   <link rel="stylesheet" href="css/codex-detail.css">
+  <link rel="stylesheet" href="css/codex-book-stage.css">
+  <link rel="stylesheet" href="css/codex-book-search-rail-fix.css">
+  <link rel="stylesheet" href="css/codex-book-debug-polish.css">
+  <link rel="stylesheet" href="css/codex-left-manuscript.css">
+  <link rel="stylesheet" href="css/codex-closed-overlay-hardening.css">
   <link rel="stylesheet" href="css/mobile.css">
 </head>
 
@@ -28,35 +33,53 @@
 
 <div id="codex-overlay" class="closed">
   <div id="codex-modal">
+    <div id="codex-book-stage">
 
-    <div id="codex-header">
-      <h2 id="codex-title">The Codex of Kadesh</h2>
-    </div>
+      <div id="codex-left-manuscript" aria-hidden="true"></div>
 
-    <div id="codex-content">
-      <button class="codex-section-button" type="button">Search</button>
-      <button class="codex-section-button" type="button">Regions</button>
-      <button class="codex-section-button" type="button">Points of Interest</button>
-      <button class="codex-section-button" type="button">NPCs</button>
-    </div>
-
-    <div
-      id="codex-global-search-modal"
-      class="codex-global-search-modal"
-      aria-hidden="true"
-      onclick="handleCodexGlobalSearchBackdropClick(event)"
-    ></div>
-
-    <div class="panel-nav codex-panel-nav">
-      <div id="codex-breadcrumbs"></div>
-
-      <div class="codex-control-cluster" aria-label="Codex controls">
-        <button id="codex-back" type="button" disabled aria-label="Back">❮</button>
-        <button id="codex-search-button" type="button">Search</button>
-        <button id="codex-close" type="button" aria-label="Close">✕</button>
+      <div id="codex-header">
+        <h2 id="codex-title">The Codex of Kadesh</h2>
       </div>
-    </div>
 
+      <div id="codex-desktop-persistent-search" aria-label="Search the Codex">
+        <input
+          id="codex-desktop-search-input"
+          type="search"
+          placeholder="Consult the Codex..."
+          autocomplete="off"
+        >
+        <button
+          id="codex-desktop-search-action"
+          type="button"
+          aria-label="Focus search"
+        >⌕</button>
+      </div>
+
+      <div id="codex-content">
+        <button class="codex-section-button" type="button">Search</button>
+        <button class="codex-section-button" type="button">Regions</button>
+        <button class="codex-section-button" type="button">Points of Interest</button>
+        <button class="codex-section-button" type="button">NPCs</button>
+      </div>
+
+      <div
+        id="codex-global-search-modal"
+        class="codex-global-search-modal"
+        aria-hidden="true"
+        onclick="handleCodexGlobalSearchBackdropClick(event)"
+      ></div>
+
+      <div class="panel-nav codex-panel-nav">
+        <div id="codex-breadcrumbs"></div>
+
+        <div class="codex-control-cluster" aria-label="Codex controls">
+          <button id="codex-back" type="button" disabled aria-label="Back">❮</button>
+          <button id="codex-search-button" type="button">Search</button>
+          <button id="codex-close" type="button" aria-label="Close">✕</button>
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
  
@@ -85,6 +108,7 @@
 <script src="js/data-loader.js"></script>
 <script src="js/app-core.js"></script>
 <script src="js/map-ui.js"></script>
+<script src="js/codex-icons.js"></script>
 <script src="js/codex-core.js"></script>
 <script src="js/codex-render.js"></script>
 <script src="js/codex-labels.js"></script>
@@ -93,6 +117,7 @@
 <script src="js/codex-list-pages.js"></script>
 <script src="js/codex-list-config.js"></script>
 <script src="js/codex-search-page.js"></script>
+<script src="js/codex-left-manuscript.js"></script>
 <script src="js/codex-pages.js"></script>
 <script src="js/app-events.js"></script>
 

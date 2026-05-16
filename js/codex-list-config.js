@@ -154,3 +154,31 @@ const npcCodexListConfig = {
     render: renderNpcListIntoContainer
   })
 };
+
+const hexCodexListConfig = {
+  sortId: "codex-hex-sort",
+  directionId: "codex-hex-direction",
+  selectedSort: "hex-id",
+
+  sortOptions: [
+    { value: "hex-id", label: "Hex ID" },
+    { value: "poi-count", label: "POI Count" },
+    { value: "npc-count", label: "NPC Count" }
+  ],
+
+  sortComparators: {
+    "hex-id": (a, b) => String(a.Hex_ID || "").localeCompare(
+      String(b.Hex_ID || ""),
+      undefined,
+      { numeric: true, sensitivity: "base" }
+    ),
+
+    "poi-count": compareByNumberThenName(row =>
+      getHexCounts(row.Hex_ID).poiCount
+    ),
+
+    "npc-count": compareByNumberThenName(row =>
+      getHexCounts(row.Hex_ID).npcCount
+    )
+  }
+};

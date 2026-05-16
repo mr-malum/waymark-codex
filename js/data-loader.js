@@ -4,7 +4,8 @@ const sheetUrls = {
   npcs: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=603218189&single=true&output=csv",
   regions: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=30419630&single=true&output=csv",
   poiGroups: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=1000348883&single=true&output=csv",
-  maps: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=1435181261&single=true&output=csv"
+  maps: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=1435181261&single=true&output=csv",
+  dmJournal: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0ads-k6v3CiG58JEZkZa7sya_IqLMBiUTh0IfnKOGeWCmbbw9qLJL9KITnd_GadRzMVz_e0otMzaD/pub?gid=2138300710&single=true&output=csv"
 };
 
 function parseCSV(csvText) {
@@ -112,6 +113,121 @@ function groupBy(rows, fieldName) {
   return groups;
 }
 
+function normalizeJournalSourceType(sourceType) {
+  const normalized = String(sourceType || "").trim().toLowerCase();
+
+  const aliases = {
+    hex: "hex",
+    hexes: "hex",
+    region: "region",
+    regions: "region",
+    poi: "poi",
+    pois: "poi",
+    point_of_interest: "poi",
+    points_of_interest: "poi",
+    poi_group: "poi_group",
+    poi_groups: "poi_group",
+    poigroup: "poi_group",
+    poigroups: "poi_group",
+    npc: "npc",
+    npcs: "npc"
+  };
+
+  return aliases[normalized] || normalized;
+}
+
+function getJournalSourceKey(sourceType, sourceId) {
+  if (!sourceType || !sourceId) return "";
+  return `${normalizeJournalSourceType(sourceType)}:${sourceId}`;
+}
+
+function sortJournalEntries(entries) {
+  return [...entries].sort((a, b) => {
+    const aTime = Date.parse(a.Timestamp || "") || 0;
+    const bTime = Date.parse(b.Timestamp || "") || 0;
+
+    if (aTime !== bTime) {
+      return bTime - aTime;
+    }
+
+    return String(b.Entry_ID || "").localeCompare(String(a.Entry_ID || ""));
+  });
+}
+
+function groupJournalBySource(rows) {
+  const groups = {};
+
+  rows.forEach(row => {
+    const key = getJournalSourceKey(row.Source_Type, row.Source_ID);
+
+    if (!key) return;
+
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+
+    groups[key].push(row);
+  });
+
+  Object.keys(groups).forEach(key => {
+    groups[key] = sortJournalEntries(groups[key]);
+  });
+
+  return groups;
+}
+
+function formatJournalTimestamp(timestamp) {
+  if (!timestamp) return "Undated";
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function formatJournalEntriesText(entries) {
+  return sortJournalEntries(entries)
+    .map(entry => {
+      const meta = [
+        formatJournalTimestamp(entry.Timestamp),
+        entry.Created_By ? `by ${entry.Created_By}` : "",
+        entry.Session_ID || "",
+        entry.Entry_Type || ""
+      ].filter(Boolean).join(" • ");
+
+      return `${meta}\n${entry.Entry_Body || ""}`.trim();
+    })
+    .join("\n\n");
+}
+
+function applyJournalTextToRows(rows, sourceType, idField, journalGroups) {
+  rows.forEach(row => {
+    const key = getJournalSourceKey(sourceType, row[idField]);
+    const entries = journalGroups[key] || [];
+
+    row.DM_Journal_Entries = entries;
+    row.DM_Journal = entries.length ? formatJournalEntriesText(entries) : "";
+  });
+}
+
+function hydrateCentralJournal(appData) {
+  const journalGroups = groupJournalBySource(appData.dmJournal);
+
+  applyJournalTextToRows(appData.hexes, "hex", "Hex_ID", journalGroups);
+  applyJournalTextToRows(appData.regions, "region", "Region_ID", journalGroups);
+  applyJournalTextToRows(appData.pois, "poi", "POI_ID", journalGroups);
+  applyJournalTextToRows(appData.poiGroups, "poi_group", "POI_Group_ID", journalGroups);
+  applyJournalTextToRows(appData.npcs, "npc", "NPC_ID", journalGroups);
+
+  return journalGroups;
+}
+
 function getMapOwnerKey(ownerType, ownerId) {
   if (!ownerType || !ownerId) return "";
   return `${String(ownerType).toLowerCase()}:${ownerId}`;
@@ -150,13 +266,14 @@ function groupMapsByOwner(rows) {
 }
 
 async function loadDatabase() {
-  const [hexes, pois, npcs, regions, poiGroups, maps] = await Promise.all([
+  const [hexes, pois, npcs, regions, poiGroups, maps, dmJournal] = await Promise.all([
     fetchSheet(sheetUrls.hexes),
     fetchSheet(sheetUrls.pois),
     fetchSheet(sheetUrls.npcs),
     fetchSheet(sheetUrls.regions),
     fetchSheet(sheetUrls.poiGroups),
-    fetchOptionalSheet(sheetUrls.maps)
+    fetchOptionalSheet(sheetUrls.maps),
+    fetchOptionalSheet(sheetUrls.dmJournal)
   ]);
 
   const appData = {
@@ -165,8 +282,11 @@ async function loadDatabase() {
     npcs,
     regions,
     poiGroups,
-    maps
+    maps,
+    dmJournal
   };
+
+  const dmJournalBySourceKey = hydrateCentralJournal(appData);
 
   const db = {
     raw: appData,
@@ -177,11 +297,13 @@ async function loadDatabase() {
     regionsById: indexById(appData.regions, "Region_ID"),
     poiGroupsById: indexById(appData.poiGroups, "POI_Group_ID"),
     mapsById: indexById(appData.maps, "Map_ID"),
+    dmJournalById: indexById(appData.dmJournal, "Entry_ID"),
 
     poisByHexId: groupBy(appData.pois, "Hex_ID_Ref"),
     npcsByHomeId: groupBy(appData.npcs, "Home_ID_Ref"),
     poisByGroupId: groupBy(appData.pois, "POI_Group_ID"),
-    mapsByOwnerKey: groupMapsByOwner(appData.maps)
+    mapsByOwnerKey: groupMapsByOwner(appData.maps),
+    dmJournalBySourceKey
   };
 
   window.db = db;

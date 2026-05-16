@@ -10,6 +10,7 @@ let codexLongPressTimer = null;
 let suppressNextCodexClick = false;
 let appBrowserHistoryDepth = 0;
 let appBrowserHistoryReleaseCount = 0;
+let codexDesktopLiveSearchTimer = null;
 
 function initializeHexGrid() {
   for (let xxx = HEX_GRID_MIN; xxx < HEX_GRID_MAX; xxx++) {
@@ -122,6 +123,8 @@ function bindCodexEvents() {
     .getElementById("codex-search-button")
     .addEventListener("click", openCodexGlobalSearchModal);
 
+  bindCodexDesktopPersistentSearch();
+
   document
     .getElementById("codex-back")
     .addEventListener("click", function () {
@@ -145,6 +148,91 @@ function bindCodexEvents() {
         closeCodex();
       }
     });
+}
+
+function isDesktopCodexBookLayout() {
+  return window.matchMedia("(min-width: 1100px) and (min-height: 700px)").matches;
+}
+
+function isTypingInEditableField(event) {
+  const target = event.target;
+  if (!target) return false;
+
+  const tagName = String(target.tagName || "").toLowerCase();
+
+  return tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    Boolean(target.isContentEditable);
+}
+
+function toggleCodexDebugGuides() {
+  const modal = document.getElementById("codex-modal");
+  if (!modal) return;
+
+  const shouldShow = !modal.classList.contains("codex-debug-guides-visible");
+  modal.classList.toggle("codex-debug-guides-visible", shouldShow);
+}
+
+function updateCodexDesktopSearchAction() {
+  const input = document.getElementById("codex-desktop-search-input");
+  const action = document.getElementById("codex-desktop-search-action");
+  if (!input || !action) return;
+
+  const hasText = Boolean(String(input.value || "").trim());
+
+  action.textContent = hasText ? "✕" : "⌾";
+  action.classList.toggle("has-query", hasText);
+  action.setAttribute("aria-label", hasText ? "Clear search" : "Focus search");
+}
+
+function clearCodexDesktopPersistentSearch() {
+  const input = document.getElementById("codex-desktop-search-input");
+  if (!input) return;
+
+  input.value = "";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.focus();
+}
+
+function bindCodexDesktopPersistentSearch() {
+  const input = document.getElementById("codex-desktop-search-input");
+  const action = document.getElementById("codex-desktop-search-action");
+  if (!input) return;
+
+  updateCodexDesktopSearchAction();
+
+  input.addEventListener("input", function () {
+    updateCodexDesktopSearchAction();
+    window.clearTimeout(codexDesktopLiveSearchTimer);
+
+    const cleanQuery = String(input.value || "").trim();
+
+    codexDesktopLiveSearchTimer = window.setTimeout(() => {
+      if (cleanQuery) {
+        startCodexLiveSearch(cleanQuery);
+        return;
+      }
+
+      restoreCodexLiveSearchReturnPage();
+    }, 90);
+  });
+
+  input.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    input.blur();
+  });
+
+  action?.addEventListener("click", function () {
+    if (String(input.value || "").trim()) {
+      clearCodexDesktopPersistentSearch();
+      return;
+    }
+
+    input.focus();
+  });
 }
 
 function openCodexGlobalSearchModal() {
@@ -224,7 +312,17 @@ function handleCodexButtonClick(event) {
 
 function bindKeyboardEasterEggEvents() {
   window.addEventListener("keydown", event => {
-    retroCodexSequence += event.key.toLowerCase();
+    const key = event.key;
+
+    if (key === "`" || key === "~") {
+      if (isCodexOpen() && isDesktopCodexBookLayout() && !isTypingInEditableField(event)) {
+        event.preventDefault();
+        toggleCodexDebugGuides();
+        return;
+      }
+    }
+
+    retroCodexSequence += key.toLowerCase();
 
     if (retroCodexSequence.length > 2) {
       retroCodexSequence = retroCodexSequence.slice(-2);
@@ -260,103 +358,89 @@ function isAppPanelOpen() {
 function ensureAppBrowserBackTrap() {
   if (!isMobileBrowserBackEnabled()) return;
 
-  history.pushState({ kadeshAppState: true }, "", window.location.href);
-  appBrowserHistoryDepth += 1;
+  if (appBrowserHistoryDepth > 0) return;
+
+  appBrowserHistoryDepth = 1;
+  history.pushState({ appPanelTrap: true }, "");
 }
 
 function releaseAppBrowserBackTrap() {
-  if (!appBrowserHistoryDepth) return;
+  if (!isMobileBrowserBackEnabled()) {
+    appBrowserHistoryDepth = 0;
+    appBrowserHistoryReleaseCount = 0;
+    return;
+  }
 
-  const releaseDepth = appBrowserHistoryDepth;
-  appBrowserHistoryDepth = 0;
-  appBrowserHistoryReleaseCount += releaseDepth;
+  if (appBrowserHistoryDepth <= 0) return;
 
-  history.go(-releaseDepth);
+  appBrowserHistoryReleaseCount += 1;
+  appBrowserHistoryDepth -= 1;
+
+  history.back();
 }
 
-function handleAppBrowserBack() {
+window.addEventListener("popstate", function () {
   if (appBrowserHistoryReleaseCount > 0) {
     appBrowserHistoryReleaseCount -= 1;
     return;
   }
 
-  if (!isMobileBrowserBackEnabled()) return;
+  if (appBrowserHistoryDepth > 0) {
+    appBrowserHistoryDepth -= 1;
+  }
 
   if (isCodexOpen()) {
-    if (appBrowserHistoryDepth > 0) {
-      appBrowserHistoryDepth -= 1;
-    }
-
-    if (codexHistory.length <= 1) {
-      closeCodex({ syncHistory: false });
-      appBrowserHistoryDepth = 0;
-      return;
-    }
-
-    goBackCodex();
+    closeCodex({ syncHistory: false });
     return;
   }
 
   if (isAppPanelOpen()) {
-    if (appBrowserHistoryDepth > 0) {
-      appBrowserHistoryDepth -= 1;
-    }
-
     closePanel({
       clearSelection: true,
-      centerSelected: true,
-      syncHistory: false
+      centerSelected: true
     });
-
-    appBrowserHistoryDepth = 0;
   }
-}
-
-function bindBrowserBackEvents() {
-  window.addEventListener("popstate", handleAppBrowserBack);
-}
-
-function clearCodexLongPressTimer() {
-  window.clearTimeout(codexLongPressTimer);
-  codexLongPressTimer = null;
-}
+});
 
 function bindCodexLongPressEvents() {
-  const codexButton = document.getElementById("codex-button");
+  const button = document.getElementById("codex-button");
+  if (!button) return;
 
-  codexButton.addEventListener("pointerdown", () => {
+  const start = event => {
     if (!isMobileCodexLongPressEnabled()) return;
+
+    clearTimeout(codexLongPressTimer);
+    suppressNextCodexClick = false;
 
     codexLongPressTimer = window.setTimeout(() => {
       suppressNextCodexClick = true;
-      toggleRetroCodexMode();
-    }, 650);
-  });
+      button.classList.remove("codex-label-visible");
+      resetCodexToIndex();
+    }, 450);
+  };
 
-  codexButton.addEventListener("pointerup", clearCodexLongPressTimer);
-  codexButton.addEventListener("pointercancel", clearCodexLongPressTimer);
-  codexButton.addEventListener("pointerleave", clearCodexLongPressTimer);
+  const cancel = () => {
+    clearTimeout(codexLongPressTimer);
+  };
 
-  codexButton.addEventListener("contextmenu", event => {
-    if (!isMobileCodexLongPressEnabled()) return;
+  button.addEventListener("touchstart", start, { passive: true });
+  button.addEventListener("mousedown", start);
 
-    event.preventDefault();
-  });
+  button.addEventListener("touchend", cancel);
+  button.addEventListener("touchcancel", cancel);
+  button.addEventListener("mouseup", cancel);
+  button.addEventListener("mouseleave", cancel);
 }
 
-function initializeAppEvents() {
+function initializeApp() {
   initializeHexGrid();
   bindMapEvents();
   bindPanelEvents();
   bindCodexEvents();
-  bindKeyboardEasterEggEvents();
-  bindBrowserBackEvents();
   bindCodexLongPressEvents();
+  bindKeyboardEasterEggEvents();
+
+  loadDatabase();
 }
 
-window.ensureAppBrowserBackTrap = ensureAppBrowserBackTrap;
-window.releaseAppBrowserBackTrap = releaseAppBrowserBackTrap;
-window.closeCodexGlobalSearchModal = closeCodexGlobalSearchModal;
-window.handleCodexGlobalSearchBackdropClick = handleCodexGlobalSearchBackdropClick;
-
-initializeAppEvents();
+initializeApp();

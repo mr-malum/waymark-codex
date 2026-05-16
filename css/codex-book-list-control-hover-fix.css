@@ -1,0 +1,92 @@
+/* =========================================================
+   DESKTOP CODEX LIST CONTROL HOVER/FOCUS PATCH
+   =========================================================
+
+   Loaded after codex-book-list-controls-fix.css.
+   Keep hover/focus feedback scoped to the actual active controls only.
+   Wrappers/labels must not visually highlight sibling selects or buttons.
+*/
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  #codex-content.codex-list-page .codex-list-control-rail label:hover,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter:hover,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-label:hover,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-topline:hover {
+    color: rgba(47, 29, 16, 0.78);
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail select,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-direction {
+    position: relative;
+    pointer-events: auto;
+
+    transition:
+      background-color 0.15s ease,
+      background-image 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      filter 0.15s ease,
+      transform 0.12s ease;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail select:hover {
+    border-color: rgba(72, 43, 18, 0.46);
+    background-color: rgba(246, 232, 196, 0.76);
+    filter: brightness(1.035) contrast(1.02);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 245, 220, 0.34),
+      0 2px 8px rgba(45, 25, 8, 0.14);
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-direction:hover {
+    border-color: rgba(72, 43, 18, 0.46);
+    background:
+      linear-gradient(
+        rgba(255, 236, 188, 0.88),
+        rgba(214, 170, 108, 0.54)
+      );
+    filter: brightness(1.035) contrast(1.02);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 245, 220, 0.34),
+      0 2px 8px rgba(45, 25, 8, 0.14);
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail select:focus,
+  #codex-content.codex-list-page .codex-list-control-rail select:focus-visible,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-direction:focus,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-direction:focus-visible {
+    outline: none;
+    border-color: rgba(72, 43, 18, 0.56);
+    filter: brightness(1.04) contrast(1.02);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 245, 220, 0.36),
+      0 2px 8px rgba(45, 25, 8, 0.15),
+      0 0 0 2px rgba(166, 108, 41, 0.13);
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-topline {
+    align-items: center;
+    overflow: visible;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-topline .codex-sort-direction {
+    flex: 0 0 calc(48 * var(--codex-book-scale));
+    width: calc(48 * var(--codex-book-scale));
+    height: calc(28 * var(--codex-book-scale));
+    min-height: calc(28 * var(--codex-book-scale));
+    max-height: calc(28 * var(--codex-book-scale));
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    margin: 0;
+    padding: 0;
+
+    line-height: 1;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-direction:active {
+    transform: scale(0.96);
+  }
+}

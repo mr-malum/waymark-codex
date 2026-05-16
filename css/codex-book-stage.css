@@ -1,0 +1,576 @@
+/* =========================================================
+   DESKTOP CODEX BOOK STAGE - CHECKPOINT 1
+   =========================================================
+
+   This file intentionally keeps the old mobile/tablet Codex behavior intact.
+   Outside the desktop book media query, #codex-book-stage uses display:contents
+   so the added wrapper does not alter the existing flex/modal layout.
+
+   Coordinate reference:
+   - Full book: 2800 x 1400
+   - Gutter: x 1380-1420
+   - Left utility strip: x 1060-1320, y 120-1280
+   - Right safe page: x 1480-2640, y 120-1280
+   - Right header: x 1480-2640, y 120-270
+   - Right content: x 1480-2640, y 290-1280
+*/
+
+#codex-book-stage {
+  display: contents;
+}
+
+#codex-desktop-persistent-search {
+  display: none;
+}
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  #codex-overlay {
+    align-items: stretch;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  #codex-modal {
+    --codex-book-anchor-x: 66%;
+    --codex-book-debug-display: block;
+    --codex-book-max-height: 1400px;
+    --codex-visible-min-ratio: 1.16;
+
+    --codex-left-utility-x: 1060;
+    --codex-left-utility-y: 120;
+    --codex-left-utility-width: 260;
+    --codex-left-utility-height: 1160;
+
+    --codex-right-content-x: 1480;
+    --codex-right-content-y: 290;
+    --codex-right-content-width: 1160;
+    --codex-right-content-height: 990;
+
+    /*
+      One shared rendered-book size.
+      The background image, debug SVG, debug boxes, and content stage all use
+      these same dimensions so everything scales together as the window changes.
+
+      The book is 2800 x 1400, so width is always 2x height.
+      Desktop scaling is height-first on normal/wide windows, capped on very
+      tall/high-density displays, and width-aware on narrow desktop windows so
+      the useful safe regions start shrinking before either side clips badly.
+    */
+    --codex-book-height: min(
+      100dvh,
+      var(--codex-book-max-height),
+      calc(100vw / var(--codex-visible-min-ratio))
+    );
+    --codex-book-width: calc(var(--codex-book-height) * 2);
+    --codex-book-scale: calc(var(--codex-book-height) / 1400);
+
+    width: 100vw;
+    max-width: none;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    max-height: none;
+
+    padding: 0;
+
+    overflow: hidden;
+    background: transparent;
+  }
+
+  #codex-modal::before,
+  #codex-modal::after,
+  #codex-book-stage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+
+    width: var(--codex-book-width);
+    height: var(--codex-book-height);
+
+    transform: translate(calc(-1 * var(--codex-book-anchor-x)), -50%);
+    transform-origin: center center;
+  }
+
+  #codex-modal::before,
+  #codex-modal::after {
+    content: "";
+    pointer-events: none;
+  }
+
+  #codex-modal::before {
+    background-image: url("../assets/codex/Desktop_Codex.png");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+
+    opacity: 1;
+    z-index: -1;
+  }
+
+  #codex-modal::after {
+    display: var(--codex-book-debug-display);
+    z-index: 0;
+
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2800 1400" preserveAspectRatio="none"><rect x="0" y="0" width="2800" height="1400" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="8"/><rect x="1380" y="60" width="40" height="1280" fill="rgba(255,64,64,0.30)" stroke="rgba(255,64,64,0.85)" stroke-width="4"/><rect x="1060" y="120" width="260" height="1160" fill="rgba(64,192,255,0.24)" stroke="rgba(64,192,255,0.9)" stroke-width="4"/><rect x="1480" y="120" width="1160" height="1160" fill="rgba(64,255,128,0.12)" stroke="rgba(64,255,128,0.9)" stroke-width="4"/><rect x="1480" y="120" width="1160" height="150" fill="rgba(255,224,64,0.30)" stroke="rgba(255,224,64,0.95)" stroke-width="4"/><rect x="1480" y="290" width="1160" height="990" fill="rgba(180,96,255,0.18)" stroke="rgba(180,96,255,0.9)" stroke-width="4"/></svg>');
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+
+    mix-blend-mode: multiply;
+  }
+
+  #codex-book-stage {
+    display: block;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  #codex-header,
+  #codex-content,
+  .codex-panel-nav,
+  #codex-global-search-modal,
+  #codex-desktop-persistent-search {
+    position: absolute;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+
+  #codex-header,
+  #codex-content,
+  .codex-panel-nav,
+  #codex-desktop-persistent-search {
+    z-index: 2;
+  }
+
+  #codex-overlay.open #codex-header,
+  #codex-overlay.open #codex-content,
+  #codex-overlay.open .codex-panel-nav,
+  #codex-overlay.open #codex-desktop-persistent-search {
+    pointer-events: auto;
+  }
+
+  #codex-global-search-modal {
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  #codex-overlay.open #codex-global-search-modal.open {
+    pointer-events: auto;
+  }
+
+  #codex-header {
+    left: calc(1480 / 2800 * 100%);
+    top: calc(120 / 1400 * 100%);
+    width: calc(1160 / 2800 * 100%);
+    height: calc(150 / 1400 * 100%);
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: center;
+    column-gap: calc(22 * var(--codex-book-scale));
+
+    margin: 0;
+    padding: 0 calc(42 * var(--codex-book-scale));
+    text-align: center;
+  }
+
+  #codex-header::before,
+  #codex-header::after {
+    content: "";
+    position: static;
+    display: block;
+    width: min(100%, calc(220 * var(--codex-book-scale)));
+    height: calc(36 * var(--codex-book-scale));
+    margin: 0;
+
+    background-image: url("../assets/codex/Header_Flourish_L.svg");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+
+    opacity: 0.78;
+    transform: none;
+  }
+
+  #codex-header::after {
+    transform: scaleX(-1);
+  }
+
+  #codex-title {
+    position: relative;
+    margin: 0;
+    font-size: clamp(1.45rem, calc(54 * var(--codex-book-scale)), 3.35rem);
+    line-height: 1.05;
+    white-space: nowrap;
+  }
+
+  #codex-title::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: calc(-15 * var(--codex-book-scale));
+
+    width: min(118%, calc(480 * var(--codex-book-scale)));
+    height: 1px;
+
+    pointer-events: none;
+
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(72, 43, 18, 0.65),
+      transparent
+    );
+
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+
+  #codex-desktop-persistent-search {
+    display: block;
+    left: calc(var(--codex-left-utility-x) / 2800 * 100%);
+    top: calc(var(--codex-left-utility-y) / 1400 * 100%);
+    width: calc(var(--codex-left-utility-width) / 2800 * 100%);
+    height: calc(100 / 1400 * 100%);
+  }
+
+  #codex-desktop-persistent-search::after {
+    content: "⌾";
+    position: absolute;
+    top: calc(26 * var(--codex-book-scale));
+    right: calc(19 * var(--codex-book-scale));
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: calc(22 * var(--codex-book-scale));
+    height: calc(22 * var(--codex-book-scale));
+
+    color: rgba(47, 29, 16, 0.78);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(1.06rem, calc(24 * var(--codex-book-scale)), 1.46rem);
+    font-weight: 700;
+    line-height: 1;
+
+    transform: translateY(-50%);
+
+    text-shadow:
+      0 0 0.4px rgba(47, 29, 16, 0.70),
+      0 0 0.8px rgba(47, 29, 16, 0.45);
+
+    pointer-events: none;
+  }
+
+  #codex-desktop-persistent-search:has(#codex-desktop-search-input:not(:placeholder-shown))::after {
+    display: none;
+  }
+
+  #codex-desktop-search-input {
+    appearance: none;
+    -webkit-appearance: none;
+
+    width: 100%;
+    height: calc(52 * var(--codex-book-scale));
+    box-sizing: border-box;
+
+    padding:
+      0
+      calc(46 * var(--codex-book-scale))
+      0
+      calc(12 * var(--codex-book-scale));
+
+    border-radius: calc(4 * var(--codex-book-scale));
+    border: 1px solid rgba(72, 43, 18, 0.22);
+
+    background: rgba(235, 214, 170, 0.72);
+    color: #2f1d10;
+
+    font-family: 'Spectral', Georgia, serif;
+    font-size: clamp(0.78rem, calc(15 * var(--codex-book-scale)), 0.96rem);
+    line-height: 1.15;
+    text-align: left;
+
+    box-shadow:
+      inset 0 1px 0 rgba(255, 245, 220, 0.26),
+      0 2px 8px rgba(45, 25, 8, 0.12);
+  }
+
+  #codex-desktop-search-input::placeholder {
+    color: rgba(47, 29, 16, 0.62);
+    text-align: left;
+  }
+
+  #codex-desktop-search-input::-webkit-search-cancel-button {
+    appearance: none;
+    -webkit-appearance: none;
+
+    width: calc(24 * var(--codex-book-scale));
+    height: calc(24 * var(--codex-book-scale));
+    margin-right: calc(-3 * var(--codex-book-scale));
+
+    cursor: pointer;
+
+    background-color: transparent;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ctext x='12' y='17' text-anchor='middle' font-family='Georgia, Times New Roman, serif' font-size='19' font-weight='700' fill='%233a2614'%3E%E2%9C%95%3C/text%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+
+    opacity: 0.92;
+  }
+
+  #codex-desktop-search-input::-webkit-search-cancel-button:hover {
+    opacity: 1;
+  }
+
+  #codex-desktop-search-input:focus {
+    outline: none;
+    border-color: rgba(72, 43, 18, 0.38);
+    background: rgba(246, 232, 196, 0.82);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 245, 220, 0.30),
+      0 2px 8px rgba(45, 25, 8, 0.14),
+      0 0 0 2px rgba(166, 108, 41, 0.10);
+  }
+
+  #codex-content {
+    left: calc(var(--codex-right-content-x) / 2800 * 100%);
+    top: calc(var(--codex-right-content-y) / 1400 * 100%);
+    width: calc(var(--codex-right-content-width) / 2800 * 100%);
+    height: calc(var(--codex-right-content-height) / 1400 * 100%);
+
+    margin: 0;
+    padding: 0 calc(32 * var(--codex-book-scale)) calc(28 * var(--codex-book-scale));
+
+    font-size: clamp(1rem, calc(25 * var(--codex-book-scale)), 1.55rem);
+    line-height: 1.45;
+    overflow-y: auto;
+  }
+
+  #codex-content.codex-home {
+    width: calc(1160 / 2800 * 100%);
+    max-width: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: calc(22 * var(--codex-book-scale));
+    align-content: start;
+  }
+
+  #codex-content:not(.codex-home-search-page):not(.codex-search-page),
+  #codex-content.codex-home:not(.codex-home-search-page),
+  #codex-content.codex-home.codex-home-search-page,
+  #codex-content.codex-search-page,
+  #codex-content.codex-list-page,
+  #codex-content.codex-detail-page,
+  #codex-content.codex-regions-index,
+  #codex-content.codex-region-detail-page {
+    width: calc(1160 / 2800 * 100%);
+    max-width: none;
+  }
+
+  #codex-content.codex-list-page,
+  #codex-content.codex-search-page,
+  #codex-content.codex-detail-page,
+  #codex-content.codex-region-detail-page {
+    overflow: visible;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .codex-panel-nav {
+    left: calc(var(--codex-left-utility-x) / 2800 * 100%);
+    top: calc(1090 / 1400 * 100%);
+    width: calc(var(--codex-left-utility-width) / 2800 * 100%);
+    height: calc(190 / 1400 * 100%);
+
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: calc(12 * var(--codex-book-scale));
+
+    margin: 0;
+    padding: 0;
+
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .codex-control-cluster {
+    width: 100%;
+    box-sizing: border-box;
+    justify-content: space-between;
+    gap: calc(8 * var(--codex-book-scale));
+    padding: calc(5 * var(--codex-book-scale));
+  }
+
+  #codex-search-button {
+    display: none;
+  }
+
+  .codex-panel-nav button {
+    min-width: calc(44 * var(--codex-book-scale));
+    min-height: calc(42 * var(--codex-book-scale));
+    padding: calc(8 * var(--codex-book-scale)) calc(10 * var(--codex-book-scale));
+    border-radius: calc(8 * var(--codex-book-scale));
+    font-size: clamp(0.72rem, calc(15 * var(--codex-book-scale)), 0.96rem);
+  }
+
+  #codex-back,
+  #codex-close,
+  #mobile-panel-back {
+    width: calc(48 * var(--codex-book-scale));
+    min-width: calc(48 * var(--codex-book-scale));
+  }
+
+  #codex-breadcrumbs {
+    width: 100%;
+    min-height: calc(42 * var(--codex-book-scale));
+    margin: 0;
+    padding: 0;
+
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+
+    white-space: normal;
+    text-align: center;
+    font-size: clamp(0.68rem, calc(14 * var(--codex-book-scale)), 0.92rem);
+    line-height: 1.15;
+  }
+
+  #codex-breadcrumbs-inner {
+    white-space: normal;
+  }
+
+  /* Left utility strip migrations */
+  .codex-list-page-shell,
+  .codex-list-control-split-view,
+  .codex-search-page-shell,
+  .codex-detail-page-shell,
+  .codex-detail-rail-page {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .codex-list-control-split-view,
+  .codex-search-split-view,
+  .codex-search-results-shell .codex-split-view,
+  .codex-detail-lower-pane {
+    display: block;
+    overflow: visible;
+  }
+
+  .codex-list-control-rail,
+  .codex-search-controls-shell,
+  .codex-search-split-view > .codex-split-rail,
+  .codex-search-results-shell .codex-split-rail,
+  .codex-detail-rail {
+    position: absolute;
+    left: calc((var(--codex-left-utility-x) - var(--codex-right-content-x)) * var(--codex-book-scale));
+    top: calc((360 - var(--codex-right-content-y)) * var(--codex-book-scale));
+    width: calc(var(--codex-left-utility-width) * var(--codex-book-scale));
+    height: calc(520 * var(--codex-book-scale));
+
+    display: flex;
+    align-items: center;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  .codex-search-controls-shell {
+    display: none;
+  }
+
+  .codex-list-controls-shell,
+  .codex-search-split-view > .codex-split-rail .codex-split-rail-inner,
+  .codex-search-results-shell .codex-split-rail-inner,
+  .codex-detail-section-rail {
+    width: 100%;
+  }
+
+  .codex-list-scroll-shell,
+  .codex-detail-main {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-width: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 calc(10 * var(--codex-book-scale)) calc(24 * var(--codex-book-scale)) 0;
+    box-sizing: border-box;
+  }
+
+  #codex-search-results,
+  .codex-search-results-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-width: none;
+    overflow: visible;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  .codex-search-split-view > .codex-split-main,
+  .codex-search-results-shell .codex-split-main {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-width: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 calc(10 * var(--codex-book-scale)) calc(24 * var(--codex-book-scale)) 0;
+    box-sizing: border-box;
+  }
+
+  .codex-list-page-shell,
+  .codex-list-control-split-view,
+  .codex-search-page-shell,
+  .codex-detail-page-shell,
+  .codex-detail-rail-page,
+  .codex-detail-lower-pane {
+    overflow: visible;
+  }
+
+  .codex-search-shell {
+    width: 100%;
+    margin: 0;
+  }
+
+  .codex-detail-overview-locked {
+    padding-bottom: calc(10 * var(--codex-book-scale));
+  }
+
+  .codex-detail-lower-pane {
+    height: calc(100% - 210px * var(--codex-book-scale));
+  }
+
+  .codex-list-control-rail .codex-filter-row label,
+  .codex-list-control-rail .codex-dynamic-filter,
+  .codex-list-control-rail .codex-sort-label,
+  .codex-search-category-rail .codex-row,
+  .codex-detail-section-rail-row {
+    font-size: clamp(0.62rem, calc(12 * var(--codex-book-scale)), 0.78rem);
+  }
+
+  .codex-list-control-rail select,
+  #codex-search-input {
+    font-size: clamp(0.78rem, calc(15 * var(--codex-book-scale)), 0.95rem);
+  }
+
+  /* The old pop-up global search remains available outside desktop-book mode only. */
+  #codex-global-search-modal {
+    display: none;
+  }
+}

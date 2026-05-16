@@ -1,0 +1,79 @@
+#codex-left-manuscript {
+  display: none;
+}
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  #codex-left-manuscript {
+    position: absolute;
+    left: calc(215 / 2800 * 100%);
+    top: calc(175 / 1400 * 100%);
+    width: calc(785 / 2800 * 100%);
+    height: calc(1000 / 1400 * 100%);
+
+    display: grid;
+    grid-template-columns: repeat(var(--codex-manuscript-columns, 3), minmax(0, 1fr));
+    align-content: stretch;
+    column-gap: calc(34 * var(--codex-book-scale));
+    row-gap: calc(20 * var(--codex-book-scale));
+
+    box-sizing: border-box;
+    padding: calc(12 * var(--codex-book-scale)) calc(16 * var(--codex-book-scale));
+
+    pointer-events: none;
+    user-select: none;
+    z-index: 1;
+
+    color: rgba(62, 36, 16, 0.72);
+    font-family: 'Macondo', 'Marcellus SC', Georgia, serif;
+    font-size: clamp(0.78rem, calc(23 * var(--codex-book-scale)), 1.42rem);
+    line-height: 1.26;
+    letter-spacing: 0.08em;
+    text-align: left;
+
+    opacity: 0.36;
+    filter: blur(0.08px) contrast(1.08);
+    transform: none;
+    transform-origin: center center;
+    mix-blend-mode: multiply;
+
+    mask-image: linear-gradient(to bottom, transparent 0%, black 6%, black 91%, transparent 100%), linear-gradient(to right, transparent 0%, black 7%, black 91%, transparent 100%);
+    mask-composite: intersect;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 6%, black 91%, transparent 100%), linear-gradient(to right, transparent 0%, black 7%, black 91%, transparent 100%);
+    -webkit-mask-composite: source-in;
+  }
+
+  #codex-left-manuscript .codex-manuscript-block {
+    display: grid;
+    align-content: start;
+    gap: calc(5 * var(--codex-book-scale));
+    min-width: 0;
+  }
+
+  #codex-left-manuscript .codex-manuscript-line {
+    display: block;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-shadow:
+      0 0 0.35px rgba(62, 36, 16, 0.42),
+      0 1px 0 rgba(255, 235, 184, 0.10);
+  }
+
+  #codex-left-manuscript .codex-manuscript-line-short {
+    width: 70%;
+  }
+
+  #codex-left-manuscript .codex-manuscript-line-mid {
+    width: 86%;
+  }
+
+  #codex-left-manuscript .codex-manuscript-line-indent {
+    padding-left: calc(22 * var(--codex-book-scale));
+  }
+
+  #codex-left-manuscript .codex-manuscript-rule {
+    height: 1px;
+    width: 76%;
+    margin: calc(5 * var(--codex-book-scale)) 0;
+    background: linear-gradient(to right, transparent, rgba(62, 36, 16, 0.78), transparent);
+  }
+}

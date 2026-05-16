@@ -1,0 +1,26 @@
+/* =========================================================
+   TEMPORARY MAP CONTROL DIAGNOSTIC
+   =========================================================
+
+   Diagnostic only: simplifies the Codex button interaction stack so we can
+   tell whether pseudo-elements/hover transforms are causing inconsistent
+   hit targeting at narrower desktop widths.
+*/
+
+#codex-button {
+  outline: 2px dashed rgba(255, 64, 64, 0.85);
+  outline-offset: -2px;
+
+  transform: none !important;
+}
+
+#codex-button::before,
+#codex-button::after {
+  display: none !important;
+}
+
+#codex-button:hover,
+#codex-button:active,
+#codex-button.codex-label-visible {
+  transform: none !important;
+}

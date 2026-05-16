@@ -1,0 +1,147 @@
+/* =========================================================
+   DESKTOP CODEX LIST CONTROL HITBOX PATCH
+   =========================================================
+
+   Loaded after codex-book-stage.css.
+   The list filter/sort controls have deeper label/select/button structure than
+   the search/detail rails, so normalize their desktop-book layout into a simple
+   static vertical stack after the rail is moved into the left utility strip.
+*/
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  #codex-overlay.open #codex-content.codex-list-page .codex-list-control-rail,
+  #codex-overlay.open #codex-content.codex-list-page .codex-list-control-rail * {
+    pointer-events: auto;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail {
+    position: absolute;
+    left: calc((var(--codex-left-utility-x) - var(--codex-right-content-x)) * var(--codex-book-scale));
+    top: calc((360 - var(--codex-right-content-y)) * var(--codex-book-scale));
+    width: calc(var(--codex-left-utility-width) * var(--codex-book-scale));
+    height: calc(520 * var(--codex-book-scale));
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  #codex-content.codex-list-page .codex-list-controls-shell {
+    position: static;
+
+    display: block;
+    width: 100%;
+    max-width: none;
+
+    margin: 0;
+    padding: 0;
+
+    transform: none;
+    overflow: visible;
+    box-sizing: border-box;
+  }
+
+  #codex-content.codex-list-page .codex-filter-row {
+    position: static;
+
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: calc(10 * var(--codex-book-scale));
+
+    width: 100%;
+    max-width: none;
+
+    margin: 0;
+    padding: 0;
+
+    transform: none;
+    overflow: visible;
+    box-sizing: border-box;
+  }
+
+  #codex-content.codex-list-page .codex-filter-row label,
+  #codex-content.codex-list-page .codex-dynamic-filter,
+  #codex-content.codex-list-page .codex-sort-label {
+    position: static;
+
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: calc(4 * var(--codex-book-scale));
+
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+
+    margin: 0;
+    padding: calc(8 * var(--codex-book-scale)) 0 calc(10 * var(--codex-book-scale));
+
+    transform: none;
+    overflow: visible;
+    box-sizing: border-box;
+  }
+
+  #codex-content.codex-list-page .codex-sort-topline {
+    position: static;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(8 * var(--codex-book-scale));
+
+    width: 100%;
+    margin: 0;
+    padding: 0;
+
+    transform: none;
+    box-sizing: border-box;
+  }
+
+  #codex-content.codex-list-page .codex-filter-row select,
+  #codex-content.codex-list-page .codex-dynamic-filter select,
+  #codex-content.codex-list-page .codex-sort-label select,
+  #codex-content.codex-list-page .codex-filter-field-select,
+  #codex-content.codex-list-page .codex-sort-direction {
+    position: static;
+
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    min-height: calc(28 * var(--codex-book-scale));
+
+    margin: 0;
+    padding: calc(6 * var(--codex-book-scale)) calc(8 * var(--codex-book-scale));
+
+    transform: none;
+    box-sizing: border-box;
+  }
+
+  #codex-content.codex-list-page .codex-filter-field-select,
+  #codex-content.codex-list-page .codex-sort-direction {
+    height: calc(28 * var(--codex-book-scale));
+    min-height: calc(28 * var(--codex-book-scale));
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  #codex-content.codex-list-page .codex-sort-topline .codex-sort-direction {
+    flex: 0 0 calc(48 * var(--codex-book-scale));
+    width: calc(48 * var(--codex-book-scale));
+  }
+
+  #codex-content.codex-list-page .codex-sort-topline span {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
