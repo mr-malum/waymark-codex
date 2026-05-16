@@ -27,25 +27,25 @@
     --codex-mobile-safe-w: 90%;         /* 1440 / 1600 */
     --codex-mobile-safe-h: 93.333333%;  /* 2240 / 2400 */
 
-    --codex-mobile-header-x: 7.5%;      /* 120 / 1600 */
-    --codex-mobile-header-y: 4%;        /* 96 / 2400 */
-    --codex-mobile-header-w: 85%;       /* 1360 / 1600 */
-    --codex-mobile-header-h: 8.333333%; /* 200 / 2400 */
+    --codex-mobile-header-x: var(--codex-mobile-safe-x);
+    --codex-mobile-header-y: var(--codex-mobile-safe-y);
+    --codex-mobile-header-w: var(--codex-mobile-safe-w);
+    --codex-mobile-header-h: 9.166667%; /* 220 / 2400 */
 
-    --codex-mobile-utility-x: 7.5%;       /* 120 / 1600 */
+    --codex-mobile-utility-x: var(--codex-mobile-safe-x);
     --codex-mobile-utility-y: 12.916667%; /* 310 / 2400 */
-    --codex-mobile-utility-w: 85%;        /* 1360 / 1600 */
+    --codex-mobile-utility-w: var(--codex-mobile-safe-w);
     --codex-mobile-utility-h: 5.833333%;  /* 140 / 2400 */
 
-    --codex-mobile-content-x: 7.5%;        /* 120 / 1600 */
-    --codex-mobile-content-y: 19.166667%;  /* 460 / 2400 */
-    --codex-mobile-content-w: 85%;         /* 1360 / 1600 */
-    --codex-mobile-content-h: 68.333333%;  /* 1640 / 2400 */
+    --codex-mobile-content-x: var(--codex-mobile-safe-x);
+    --codex-mobile-content-y: 14.166667%; /* 340 / 2400 */
+    --codex-mobile-content-w: var(--codex-mobile-safe-w);
+    --codex-mobile-content-h: 74.166667%; /* 1780 / 2400 */
 
-    --codex-mobile-nav-x: 7.5%;        /* 120 / 1600 */
-    --codex-mobile-nav-y: 89.166667%;  /* 2140 / 2400 */
-    --codex-mobile-nav-w: 85%;         /* 1360 / 1600 */
-    --codex-mobile-nav-h: 6.666667%;   /* 160 / 2400 */
+    --codex-mobile-nav-x: var(--codex-mobile-safe-x);
+    --codex-mobile-nav-y: 90%; /* 2160 / 2400 */
+    --codex-mobile-nav-w: var(--codex-mobile-safe-w);
+    --codex-mobile-nav-h: 6.666667%; /* 160 / 2400 */
 
     position: relative;
 
