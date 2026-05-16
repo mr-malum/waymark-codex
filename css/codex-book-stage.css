@@ -240,18 +240,27 @@
   #codex-desktop-persistent-search::after {
     content: "⌾";
     position: absolute;
-    top: 0;
-    right: calc(12 * var(--codex-book-scale));
-    bottom: 0;
+    top: calc(26 * var(--codex-book-scale));
+    right: calc(19 * var(--codex-book-scale));
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    color: rgba(47, 29, 16, 0.64);
-    font-family: 'Marcellus SC', Georgia, serif;
-    font-size: clamp(0.98rem, calc(22 * var(--codex-book-scale)), 1.35rem);
+    width: calc(22 * var(--codex-book-scale));
+    height: calc(22 * var(--codex-book-scale));
+
+    color: rgba(47, 29, 16, 0.78);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(1.06rem, calc(24 * var(--codex-book-scale)), 1.46rem);
+    font-weight: 700;
     line-height: 1;
+
+    transform: translateY(-50%);
+
+    text-shadow:
+      0 0 0.4px rgba(47, 29, 16, 0.70),
+      0 0 0.8px rgba(47, 29, 16, 0.45);
 
     pointer-events: none;
   }
@@ -270,7 +279,7 @@
 
     padding:
       0
-      calc(34 * var(--codex-book-scale))
+      calc(46 * var(--codex-book-scale))
       0
       calc(12 * var(--codex-book-scale));
 
