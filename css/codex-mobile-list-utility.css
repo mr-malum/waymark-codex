@@ -185,11 +185,16 @@
     text-transform: uppercase !important;
   }
 
-  .codex-mobile-list-controls-mount select.codex-filter-field-select,
-  .codex-mobile-list-controls-mount .codex-dynamic-filter > select.codex-filter-field-select {
+  #codex-mobile-utility-panel.open .codex-mobile-list-controls-mount select.codex-filter-field-select,
+  #codex-mobile-utility-panel.open .codex-mobile-list-controls-mount .codex-dynamic-filter > select.codex-filter-field-select,
+  #codex-overlay #codex-mobile-utility-panel.open .codex-mobile-list-controls-mount .codex-dynamic-filter > select.codex-filter-field-select {
+    display: inline-block !important;
     width: 67% !important;
+    inline-size: 67% !important;
     max-width: 67% !important;
+    max-inline-size: 67% !important;
     min-width: 0 !important;
+    flex: 0 0 67% !important;
     align-self: flex-start !important;
     justify-self: start !important;
   }
