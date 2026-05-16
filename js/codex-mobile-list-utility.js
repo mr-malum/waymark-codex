@@ -12,6 +12,12 @@ let codexListStateCache = {};
 let codexCurrentListConfig = null;
 let codexHexListStateCache = null;
 
+function resetCodexMobileListState() {
+  codexListStateCache = {};
+  codexCurrentListConfig = null;
+  codexHexListStateCache = null;
+}
+
 function getCodexListStateKey(config) {
   return config?.listId || config?.title || "default-list";
 }
@@ -418,3 +424,4 @@ function renderCodexHexListPage() {
 
 window.registerCodexMobileListFilterUtility = registerCodexMobileListFilterUtility;
 window.openCodexListResult = openCodexListResult;
+window.resetCodexMobileListState = resetCodexMobileListState;
