@@ -2,7 +2,10 @@
    MOBILE CODEX FOUNDATION
    =========================================================
 
-   This file establishes the mobile/tablet Codex shell as its own layout mode.
+   Mobile_Codex.png native size: 1600 x 2400.
+   Main mobile layout is anchored to that image, using native-coordinate
+   percentage zones instead of loose viewport padding.
+
    Desktop book-stage behavior remains owned by codex-book-stage.css under:
    (min-width: 1100px) and (min-height: 700px).
 */
@@ -15,6 +18,35 @@
   }
 
   #codex-modal {
+    --codex-mobile-image-width: min(100vw, calc(100dvh * 2 / 3));
+    --codex-mobile-image-height: calc(var(--codex-mobile-image-width) * 3 / 2);
+
+    /* Native Mobile_Codex.png zones, expressed as percentages. */
+    --codex-mobile-safe-x: 5%;          /* 80 / 1600 */
+    --codex-mobile-safe-y: 3.333333%;   /* 80 / 2400 */
+    --codex-mobile-safe-w: 90%;         /* 1440 / 1600 */
+    --codex-mobile-safe-h: 93.333333%;  /* 2240 / 2400 */
+
+    --codex-mobile-header-x: 7.5%;      /* 120 / 1600 */
+    --codex-mobile-header-y: 4%;        /* 96 / 2400 */
+    --codex-mobile-header-w: 85%;       /* 1360 / 1600 */
+    --codex-mobile-header-h: 8.333333%; /* 200 / 2400 */
+
+    --codex-mobile-utility-x: 7.5%;       /* 120 / 1600 */
+    --codex-mobile-utility-y: 12.916667%; /* 310 / 2400 */
+    --codex-mobile-utility-w: 85%;        /* 1360 / 1600 */
+    --codex-mobile-utility-h: 5.833333%;  /* 140 / 2400 */
+
+    --codex-mobile-content-x: 7.5%;        /* 120 / 1600 */
+    --codex-mobile-content-y: 19.166667%;  /* 460 / 2400 */
+    --codex-mobile-content-w: 85%;         /* 1360 / 1600 */
+    --codex-mobile-content-h: 68.333333%;  /* 1640 / 2400 */
+
+    --codex-mobile-nav-x: 7.5%;        /* 120 / 1600 */
+    --codex-mobile-nav-y: 89.166667%;  /* 2140 / 2400 */
+    --codex-mobile-nav-w: 85%;         /* 1360 / 1600 */
+    --codex-mobile-nav-h: 6.666667%;   /* 160 / 2400 */
+
     position: relative;
 
     width: 100vw;
@@ -36,7 +68,13 @@
   #codex-modal::before {
     content: "";
     position: absolute;
-    inset: 0;
+    top: 50%;
+    left: 50%;
+
+    width: var(--codex-mobile-image-width);
+    height: var(--codex-mobile-image-height);
+
+    transform: translate(-50%, -50%);
 
     background-image: url("../assets/codex/Mobile_Codex.png");
     background-size: 100% 100%;
@@ -49,26 +87,24 @@
   }
 
   #codex-book-stage {
-    position: relative;
+    position: absolute;
+    top: 50%;
+    left: 50%;
     z-index: 1;
 
-    width: 100%;
-    height: 100%;
+    width: var(--codex-mobile-image-width);
+    height: var(--codex-mobile-image-height);
     min-height: 0;
 
-    display: flex;
-    flex-direction: column;
+    display: block;
 
     box-sizing: border-box;
     overflow: hidden;
 
-    padding:
-      calc(env(safe-area-inset-top) + clamp(18px, 4.8dvh, 42px))
-      max(18px, calc(env(safe-area-inset-right) + clamp(18px, 5vw, 46px)))
-      calc(env(safe-area-inset-bottom) + clamp(98px, 15dvh, 140px))
-      max(18px, calc(env(safe-area-inset-left) + clamp(18px, 5vw, 46px)));
+    padding: 0;
+    transform: translate(-50%, -50%);
 
-    pointer-events: auto;
+    pointer-events: none;
   }
 
   #codex-left-manuscript,
@@ -76,11 +112,34 @@
     display: none !important;
   }
 
-  #codex-header {
-    flex: 0 0 auto;
+  #codex-header,
+  #codex-content,
+  .codex-panel-nav,
+  #codex-global-search-modal {
+    position: absolute;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
 
-    margin: 0 0 clamp(10px, 2.2dvh, 20px);
-    padding: 0;
+  #codex-overlay.open #codex-header,
+  #codex-overlay.open #codex-content,
+  #codex-overlay.open .codex-panel-nav,
+  #codex-overlay.open #codex-global-search-modal.open {
+    pointer-events: auto;
+  }
+
+  #codex-header {
+    left: var(--codex-mobile-header-x);
+    top: var(--codex-mobile-header-y);
+    width: var(--codex-mobile-header-w);
+    height: var(--codex-mobile-header-h);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    margin: 0;
+    padding: 0 4%;
 
     text-align: center;
   }
@@ -88,7 +147,7 @@
   #codex-title {
     margin: 0;
 
-    font-size: clamp(1.45rem, 7vw, 2.25rem);
+    font-size: clamp(1.25rem, calc(var(--codex-mobile-image-width) * 0.075), 2.25rem);
     line-height: 1.05;
     letter-spacing: clamp(0.8px, 0.32vw, 1.5px);
     white-space: normal;
@@ -100,26 +159,27 @@
   }
 
   #codex-content {
-    flex: 1 1 auto;
+    left: var(--codex-mobile-content-x);
+    top: var(--codex-mobile-content-y);
+    width: var(--codex-mobile-content-w);
+    height: var(--codex-mobile-content-h);
     min-height: 0;
 
-    width: 100%;
-    max-width: none;
     margin: 0;
-    padding: 0 2px clamp(18px, 3dvh, 30px);
+    padding: 0 2px 12px;
 
     box-sizing: border-box;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
 
-    font-size: clamp(1rem, 4.4vw, 1.18rem);
+    font-size: clamp(1rem, calc(var(--codex-mobile-image-width) * 0.038), 1.18rem);
     line-height: 1.48;
   }
 
   #codex-content.codex-home {
     display: block;
-    width: 100%;
+    width: var(--codex-mobile-content-w);
     max-width: none;
   }
 
@@ -151,10 +211,13 @@
   }
 
   .codex-panel-nav {
-    position: absolute !important;
-    left: max(14px, env(safe-area-inset-left));
-    right: max(14px, env(safe-area-inset-right));
-    bottom: calc(env(safe-area-inset-bottom) + 18px);
+    left: var(--codex-mobile-nav-x) !important;
+    top: var(--codex-mobile-nav-y) !important;
+    right: auto !important;
+    bottom: auto !important;
+
+    width: var(--codex-mobile-nav-w);
+    height: var(--codex-mobile-nav-h);
 
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) auto auto;
@@ -174,7 +237,7 @@
     max-width: 100%;
     min-height: 1.25em;
 
-    margin: 0;
+    margin: 0 0 6px;
     padding: 0 4px;
     box-sizing: border-box;
 
@@ -183,7 +246,7 @@
     text-overflow: ellipsis;
 
     text-align: left;
-    font-size: clamp(0.78rem, 3.2vw, 0.95rem);
+    font-size: clamp(0.72rem, calc(var(--codex-mobile-image-width) * 0.028), 0.95rem);
     line-height: 1.2;
 
     pointer-events: auto;
@@ -291,20 +354,28 @@
     outline-color: rgba(64, 192, 255, 0.92);
   }
 
+  #codex-modal.codex-debug-guides-visible #codex-book-stage::before,
   #codex-modal.codex-debug-guides-visible #codex-book-stage::after {
-    content: "mobile shell safe area";
+    content: "";
     position: absolute;
+    pointer-events: none;
+    box-sizing: border-box;
+    z-index: 20;
+  }
+
+  #codex-modal.codex-debug-guides-visible #codex-book-stage::before {
     inset: 0;
+    border: 2px solid rgba(255, 255, 255, 0.86);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  #codex-modal.codex-debug-guides-visible #codex-book-stage::after {
+    left: var(--codex-mobile-safe-x);
+    top: var(--codex-mobile-safe-y);
+    width: var(--codex-mobile-safe-w);
+    height: var(--codex-mobile-safe-h);
     border: 2px dashed rgba(64, 255, 128, 0.86);
     background: rgba(64, 255, 128, 0.06);
-    color: rgba(30, 78, 46, 0.95);
-    font: 700 11px/1.1 system-ui, sans-serif;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 4px;
-    box-sizing: border-box;
-    pointer-events: none;
-    z-index: 20;
   }
 }
 
@@ -316,15 +387,12 @@
 
 @media (max-width: 700px) {
   #codex-content.codex-search-page {
-    display: flex;
-    flex-direction: column;
     overflow: hidden;
   }
 
   .codex-search-page-shell {
-    flex: 1 1 auto;
     min-height: 0;
-    height: auto;
+    height: 100%;
 
     display: flex;
     flex-direction: column;
@@ -416,16 +484,8 @@
 }
 
 @media (max-width: 420px) {
-  #codex-book-stage {
-    padding:
-      calc(env(safe-area-inset-top) + 18px)
-      max(14px, calc(env(safe-area-inset-right) + 14px))
-      calc(env(safe-area-inset-bottom) + 104px)
-      max(14px, calc(env(safe-area-inset-left) + 14px));
-  }
-
   #codex-title {
-    font-size: clamp(1.32rem, 8vw, 1.85rem);
+    font-size: clamp(1.18rem, calc(var(--codex-mobile-image-width) * 0.07), 1.85rem);
   }
 
   .codex-panel-nav button,
@@ -449,27 +509,12 @@
 }
 
 @media (orientation: landscape) and (max-height: 699px) {
-  #codex-book-stage {
-    padding:
-      calc(env(safe-area-inset-top) + 14px)
-      max(24px, calc(env(safe-area-inset-right) + 5vw))
-      calc(env(safe-area-inset-bottom) + 82px)
-      max(24px, calc(env(safe-area-inset-left) + 5vw));
-  }
-
-  #codex-header {
-    margin-bottom: 8px;
+  #codex-modal {
+    --codex-mobile-image-height: min(100dvh, calc(100vw * 3 / 2));
+    --codex-mobile-image-width: calc(var(--codex-mobile-image-height) * 2 / 3);
   }
 
   #codex-title {
-    font-size: clamp(1.2rem, 5dvh, 1.7rem);
-  }
-
-  #codex-header::after {
-    margin-top: 6px;
-  }
-
-  .codex-panel-nav {
-    bottom: calc(env(safe-area-inset-bottom) + 12px);
+    font-size: clamp(1.1rem, calc(var(--codex-mobile-image-height) * 0.045), 1.7rem);
   }
 }
