@@ -24,20 +24,37 @@
   .codex-mobile-search-query-summary {
     flex: 0 0 auto;
 
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 10px;
+
     margin: 0 0 2px;
     padding: 4px 2px 8px;
 
     font-family: 'Marcellus SC', Georgia, serif;
-    font-size: clamp(0.92rem, 3.8vw, 1.04rem);
-    line-height: 1.25;
-    letter-spacing: 0.04em;
-    text-align: center;
+    font-size: clamp(0.78rem, 3.15vw, 0.92rem);
+    line-height: 1.2;
+    letter-spacing: 0.035em;
     color: #3a2614;
     opacity: 0.86;
 
     overflow: hidden;
     white-space: nowrap;
+  }
+
+  .codex-mobile-search-summary-query {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
     text-overflow: ellipsis;
+    text-align: left;
+  }
+
+  .codex-mobile-search-summary-count {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    text-align: right;
   }
 
   .codex-search-results-shell {
