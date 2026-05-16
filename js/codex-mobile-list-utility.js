@@ -18,7 +18,7 @@ function getCodexCachedListState(config) {
   return codexListStateCache[getCodexListStateKey(config)] || null;
 }
 
-function cacheCodexListState(config) {
+function cacheCodexListState(config = codexCurrentListConfig) {
   if (!config) return;
 
   const filters = config.filters.map(filter => ({
@@ -47,8 +47,8 @@ function getCodexListSortLabel(config, sortMode) {
   return config.sortOptions.find(option => option.value === sortMode)?.label || sortMode || "Name";
 }
 
-function renderCodexListSummary(config) {
-  const state = getCodexCachedListState(config) || {
+function getCodexListSummaryState(config) {
+  return getCodexCachedListState(config) || {
     filters: config.filters.map(filter => ({
       field: filter.fieldValue,
       value: filter.selectedValue || "all"
@@ -56,7 +56,9 @@ function renderCodexListSummary(config) {
     sortMode: config.selectedSort,
     direction: "asc"
   };
+}
 
+function renderCodexListSummaryInner(config, state = getCodexListSummaryState(config)) {
   const filterSummary = state.filters
     .map(filter => `${filter.field}: ${getCodexListFilterOptionLabel(config, filter.field, filter.value)}`)
     .join(" • ");
@@ -65,9 +67,15 @@ function renderCodexListSummary(config) {
   const directionArrow = state.direction === "desc" ? "↓" : "↑";
 
   return `
+    <span class="codex-mobile-list-summary-filters">${escapeHtml(filterSummary)}</span>
+    <span class="codex-mobile-list-summary-sort">${escapeHtml(sortLabel)} ${directionArrow}</span>
+  `;
+}
+
+function renderCodexListSummary(config) {
+  return `
     <div id="codex-mobile-list-summary" class="codex-mobile-list-summary">
-      <span class="codex-mobile-list-summary-filters">${escapeHtml(filterSummary)}</span>
-      <span class="codex-mobile-list-summary-sort">${escapeHtml(sortLabel)} ${directionArrow}</span>
+      ${renderCodexListSummaryInner(config)}
     </div>
   `;
 }
@@ -76,20 +84,12 @@ function updateCodexListSummary(config = codexCurrentListConfig) {
   const summary = document.getElementById("codex-mobile-list-summary");
   if (!summary || !config) return;
 
-  const state = getCodexCachedListState(config);
-  if (!state) return;
+  summary.innerHTML = renderCodexListSummaryInner(config);
+}
 
-  const filterSummary = state.filters
-    .map(filter => `${filter.field}: ${getCodexListFilterOptionLabel(config, filter.field, filter.value)}`)
-    .join(" • ");
-
-  const sortLabel = getCodexListSortLabel(config, state.sortMode);
-  const directionArrow = state.direction === "desc" ? "↓" : "↑";
-
-  summary.innerHTML = `
-    <span class="codex-mobile-list-summary-filters">${escapeHtml(filterSummary)}</span>
-    <span class="codex-mobile-list-summary-sort">${escapeHtml(sortLabel)} ${directionArrow}</span>
-  `;
+function updateCodexListStateFromControls(config = codexCurrentListConfig) {
+  cacheCodexListState(config);
+  updateCodexListSummary(config);
 }
 
 function applyCodexCachedListState(config) {
@@ -105,24 +105,18 @@ function applyCodexCachedListState(config) {
     if (!filter) return;
 
     const fieldEl = document.getElementById(filter.fieldId);
-    const valueEl = document.getElementById(filter.id);
 
     if (fieldEl) {
       fieldEl.value = cachedFilter.field;
     }
 
-    if (typeof filter.updateOptions === "function") {
-      filter.updateOptions();
-    } else {
-      const options = config.getFilterOptions(cachedFilter.field);
-      if (valueEl) {
-        valueEl.innerHTML = renderCodexSelectOptions(options, cachedFilter.value);
-      }
-    }
-
-    const updatedValueEl = document.getElementById(filter.id);
-    if (updatedValueEl) {
-      updatedValueEl.value = cachedFilter.value;
+    const valueEl = document.getElementById(filter.id);
+    if (valueEl) {
+      valueEl.innerHTML = renderCodexSelectOptions(
+        config.getFilterOptions(cachedFilter.field),
+        cachedFilter.value
+      );
+      valueEl.value = cachedFilter.value;
     }
   });
 
@@ -138,6 +132,11 @@ function applyCodexCachedListState(config) {
   }
 
   updateCodexListSummary(config);
+}
+
+function openCodexListResult(type, id) {
+  updateCodexListStateFromControls();
+  openCodexPage(type, id);
 }
 
 function registerCodexMobileListFilterUtility() {
@@ -183,11 +182,23 @@ function wrapCodexListRender(config) {
   return {
     ...config,
     renderList() {
-      cacheCodexListState(config);
+      updateCodexListStateFromControls(config);
       originalRenderList();
-      updateCodexListSummary(config);
     }
   };
+}
+
+function bindCodexListStateListeners(config) {
+  const root = document.getElementById("codex-list-controls-shell");
+  if (!root) return;
+
+  root.addEventListener("change", function () {
+    window.setTimeout(() => updateCodexListStateFromControls(config), 0);
+  });
+
+  document.getElementById(config.directionId)?.addEventListener("click", function () {
+    window.setTimeout(() => updateCodexListStateFromControls(config), 0);
+  });
 }
 
 function renderCodexListPage(config) {
@@ -250,9 +261,11 @@ function renderCodexListPage(config) {
   document.getElementById("codex-content").classList.add("codex-list-page");
 
   listConfig.bindControls();
+  bindCodexListStateListeners(listConfig);
   applyCodexCachedListState(listConfig);
   listConfig.renderList();
   registerCodexMobileListFilterUtility();
 }
 
 window.registerCodexMobileListFilterUtility = registerCodexMobileListFilterUtility;
+window.openCodexListResult = openCodexListResult;
