@@ -130,29 +130,18 @@ function bindCodexEvents() {
     });
 }
 
-function handleCodexBackAction(options = {}) {
-  const shouldRearmBrowserTrap = options.rearmBrowserTrap === true;
+function handleCodexBackAction() {
+  if (isMobileBrowserBackEnabled() && appBrowserHistoryDepth > 0) {
+    history.back();
+    return;
+  }
 
   if (codexHistory.length > 1) {
     goBackCodex();
-
-    if (shouldRearmBrowserTrap) {
-      scheduleAppBrowserBackTrapRearm();
-    }
-
     return;
   }
 
   closeCodex();
-}
-
-function scheduleAppBrowserBackTrapRearm() {
-  if (!isMobileBrowserBackEnabled()) return;
-
-  window.setTimeout(() => {
-    if (!isCodexOpen()) return;
-    ensureAppBrowserBackTrap({ force: true });
-  }, 0);
 }
 
 function isDesktopCodexBookLayout() {
@@ -360,15 +349,25 @@ function isAppPanelOpen() {
     ?.classList.contains("open");
 }
 
-function ensureAppBrowserBackTrap(options = {}) {
+function pushAppBrowserHistoryState() {
   if (!isMobileBrowserBackEnabled()) return;
 
-  const force = options.force === true;
+  appBrowserHistoryDepth += 1;
+  history.pushState({ kadeshApp: true }, "");
+}
 
-  if (!force && appBrowserHistoryDepth > 0) return;
+function ensureAppBrowserBackTrap() {
+  if (!isMobileBrowserBackEnabled()) return;
+  if (appBrowserHistoryDepth > 0) return;
 
-  appBrowserHistoryDepth = 1;
-  history.pushState({ appPanelTrap: true }, "");
+  pushAppBrowserHistoryState();
+}
+
+function pushAppBrowserHistoryStep() {
+  if (!isMobileBrowserBackEnabled()) return;
+  if (!isCodexOpen()) return;
+
+  pushAppBrowserHistoryState();
 }
 
 function releaseAppBrowserBackTrap() {
@@ -380,10 +379,12 @@ function releaseAppBrowserBackTrap() {
 
   if (appBrowserHistoryDepth <= 0) return;
 
-  appBrowserHistoryReleaseCount += 1;
-  appBrowserHistoryDepth -= 1;
+  const stepsToRelease = appBrowserHistoryDepth;
 
-  history.back();
+  appBrowserHistoryReleaseCount += stepsToRelease;
+  appBrowserHistoryDepth = 0;
+
+  history.go(-stepsToRelease);
 }
 
 window.addEventListener("popstate", function () {
@@ -397,7 +398,12 @@ window.addEventListener("popstate", function () {
   }
 
   if (isCodexOpen()) {
-    handleCodexBackAction({ rearmBrowserTrap: true });
+    if (codexHistory.length > 1) {
+      goBackCodex();
+      return;
+    }
+
+    closeCodex({ syncHistory: false });
     return;
   }
 
@@ -449,5 +455,7 @@ function initializeApp() {
 
   loadDatabase();
 }
+
+window.pushAppBrowserHistoryStep = pushAppBrowserHistoryStep;
 
 initializeApp();
