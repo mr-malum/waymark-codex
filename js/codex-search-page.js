@@ -104,6 +104,10 @@ function renderCodexSearchResults(query) {
 
   const results = buildCodexSearchResults(cleanQuery);
 
+  if (isMobileCodexSearchLayout()) {
+    updateCodexMobileSearchQuerySummary?.(results);
+  }
+
   resultsEl.innerHTML = isMobileCodexSearchLayout()
     ? renderMobileCodexSearchResultGroups(results)
     : renderCodexSearchResultGroups(results);
@@ -422,36 +426,14 @@ function getCodexSearchMobileActiveRows(results) {
 function renderMobileCodexSearchResultGroups(results) {
   normalizeCodexSearchActiveGroup(results);
 
-  const activeGroup = CODEX_SEARCH_GROUPS.find(group => group.type === codexSearchActiveGroup);
   const rows = getCodexSearchMobileActiveRows(results);
-  const countLabel = getCodexSearchMatchLabel(rows.length);
-
-  if (activeGroup) {
-    return `
-      <div class="codex-mobile-search-results-page">
-        <section class="codex-mobile-search-group">
-          <h3 class="codex-mobile-search-group-title">
-            ${escapeHtml(activeGroup.label)}
-            <span>${escapeHtml(countLabel)}</span>
-          </h3>
-
-          ${renderCodexSearchRowList(rows, `No matching ${activeGroup.label}.`)}
-        </section>
-      </div>
-    `;
-  }
-
-  const totalCount = getCodexSearchTotalCount(results);
+  const emptyText = codexSearchActiveGroup === "all"
+    ? "No matching records."
+    : `No matching ${getCodexMobileSearchActiveCategoryLabel?.() || "records"}.`;
 
   return `
-    <div class="codex-mobile-search-results-page">
-      <p class="codex-mobile-search-result-count">
-        ${escapeHtml(getCodexSearchMatchLabel(totalCount))}
-      </p>
-
-      ${CODEX_SEARCH_GROUPS
-        .map(group => renderMobileCodexSearchGroupSection(group, results))
-        .join("")}
+    <div class="codex-mobile-search-results-page codex-mobile-search-results-flat">
+      ${renderCodexSearchRowList(rows, emptyText)}
     </div>
   `;
 }
