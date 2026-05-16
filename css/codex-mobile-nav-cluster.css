@@ -17,18 +17,25 @@
 
     width: 100% !important;
     max-width: 100% !important;
+    min-width: 0 !important;
     margin: 0 !important;
+    box-sizing: border-box !important;
 
     display: flex !important;
     align-items: center !important;
     justify-content: stretch !important;
-    gap: 10px !important;
+    gap: 8px !important;
 
+    overflow: hidden !important;
     pointer-events: auto !important;
   }
 
+  #codex-overlay .codex-control-cluster > button {
+    box-sizing: border-box !important;
+  }
+
   #codex-overlay #codex-mobile-page-control {
-    flex: 0 0 clamp(132px, 34%, 198px) !important;
+    flex: 0 1 clamp(122px, 31%, 186px) !important;
     min-width: 0 !important;
   }
 
@@ -46,7 +53,7 @@
     transform: none !important;
 
     flex: 1 1 auto !important;
-    min-width: 48px !important;
+    min-width: 40px !important;
   }
 
   #codex-overlay #codex-back,
@@ -69,6 +76,10 @@
   }
 
   #codex-overlay #codex-mobile-page-control {
-    flex-basis: clamp(112px, 31%, 150px) !important;
+    flex-basis: clamp(104px, 28%, 140px) !important;
+  }
+
+  #codex-overlay #codex-mobile-debug-toggle {
+    min-width: 36px !important;
   }
 }
