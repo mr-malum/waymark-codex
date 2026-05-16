@@ -18,8 +18,8 @@
   }
 
   #codex-modal {
-    --codex-mobile-image-width: min(100vw, calc(100dvh * 2 / 3));
-    --codex-mobile-image-height: calc(var(--codex-mobile-image-width) * 3 / 2);
+    --codex-mobile-image-height: 100dvh;
+    --codex-mobile-image-width: calc(var(--codex-mobile-image-height) * 2 / 3);
 
     /* Native Mobile_Codex.png zones, expressed as percentages. */
     --codex-mobile-safe-x: 5%;          /* 80 / 1600 */
@@ -510,7 +510,7 @@
 
 @media (orientation: landscape) and (max-height: 699px) {
   #codex-modal {
-    --codex-mobile-image-height: min(100dvh, calc(100vw * 3 / 2));
+    --codex-mobile-image-height: 100dvh;
     --codex-mobile-image-width: calc(var(--codex-mobile-image-height) * 2 / 3);
   }
 
