@@ -228,6 +228,94 @@ function ensureCodexImageMissingLabel(node) {
   node.appendChild(label);
 }
 
+function getCodexRenderedImageFit(node) {
+  if (!node) return "cover";
+
+  if (node.dataset.codexImageKind === "map") return "contain";
+  if (node.classList.contains("codex-placeholder-npc")) return "contain";
+
+  return "cover";
+}
+
+function layoutCodexRenderedImage(node, image) {
+  if (!node || !image) return;
+
+  const fit = getCodexRenderedImageFit(node);
+  image.dataset.codexImageFit = fit;
+
+  if (fit !== "contain") {
+    image.style.left = "0";
+    image.style.top = "0";
+    image.style.width = "100%";
+    image.style.height = "100%";
+    return;
+  }
+
+  const nodeWidth = node.clientWidth;
+  const nodeHeight = node.clientHeight;
+  const naturalWidth = image.naturalWidth || 1;
+  const naturalHeight = image.naturalHeight || 1;
+
+  if (!nodeWidth || !nodeHeight || !naturalWidth || !naturalHeight) {
+    image.style.left = "0";
+    image.style.top = "0";
+    image.style.width = "100%";
+    image.style.height = "100%";
+    return;
+  }
+
+  const scale = Math.min(nodeWidth / naturalWidth, nodeHeight / naturalHeight);
+  const renderedWidth = Math.max(1, naturalWidth * scale);
+  const renderedHeight = Math.max(1, naturalHeight * scale);
+
+  image.style.width = `${renderedWidth}px`;
+  image.style.height = `${renderedHeight}px`;
+  image.style.left = `${(nodeWidth - renderedWidth) / 2}px`;
+  image.style.top = `${(nodeHeight - renderedHeight) / 2}px`;
+}
+
+function ensureCodexRenderedImageLayer(node) {
+  if (!node || node.dataset.codexImageKind === "map" && node.classList.contains("codex-map-card-missing")) return null;
+
+  const src = node.dataset.codexImageSource;
+  if (!src) return null;
+
+  let image = node.querySelector(":scope > .codex-rendered-image-layer");
+
+  if (!image) {
+    image = document.createElement("img");
+    image.className = "codex-rendered-image-layer";
+    image.alt = "";
+    image.loading = "lazy";
+    image.decoding = "async";
+
+    image.addEventListener("load", () => {
+      node.classList.remove("codex-image-loading", "codex-image-missing");
+      node.classList.add("codex-image-loaded");
+      layoutCodexRenderedImage(node, image);
+    });
+
+    image.addEventListener("error", () => {
+      node.classList.remove("codex-image-loading", "codex-image-loaded");
+      node.classList.add("codex-image-missing");
+      ensureCodexImageMissingLabel(node);
+    });
+
+    node.prepend(image);
+  }
+
+  if (image.getAttribute("src") !== src) {
+    node.classList.add("codex-image-loading");
+    image.src = src;
+  } else if (image.complete && image.naturalWidth) {
+    node.classList.remove("codex-image-loading", "codex-image-missing");
+    node.classList.add("codex-image-loaded");
+    layoutCodexRenderedImage(node, image);
+  }
+
+  return image;
+}
+
 function bindCodexImageExpansion(node) {
   if (!node || node.dataset.codexImageClickBound === "true") return;
 
@@ -269,27 +357,17 @@ function hydrateCodexImageAssets(root = document) {
 
   nodes.forEach(node => {
     bindCodexImageExpansion(node);
+    ensureCodexRenderedImageLayer(node);
+  });
+}
 
-    const src = node.dataset.codexImageSource;
-    if (!src || node.dataset.codexImageChecked === "true") return;
+function relayoutCodexRenderedImages(root = document) {
+  const images = Array.from(root.querySelectorAll?.(".codex-rendered-image-layer") || []);
 
-    node.dataset.codexImageChecked = "true";
-    node.classList.add("codex-image-loading");
-
-    const image = new Image();
-
-    image.onload = () => {
-      node.classList.remove("codex-image-loading", "codex-image-missing");
-      node.classList.add("codex-image-loaded");
-    };
-
-    image.onerror = () => {
-      node.classList.remove("codex-image-loading", "codex-image-loaded");
-      node.classList.add("codex-image-missing");
-      ensureCodexImageMissingLabel(node);
-    };
-
-    image.src = src;
+  images.forEach(image => {
+    const node = image.closest("[data-codex-image-source]");
+    if (!node || !image.complete || !image.naturalWidth) return;
+    layoutCodexRenderedImage(node, image);
   });
 }
 
@@ -300,6 +378,11 @@ function injectCodexAssetStyles() {
   style.id = "codex-asset-state-styles";
   style.textContent = `
     [data-codex-image-source].codex-image-missing {
+      --codex-record-image: none !important;
+      --codex-map-image: none !important;
+    }
+
+    [data-codex-image-source].codex-image-loaded {
       --codex-record-image: none !important;
       --codex-map-image: none !important;
     }
@@ -316,6 +399,81 @@ function injectCodexAssetStyles() {
     .codex-placeholder-poi.codex-image-missing::before,
     .codex-placeholder-region.codex-image-missing::before {
       opacity: 0.90;
+    }
+
+    .codex-rendered-image-layer {
+      position: absolute;
+      z-index: 1;
+
+      display: block;
+      max-width: none;
+      max-height: none;
+
+      object-fit: cover;
+      object-position: center;
+
+      opacity: 0;
+      transition: opacity 0.16s ease;
+
+      pointer-events: none;
+
+      -webkit-mask-image:
+        linear-gradient(
+          to right,
+          transparent 0%,
+          rgba(0, 0, 0, 0.22) 4%,
+          rgba(0, 0, 0, 0.82) 11%,
+          black 20%,
+          black 80%,
+          rgba(0, 0, 0, 0.82) 89%,
+          rgba(0, 0, 0, 0.22) 96%,
+          transparent 100%
+        ),
+        linear-gradient(
+          to bottom,
+          transparent 0%,
+          rgba(0, 0, 0, 0.22) 4%,
+          rgba(0, 0, 0, 0.82) 11%,
+          black 20%,
+          black 80%,
+          rgba(0, 0, 0, 0.82) 89%,
+          rgba(0, 0, 0, 0.22) 96%,
+          transparent 100%
+        );
+      -webkit-mask-composite: source-in;
+
+      mask-image:
+        linear-gradient(
+          to right,
+          transparent 0%,
+          rgba(0, 0, 0, 0.22) 4%,
+          rgba(0, 0, 0, 0.82) 11%,
+          black 20%,
+          black 80%,
+          rgba(0, 0, 0, 0.82) 89%,
+          rgba(0, 0, 0, 0.22) 96%,
+          transparent 100%
+        ),
+        linear-gradient(
+          to bottom,
+          transparent 0%,
+          rgba(0, 0, 0, 0.22) 4%,
+          rgba(0, 0, 0, 0.82) 11%,
+          black 20%,
+          black 80%,
+          rgba(0, 0, 0, 0.82) 89%,
+          rgba(0, 0, 0, 0.22) 96%,
+          transparent 100%
+        );
+      mask-composite: intersect;
+    }
+
+    .codex-image-loaded > .codex-rendered-image-layer {
+      opacity: 1;
+    }
+
+    .codex-image-missing > .codex-rendered-image-layer {
+      display: none;
     }
 
     .codex-placeholder-npc,
@@ -349,12 +507,11 @@ function injectCodexAssetStyles() {
 
     .codex-map-card::before {
       background:
-        var(--codex-map-image, none),
         radial-gradient(circle at center, rgba(255, 232, 174, 0.18), transparent 62%),
         rgba(94, 55, 22, 0.08) !important;
-      background-size: contain, cover, auto !important;
-      background-position: center, center, center !important;
-      background-repeat: no-repeat, no-repeat, no-repeat !important;
+      background-size: cover, auto !important;
+      background-position: center, center !important;
+      background-repeat: no-repeat, no-repeat !important;
     }
 
     .codex-map-card-info {
@@ -440,6 +597,11 @@ document.addEventListener("DOMContentLoaded", () => {
   hydrateCodexImageAssets(document);
 });
 
+window.addEventListener("resize", () => {
+  relayoutCodexRenderedImages(document);
+});
+
 window.hydrateCodexImageAssets = hydrateCodexImageAssets;
+window.relayoutCodexRenderedImages = relayoutCodexRenderedImages;
 window.resolveCodexAssetUrl = resolveCodexAssetUrl;
 window.resolveCodexAssetHref = resolveCodexAssetHref;
