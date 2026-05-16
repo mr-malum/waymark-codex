@@ -26,8 +26,8 @@ function renderCodexSearchPage() {
 
     content.innerHTML = `
       <div class="codex-search-page-shell codex-mobile-search-page-shell">
-        <div class="codex-mobile-search-query-summary">
-          Search results for &ldquo;${escapeHtml(codexSearchQuery)}&rdquo;
+        <div id="codex-mobile-search-query-summary" class="codex-mobile-search-query-summary">
+          ${renderCodexMobileSearchQuerySummary()}
         </div>
 
         <div id="codex-search-results" class="codex-search-results-shell"></div>
@@ -59,6 +59,38 @@ function renderCodexSearchPage() {
   `;
 
   bindCodexSearchInput();
+}
+
+function getCodexMobileSearchActiveCategoryLabel() {
+  if (codexSearchActiveGroup === "all") return "All";
+
+  const activeGroup = CODEX_SEARCH_GROUPS.find(group => group.type === codexSearchActiveGroup);
+  return activeGroup?.label || "All";
+}
+
+function getCodexMobileSearchActiveMatchCount(results) {
+  const activeGroup = CODEX_SEARCH_GROUPS.find(group => group.type === codexSearchActiveGroup);
+  return activeGroup
+    ? getCodexSearchGroupRows(activeGroup, results).length
+    : getCodexSearchTotalCount(results);
+}
+
+function renderCodexMobileSearchQuerySummary(results = null) {
+  const cleanQuery = normalizeCodexSearchQuery(codexSearchQuery);
+  const searchResults = results || (cleanQuery ? buildCodexSearchResults(cleanQuery) : []);
+  const categoryLabel = getCodexMobileSearchActiveCategoryLabel().toUpperCase();
+  const matchLabel = getCodexSearchMatchLabel(
+    getCodexMobileSearchActiveMatchCount(searchResults)
+  );
+
+  return `Search Results for query &ldquo;${escapeHtml(codexSearchQuery)}&rdquo; - ${escapeHtml(categoryLabel)}: ${escapeHtml(matchLabel)}`;
+}
+
+function updateCodexMobileSearchQuerySummary(results = null) {
+  const summary = document.getElementById("codex-mobile-search-query-summary");
+  if (!summary) return;
+
+  summary.innerHTML = renderCodexMobileSearchQuerySummary(results);
 }
 
 function getCodexSearchCategoryOptions(results) {
