@@ -258,6 +258,107 @@
   }
 }
 
+@media (max-width: 700px) {
+  #codex-content.codex-search-page {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .codex-search-page-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+
+    display: flex;
+    flex-direction: column;
+
+    overflow: hidden;
+  }
+
+  .codex-search-controls-shell {
+    flex: 0 0 auto;
+    display: block !important;
+    padding: 0 0 12px;
+  }
+
+  .codex-search-results-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+
+    display: block !important;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+
+    padding: 2px 0 24px;
+
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .codex-mobile-search-results-page {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .codex-mobile-search-result-count {
+    margin: 0 0 2px;
+
+    font-family: 'Marcellus SC', Georgia, serif;
+    font-size: 0.96rem;
+    letter-spacing: 0.04em;
+    opacity: 0.78;
+  }
+
+  .codex-mobile-search-group {
+    display: grid;
+    gap: 8px;
+  }
+
+  #codex-content .codex-mobile-search-group-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+
+    margin: 0;
+
+    font-size: 1.05rem;
+    line-height: 1.15;
+  }
+
+  #codex-content .codex-mobile-search-group-title::after {
+    display: none;
+  }
+
+  .codex-mobile-search-group-title span {
+    flex: 0 0 auto;
+
+    font-family: 'Spectral', Georgia, serif;
+    font-size: 0.82rem;
+    letter-spacing: 0;
+    opacity: 0.72;
+  }
+
+  .codex-mobile-search-group .codex-list {
+    display: grid;
+    gap: 7px;
+  }
+
+  .codex-mobile-search-group .codex-record-button {
+    min-height: 52px;
+    padding: 10px 12px;
+  }
+
+  .codex-mobile-search-group .codex-row-meta {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 @media (max-width: 420px) {
   #codex-book-stage {
     padding:
