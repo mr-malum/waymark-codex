@@ -87,19 +87,19 @@ function getCodexRecordTypeIcon(type) {
   switch (type) {
     case "poi":
     case "poi-group":
-      return "◎";
+      return getCodexIcon("poi");
 
     case "npc":
-      return "♟";
+      return getCodexIcon("npc");
 
     case "region":
-      return "✥";
+      return getCodexIcon("region");
 
     case "hex":
-      return "⬡";
+      return getCodexIcon("hex");
 
     default:
-      return "•";
+      return getCodexIcon("fallback");
   }
 }
 
@@ -124,7 +124,7 @@ function getCodexRecordTypeLabel(type) {
 }
 
 function getCodexRowIconClass(icon) {
-  return icon === "⬡" ? " codex-row-icon-hex" : "";
+  return icon === getCodexIcon("hex") ? " codex-row-icon-hex" : "";
 }
 
 function renderCodexRow(options) {
