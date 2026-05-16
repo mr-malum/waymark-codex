@@ -412,7 +412,35 @@ function getCodexSearchMatchLabel(count) {
   return `${count} matches`;
 }
 
+function getCodexSearchMobileActiveRows(results) {
+  const activeGroup = CODEX_SEARCH_GROUPS.find(group => group.type === codexSearchActiveGroup);
+  return activeGroup
+    ? getCodexSearchGroupRows(activeGroup, results)
+    : getCodexSearchOrderedRows(results);
+}
+
 function renderMobileCodexSearchResultGroups(results) {
+  normalizeCodexSearchActiveGroup(results);
+
+  const activeGroup = CODEX_SEARCH_GROUPS.find(group => group.type === codexSearchActiveGroup);
+  const rows = getCodexSearchMobileActiveRows(results);
+  const countLabel = getCodexSearchMatchLabel(rows.length);
+
+  if (activeGroup) {
+    return `
+      <div class="codex-mobile-search-results-page">
+        <section class="codex-mobile-search-group">
+          <h3 class="codex-mobile-search-group-title">
+            ${escapeHtml(activeGroup.label)}
+            <span>${escapeHtml(countLabel)}</span>
+          </h3>
+
+          ${renderCodexSearchRowList(rows, `No matching ${activeGroup.label}.`)}
+        </section>
+      </div>
+    `;
+  }
+
   const totalCount = getCodexSearchTotalCount(results);
 
   return `
