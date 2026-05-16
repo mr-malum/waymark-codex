@@ -497,8 +497,7 @@ function injectCodexAssetStyles() {
     }
 
     .codex-image-expandable:focus-visible {
-      outline: 1px solid rgba(72, 43, 18, 0.45);
-      outline-offset: -3px;
+      outline: none;
     }
 
     .codex-map-card {
@@ -575,8 +574,7 @@ function injectCodexAssetStyles() {
     }
 
     .codex-image-missing {
-      outline: 1px solid rgba(120, 56, 31, 0.28);
-      outline-offset: -1px;
+      outline: none !important;
     }
   `;
 
