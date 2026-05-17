@@ -3,46 +3,49 @@
    ========================================================= */
 
 @media (max-width: 1099px), (max-height: 699px) {
-  #codex-content.codex-detail-page .codex-detail-overview-locked {
-    display: none !important;
-  }
-
   #codex-content.codex-detail-page .codex-detail-page-shell,
   #codex-content.codex-detail-page .codex-detail-rail-page {
     height: 100% !important;
     min-height: 0 !important;
-  }
-
-  #codex-content.codex-detail-page .codex-detail-lower-pane {
-    height: 100% !important;
-    min-height: 0 !important;
-  }
-
-  .codex-mobile-lore-overview {
-    margin: 0 0 14px !important;
-    padding: 0 0 14px !important;
-    border-bottom: 1px solid rgba(72, 43, 18, 0.18) !important;
-  }
-
-  .codex-mobile-lore-overview-grid {
     display: grid !important;
-    grid-template-columns: minmax(96px, 0.72fr) minmax(0, 1.28fr) !important;
-    align-items: center !important;
-    gap: clamp(10px, calc(var(--codex-mobile-image-width, 100vw) * 0.035), 16px) !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    gap: 8px !important;
+    overflow: hidden !important;
   }
 
-  .codex-mobile-lore-overview-image.codex-detail-portrait-slot {
+  #codex-content.codex-detail-page .codex-detail-overview-locked {
+    display: block !important;
+    min-height: 0 !important;
+    padding-bottom: 6px !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel {
+    border-bottom: 1px solid rgba(72, 43, 18, 0.16) !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-poi,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-region {
+    display: grid !important;
+    grid-template-columns: minmax(82px, 0.72fr) minmax(0, 1.28fr) !important;
+    align-items: center !important;
+    gap: clamp(10px, calc(var(--codex-mobile-image-width, 100vw) * 0.032), 16px) !important;
+    padding: 0 0 7px !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-portrait-slot {
     width: 100% !important;
     height: auto !important;
     aspect-ratio: 1 / 1 !important;
-    max-width: 170px !important;
+    max-width: 138px !important;
     min-width: 0 !important;
     margin: 0 !important;
     align-self: center !important;
     justify-self: center !important;
   }
 
-  .codex-mobile-lore-overview-meta.codex-detail-meta {
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-meta {
     width: 100% !important;
     min-width: 0 !important;
     margin: 0 !important;
@@ -51,15 +54,19 @@
     gap: 2px !important;
   }
 
-  .codex-mobile-lore-overview-meta.codex-detail-meta p {
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-meta p {
     margin: 0 0 4px !important;
-    font-size: clamp(0.78rem, calc(var(--codex-mobile-image-width, 100vw) * 0.03), 0.98rem) !important;
-    line-height: 1.22 !important;
+    font-size: clamp(0.76rem, calc(var(--codex-mobile-image-width, 100vw) * 0.029), 0.96rem) !important;
+    line-height: 1.18 !important;
   }
 
-  #codex-content.codex-detail-page .codex-detail-rail-section-content > .codex-mobile-lore-overview + p,
-  #codex-content.codex-detail-page .codex-detail-rail-section-content > .codex-mobile-lore-overview + .codex-detail-text-block {
-    margin-top: 0 !important;
+  #codex-content.codex-detail-page .codex-detail-overview-side {
+    display: none !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-lower-pane {
+    height: 100% !important;
+    min-height: 0 !important;
   }
 
   #codex-overlay #codex-title .codex-header-link {
@@ -86,16 +93,18 @@
 }
 
 @media (max-width: 420px) {
-  .codex-mobile-lore-overview-grid {
-    grid-template-columns: minmax(82px, 0.68fr) minmax(0, 1.32fr) !important;
-    gap: 10px !important;
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-poi,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-region {
+    grid-template-columns: minmax(74px, 0.66fr) minmax(0, 1.34fr) !important;
+    gap: 9px !important;
   }
 
-  .codex-mobile-lore-overview-image.codex-detail-portrait-slot {
-    max-width: 132px !important;
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-portrait-slot {
+    max-width: 112px !important;
   }
 
-  .codex-mobile-lore-overview-meta.codex-detail-meta p {
-    font-size: 0.76rem !important;
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-meta p {
+    font-size: 0.74rem !important;
   }
 }
