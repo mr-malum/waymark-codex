@@ -18,14 +18,19 @@
   }
 
   #codex-modal {
-    --codex-mobile-image-height: 100dvh;
+    --codex-mobile-safe-area-top: env(safe-area-inset-top, 0px);
+    --codex-mobile-safe-area-right: env(safe-area-inset-right, 0px);
+    --codex-mobile-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --codex-mobile-safe-area-left: env(safe-area-inset-left, 0px);
+
+    --codex-mobile-image-height: calc(100dvh - var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom));
     --codex-mobile-image-width: calc(var(--codex-mobile-image-height) * 2 / 3);
 
     /* Native Mobile_Codex.png zones, expressed as percentages. */
     --codex-mobile-safe-x: 5%;
-    --codex-mobile-safe-y: 3.333333%;
+    --codex-mobile-safe-y: calc(3.333333% + var(--codex-mobile-safe-area-top));
     --codex-mobile-safe-w: 90%;
-    --codex-mobile-safe-h: 93.333333%;
+    --codex-mobile-safe-h: calc(93.333333% - var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom));
 
     /*
       Height-first scaling can make the rendered Codex wider than the viewport.
@@ -34,28 +39,28 @@
     */
     --codex-mobile-visible-edge-inset: max(
       var(--codex-mobile-safe-x),
-      calc((var(--codex-mobile-image-width) - 100vw) / 2 + max(14px, 2.6vw))
+      calc((var(--codex-mobile-image-width) - 100vw) / 2 + max(14px, 2.6vw) + var(--codex-mobile-safe-area-left))
     );
 
-    --codex-mobile-header-left: var(--codex-mobile-visible-edge-inset);
-    --codex-mobile-header-right: var(--codex-mobile-visible-edge-inset);
+    --codex-mobile-header-left: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-left));
+    --codex-mobile-header-right: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-right));
     --codex-mobile-header-y: var(--codex-mobile-safe-y);
     --codex-mobile-header-h: 9.166667%;
 
-    --codex-mobile-utility-left: var(--codex-mobile-visible-edge-inset);
-    --codex-mobile-utility-right: var(--codex-mobile-visible-edge-inset);
+    --codex-mobile-utility-left: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-left));
+    --codex-mobile-utility-right: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-right));
     --codex-mobile-utility-y: 12.916667%;
     --codex-mobile-utility-h: 5.833333%;
 
-    --codex-mobile-content-left: var(--codex-mobile-visible-edge-inset);
-    --codex-mobile-content-right: var(--codex-mobile-visible-edge-inset);
+    --codex-mobile-content-left: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-left));
+    --codex-mobile-content-right: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-right));
     --codex-mobile-content-y: 14.166667%;
-    --codex-mobile-content-h: 71.75%;
+    --codex-mobile-content-h: calc(71.75% - var(--codex-mobile-safe-area-bottom));
 
-    --codex-mobile-nav-left: var(--codex-mobile-visible-edge-inset);
-    --codex-mobile-nav-right: var(--codex-mobile-visible-edge-inset);
+    --codex-mobile-nav-left: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-left));
+    --codex-mobile-nav-right: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-right));
     --codex-mobile-nav-y: 87%;
-    --codex-mobile-nav-h: 9.666667%;
+    --codex-mobile-nav-h: calc(9.666667% - var(--codex-mobile-safe-area-bottom));
 
     position: relative;
 
@@ -78,7 +83,7 @@
   #codex-modal::before {
     content: "";
     position: absolute;
-    top: 50%;
+    top: calc(50% + (var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom)) / 2);
     left: 50%;
 
     width: var(--codex-mobile-image-width);
@@ -98,7 +103,7 @@
 
   #codex-book-stage {
     position: absolute;
-    top: 50%;
+    top: calc(50% + (var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom)) / 2);
     left: 50%;
     z-index: 1;
 
@@ -234,7 +239,7 @@
     width: auto !important;
     max-width: none !important;
 
-    height: var(--codex-mobile-nav-h);
+    height: max(76px, var(--codex-mobile-nav-h));
 
     display: grid !important;
     grid-template-columns: minmax(0, 1fr);
@@ -563,7 +568,7 @@
 
 @media (orientation: landscape) and (max-height: 699px) {
   #codex-modal {
-    --codex-mobile-image-height: 100dvh;
+    --codex-mobile-image-height: calc(100dvh - var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom));
     --codex-mobile-image-width: calc(var(--codex-mobile-image-height) * 2 / 3);
   }
 
