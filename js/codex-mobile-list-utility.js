@@ -46,8 +46,16 @@ function cacheCodexListState(config = codexCurrentListConfig) {
   });
 }
 
+function getCodexHexListStateConfig() {
+  return {
+    ...hexCodexListConfig,
+    listId: "codex-hex-list",
+    title: "Hexes"
+  };
+}
+
 function presetCodexHexListFilters(regionLabel = "all", terrain = "all") {
-  setCodexCachedListState(hexCodexListConfig, {
+  setCodexCachedListState(getCodexHexListStateConfig(), {
     filters: [
       { field: "Region", value: regionLabel || "all" },
       { field: "Terrain", value: terrain || "all" }
