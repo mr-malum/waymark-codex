@@ -49,27 +49,27 @@
   }
 
   #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: start;
-    justify-items: stretch;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: 28px;
 
-    width: min(100%, 560px);
-    margin: 0 auto;
-    padding: 16px 0 14px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 16px 2px 14px;
 
-    text-align: center;
+    text-align: left;
   }
 
   #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta p:first-child {
-    justify-self: end;
-    text-align: right;
+    margin: 0;
+    text-align: left;
   }
 
   #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta p:last-child {
-    justify-self: start;
-    text-align: left;
+    margin: 0;
+    text-align: right;
   }
 
   #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta .codex-link-button {
@@ -152,34 +152,52 @@
     mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 22px), transparent 100%) !important;
   }
 
-  /* Stable dynamic filter control sizing across POI/NPC/Hex. */
-  #codex-content.codex-list-page .codex-list-controls,
+  /* Stable dynamic filter control sizing across desktop POI/NPC/Hex. */
+  #codex-content.codex-list-page .codex-list-control-rail,
+  #codex-content.codex-list-page .codex-list-controls-shell,
   #codex-content.codex-list-page .codex-mobile-controls-panel,
-  #codex-content.codex-list-page .codex-list-controls-shell {
-    width: 100%;
-    min-width: 0;
-  }
-
   #codex-content.codex-list-page .codex-filter-row,
-  #codex-content.codex-list-page .codex-list-filter-row,
-  #codex-content.codex-list-page .codex-control-row {
-    width: 100%;
-    min-width: 0;
+  #codex-content.codex-list-page .codex-dynamic-filter,
+  #codex-content.codex-list-page .codex-sort-label {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
-  #codex-content.codex-list-page select {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
   }
 
-  #codex-content.codex-list-page select[id$="-field"] {
-    width: 66.666%;
-    max-width: 66.666%;
+  #codex-content.codex-list-page .codex-list-control-rail .codex-filter-row select,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter select,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-label select {
+    min-width: 0 !important;
+    box-sizing: border-box !important;
   }
 
-  #codex-content.codex-list-page select[id$="-value"] {
-    width: 100%;
-    max-width: 100%;
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter .codex-filter-field-select,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-filter-field-select {
+    width: 66.666% !important;
+    min-width: 0 !important;
+    max-width: 66.666% !important;
+    flex: 0 0 auto !important;
+    align-self: flex-start !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter select:not(.codex-filter-field-select) {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    align-self: stretch !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-label select {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
   }
 }
