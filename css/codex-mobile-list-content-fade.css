@@ -21,37 +21,13 @@
   }
 
   #codex-content.codex-list-page .codex-list-control-split-view {
-    position: relative !important;
     height: 100% !important;
     min-height: 0 !important;
     display: block !important;
     overflow: hidden !important;
   }
 
-  #codex-content.codex-list-page .codex-list-control-split-view::before,
-  #codex-content.codex-list-page .codex-list-control-split-view::after {
-    content: "" !important;
-    position: absolute !important;
-    left: 0 !important;
-    right: 0 !important;
-    z-index: 3 !important;
-    height: 14px !important;
-    pointer-events: none !important;
-  }
-
-  #codex-content.codex-list-page .codex-list-control-split-view::before {
-    top: 0 !important;
-    background: linear-gradient(to bottom, rgba(239, 219, 177, 0.82), rgba(239, 219, 177, 0)) !important;
-  }
-
-  #codex-content.codex-list-page .codex-list-control-split-view::after {
-    bottom: 0 !important;
-    background: linear-gradient(to bottom, rgba(239, 219, 177, 0), rgba(239, 219, 177, 0.82)) !important;
-  }
-
   #codex-content.codex-list-page .codex-list-scroll-shell {
-    position: relative !important;
-    z-index: 1 !important;
     height: 100% !important;
     min-height: 0 !important;
     overflow-y: auto !important;
@@ -59,12 +35,14 @@
     padding-right: 0 !important;
     padding-bottom: clamp(18px, calc(var(--codex-mobile-image-width) * 0.045), 30px) !important;
     -webkit-overflow-scrolling: touch !important;
-    -webkit-mask-image: none !important;
-    mask-image: none !important;
   }
 
   #codex-content.codex-list-page .codex-list-scroll-shell.codex-scroll-fade {
-    -webkit-mask-image: none !important;
-    mask-image: none !important;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%) !important;
+    mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%) !important;
+    -webkit-mask-size: 100% 100% !important;
+    mask-size: 100% 100% !important;
+    -webkit-mask-repeat: no-repeat !important;
+    mask-repeat: no-repeat !important;
   }
 }
