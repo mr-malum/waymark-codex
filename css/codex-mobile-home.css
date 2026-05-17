@@ -5,28 +5,33 @@
 @media (max-width: 1099px), (max-height: 699px) {
   #codex-content.codex-home {
     display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
     align-items: center !important;
     justify-items: center !important;
+    align-content: center !important;
+    justify-content: center !important;
     overflow: hidden !important;
   }
 
   #codex-home-section-buttons.codex-home-section-buttons {
-    width: min(100%, calc(var(--codex-mobile-image-width) * 0.76)) !important;
-    max-width: 520px !important;
+    width: min(100%, calc(var(--codex-mobile-image-width, 100vw) * 0.76)) !important;
+    max-width: min(520px, 88%) !important;
 
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) !important;
     gap: 0 !important;
     row-gap: 0 !important;
 
+    justify-self: center !important;
+    align-self: center !important;
     margin: 0 auto !important;
     padding: 0 !important;
   }
 
   #codex-home-section-buttons .codex-home-section-row {
-    min-height: clamp(64px, calc(var(--codex-mobile-image-width) * 0.168), 84px) !important;
-    padding: clamp(10px, calc(var(--codex-mobile-image-width) * 0.028), 15px)
-             clamp(12px, calc(var(--codex-mobile-image-width) * 0.035), 20px) !important;
+    min-height: clamp(64px, calc(var(--codex-mobile-image-width, 100vw) * 0.168), 84px) !important;
+    padding: clamp(10px, calc(var(--codex-mobile-image-width, 100vw) * 0.028), 15px)
+             clamp(12px, calc(var(--codex-mobile-image-width, 100vw) * 0.035), 20px) !important;
 
     align-items: center !important;
     margin: 0 !important;
@@ -42,19 +47,20 @@
   }
 
   #codex-home-section-buttons .codex-row-title {
-    font-size: clamp(0.98rem, calc(var(--codex-mobile-image-width) * 0.04), 1.26rem) !important;
+    font-size: clamp(0.98rem, calc(var(--codex-mobile-image-width, 100vw) * 0.04), 1.26rem) !important;
     line-height: 1.05 !important;
   }
 
   #codex-home-section-buttons .codex-row-meta {
-    font-size: clamp(0.72rem, calc(var(--codex-mobile-image-width) * 0.027), 0.9rem) !important;
+    font-size: clamp(0.72rem, calc(var(--codex-mobile-image-width, 100vw) * 0.027), 0.9rem) !important;
     line-height: 1.15 !important;
   }
 }
 
 @media (max-width: 420px) {
   #codex-home-section-buttons.codex-home-section-buttons {
-    width: min(100%, calc(var(--codex-mobile-image-width) * 0.82)) !important;
+    width: min(100%, calc(var(--codex-mobile-image-width, 100vw) * 0.82)) !important;
+    max-width: 92% !important;
     gap: 0 !important;
     row-gap: 0 !important;
   }
