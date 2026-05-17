@@ -124,6 +124,20 @@ function renderCodexBreadcrumbItem(crumb, isLast) {
   `;
 }
 
+function renderCodexMobileBreadcrumbItem(crumb, isLast, className = "") {
+  const labelClass = className ? ` class="${className}"` : "";
+
+  return `
+    ${crumb.clickable && !isLast
+      ? `<button class="codex-breadcrumb-button ${className}" type="button" onclick="${crumb.onclick}">
+          ${escapeHtml(crumb.label)}
+        </button>`
+      : `<span${labelClass}>${escapeHtml(crumb.label)}</span>`
+    }
+    ${!isLast ? `<span class="codex-breadcrumb-separator">/</span>` : ""}
+  `;
+}
+
 function renderCodexBreadcrumbs(breadcrumbs = []) {
   const breadcrumbsEl = document.getElementById("codex-breadcrumbs");
   if (!breadcrumbsEl) return;
@@ -142,20 +156,28 @@ function renderCodexBreadcrumbs(breadcrumbs = []) {
     ))
     .join("");
 
-  const mobileCrumbs = displayCrumbs.slice(-2);
+  const leadingMobileCrumbs = displayCrumbs.length > 2
+    ? displayCrumbs.slice(0, 2)
+    : displayCrumbs.slice(0, -1);
+  const currentMobileCrumb = displayCrumbs[displayCrumbs.length - 1];
 
   const mobileHtml = `
-    ${displayCrumbs.length > 2
-      ? `<span class="codex-breadcrumb-ellipsis">...</span><span class="codex-breadcrumb-separator">/</span>`
-      : ""
-    }
-
-    ${mobileCrumbs
-      .map((crumb, index) => renderCodexBreadcrumbItem(
+    ${leadingMobileCrumbs
+      .map((crumb, index) => renderCodexMobileBreadcrumbItem(
         crumb,
-        index === mobileCrumbs.length - 1
+        false,
+        "codex-breadcrumb-fixed"
       ))
       .join("")}
+
+    ${currentMobileCrumb
+      ? renderCodexMobileBreadcrumbItem(
+        currentMobileCrumb,
+        true,
+        "codex-breadcrumb-current"
+      )
+      : ""
+    }
   `;
 
   breadcrumbsEl.innerHTML = `
