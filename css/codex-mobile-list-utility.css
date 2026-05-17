@@ -65,25 +65,23 @@
     padding-right: 0;
     overflow-y: auto !important;
     overflow-x: hidden !important;
+  }
 
+  #codex-content.codex-list-page .codex-list-scroll-shell.codex-scroll-fade {
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      black 18px,
-      black calc(100% - 34px),
+      black 12px,
+      black calc(100% - 12px),
       transparent 100%
     ) !important;
     mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      black 18px,
-      black calc(100% - 34px),
+      black 12px,
+      black calc(100% - 12px),
       transparent 100%
     ) !important;
-    -webkit-mask-size: 100% 100% !important;
-    mask-size: 100% 100% !important;
-    -webkit-mask-repeat: no-repeat !important;
-    mask-repeat: no-repeat !important;
   }
 
   .codex-mobile-list-controls-mount,
