@@ -1,0 +1,174 @@
+/* =========================================================
+   MOBILE DETAIL CONTENT ADAPTATION
+   ========================================================= */
+
+@media (max-width: 1099px), (max-height: 699px) {
+  #codex-content.codex-detail-page .codex-detail-page-shell,
+  #codex-content.codex-detail-page .codex-detail-rail-page {
+    height: 100% !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    gap: 8px !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-locked {
+    display: block !important;
+    min-height: 0 !important;
+    padding-bottom: 6px !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel {
+    border-bottom: 1px solid rgba(72, 43, 18, 0.16) !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-poi,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-region {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    align-items: center !important;
+    justify-content: center !important;
+    justify-items: stretch !important;
+    gap: clamp(10px, calc(var(--codex-mobile-image-width, 100vw) * 0.032), 16px) !important;
+    max-width: min(100%, 460px) !important;
+    margin: 0 auto !important;
+    padding: 0 0 7px !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed::before,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed::after,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-poi::before,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-poi::after,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-region::before,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-region::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    align-items: start !important;
+    justify-items: stretch !important;
+    gap: clamp(12px, calc(var(--codex-mobile-image-width, 100vw) * 0.052), 24px) !important;
+    width: min(100%, 460px) !important;
+    margin: 0 auto !important;
+    padding: clamp(8px, calc(var(--codex-mobile-image-height, 100vh) * 0.014), 14px) 4px 10px !important;
+    text-align: center !important;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta p:first-child {
+    justify-self: end !important;
+    text-align: right !important;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta p:last-child {
+    justify-self: start !important;
+    text-align: left !important;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta p {
+    margin: 0 !important;
+    min-width: 0 !important;
+    font-size: clamp(0.82rem, calc(var(--codex-mobile-image-width, 100vw) * 0.031), 1rem) !important;
+    line-height: 1.2 !important;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta .codex-link-button {
+    margin: 0 !important;
+    padding: 0 !important;
+    display: inline !important;
+    font: inherit !important;
+    line-height: inherit !important;
+    vertical-align: baseline !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-portrait-slot {
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1 !important;
+    max-width: 138px !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    align-self: center !important;
+    justify-self: end !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-meta {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    align-self: center !important;
+    justify-self: start !important;
+    text-align: left !important;
+    gap: 2px !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-meta p {
+    margin: 0 0 4px !important;
+    font-size: clamp(0.76rem, calc(var(--codex-mobile-image-width, 100vw) * 0.029), 0.96rem) !important;
+    line-height: 1.18 !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-side {
+    display: none !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-lower-pane {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  #codex-overlay #codex-title .codex-header-link {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    border: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font: inherit !important;
+    color: inherit !important;
+    letter-spacing: inherit !important;
+    text-transform: inherit !important;
+    cursor: pointer !important;
+    border-bottom: 1px solid rgba(72, 43, 18, 0.32) !important;
+  }
+
+  #codex-overlay #codex-title .codex-header-link:active,
+  #codex-overlay #codex-title .codex-header-link:focus-visible {
+    color: rgba(47, 29, 16, 0.82) !important;
+    outline: none !important;
+    border-bottom-color: rgba(72, 43, 18, 0.58) !important;
+  }
+}
+
+@media (max-width: 420px) {
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-poi,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-region {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 9px !important;
+    max-width: 100% !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-portrait-slot {
+    max-width: 112px !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-meta p {
+    font-size: 0.74rem !important;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta {
+    gap: 10px !important;
+    padding-top: 9px !important;
+    max-width: 100% !important;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta p {
+    font-size: 0.78rem !important;
+  }
+}

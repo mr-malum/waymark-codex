@@ -1,0 +1,36 @@
+/* =========================================================
+   MOBILE BREADCRUMB WIDTH POLISH
+   ========================================================= */
+
+@media (max-width: 1099px), (max-height: 699px) {
+  #codex-overlay #codex-breadcrumbs {
+    padding-inline: clamp(2px, calc(var(--codex-mobile-image-width, 100vw) * 0.012), 8px) !important;
+  }
+
+  #codex-overlay .codex-breadcrumbs-mobile {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.28em !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: clip !important;
+  }
+
+  #codex-overlay .codex-breadcrumbs-mobile .codex-breadcrumb-button,
+  #codex-overlay .codex-breadcrumbs-mobile span:not(.codex-breadcrumb-separator):not(.codex-breadcrumb-ellipsis) {
+    min-width: 0 !important;
+    max-width: none !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+
+  #codex-overlay .codex-breadcrumbs-mobile .codex-breadcrumb-separator,
+  #codex-overlay .codex-breadcrumbs-mobile .codex-breadcrumb-ellipsis {
+    flex: 0 0 auto !important;
+  }
+}

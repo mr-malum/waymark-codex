@@ -138,6 +138,11 @@ function getNpcHomeLabel(npc) {
   return group?.POI_Group_Name || home?.Name || npc.Home_ID_Ref || "";
 }
 
+function getHexRegionLabel(hex) {
+  const region = hex?.Region_ID_Ref ? db?.regionsById?.[hex.Region_ID_Ref] : null;
+  return region?.Region_Name || hex?.Region_ID_Ref || "";
+}
+
 function getNpcFilterValue(npc, field) {
   if (field === "Race") return npc.Race || "";
   if (field === "Occupation") return npc.Occupation || "";
@@ -148,14 +153,19 @@ function getNpcFilterValue(npc, field) {
 
 function getPoiRegionLabel(poi) {
   const hex = poi.Hex_ID_Ref ? db?.hexesById?.[poi.Hex_ID_Ref] : null;
-  const region = hex?.Region_ID_Ref ? db?.regionsById?.[hex.Region_ID_Ref] : null;
-  return region?.Region_Name || hex?.Region_ID_Ref || "";
+  return getHexRegionLabel(hex);
 }
 
 function getPoiFilterValue(poi, field) {
   if (field === "Type") return poi.POI_Type || "";
   if (field === "Notoriety") return poi["Notoriety Tier"] || "";
   if (field === "Region") return getPoiRegionLabel(poi);
+  return "";
+}
+
+function getHexFilterValue(hex, field) {
+  if (field === "Region") return getHexRegionLabel(hex);
+  if (field === "Terrain") return hex.Terrain || "";
   return "";
 }
 
@@ -185,6 +195,11 @@ function getNpcFilterOptions(field) {
 function getPoiFilterOptions(field) {
   const pois = db?.raw?.pois || [];
   return getDynamicFilterOptions(pois, poi => getPoiFilterValue(poi, field));
+}
+
+function getHexFilterOptions(field) {
+  const hexes = db?.raw?.hexes || [];
+  return getDynamicFilterOptions(hexes, hex => getHexFilterValue(hex, field));
 }
 
 function updateDynamicFilterValueOptions(fieldSelectId, valueSelectId, getOptions, fallbackField) {
@@ -217,17 +232,26 @@ function updatePoiFilterValueOptions(fieldSelectId, valueSelectId) {
   );
 }
 
+function updateHexFilterValueOptions(fieldSelectId, valueSelectId) {
+  updateDynamicFilterValueOptions(
+    fieldSelectId,
+    valueSelectId,
+    getHexFilterOptions,
+    "Region"
+  );
+}
+
 function compareByTextThenName(getPrimary) {
   return (a, b) => {
     const primary = compareText(getPrimary(a), getPrimary(b));
-    return primary !== 0 ? primary : compareText(a.Name, b.Name);
+    return primary !== 0 ? primary : compareText(a.Name || a.Hex_ID, b.Name || b.Hex_ID);
   };
 }
 
 function compareByNumberThenName(getPrimary) {
   return (a, b) => {
     const primary = getPrimary(a) - getPrimary(b);
-    return primary !== 0 ? primary : compareText(a.Name, b.Name);
+    return primary !== 0 ? primary : compareText(a.Name || a.Hex_ID, b.Name || b.Hex_ID);
   };
 }
 

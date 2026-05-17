@@ -1,0 +1,203 @@
+/* =========================================================
+   DESKTOP DETAIL / LIST NORMALIZATION
+   ========================================================= */
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  /* Detail overview panes: image + concise metadata only. */
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-poi,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-region {
+    display: grid;
+    grid-template-columns: minmax(190px, 1fr) minmax(205px, 1fr);
+    align-items: center;
+    justify-content: center;
+    justify-items: stretch;
+    gap: 18px;
+
+    width: min(100%, 560px);
+    margin: 0 auto;
+    padding: 8px 0;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed::before,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed::after,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-poi::before,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-poi::after,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-region::before,
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-fixed-region::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-portrait-slot {
+    justify-self: end;
+    align-self: center;
+    margin: 0;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-overview-panel .codex-detail-meta {
+    justify-self: start;
+    align-self: center;
+
+    width: 100%;
+    min-width: 0;
+    max-width: 235px;
+    flex: initial;
+
+    margin: 0;
+    text-align: left;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 28px;
+
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 16px 2px 14px;
+
+    text-align: left;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta p:first-child {
+    margin: 0;
+    text-align: left;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta p:last-child {
+    margin: 0;
+    text-align: right;
+  }
+
+  #codex-content.codex-hex-detail-page .codex-detail-overview-panel .codex-detail-overview-meta .codex-link-button {
+    margin: 0;
+    padding: 0;
+    display: inline;
+    font: inherit;
+    line-height: inherit;
+    vertical-align: baseline;
+  }
+
+  /* Detail section headers should stay fixed above their own scrolling content. */
+  #codex-content.codex-detail-page .codex-detail-main {
+    overflow: hidden;
+    padding: 0 12px 0 2px;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section {
+    display: none;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section.active {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section > h3 {
+    margin: 0;
+    padding: 12px 0 8px;
+    text-align: center;
+    font-size: 1.05rem;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section > h3::after {
+    content: "";
+    display: block;
+    width: min(72%, 360px);
+    height: 1px;
+    margin: 7px auto 0;
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(72, 43, 18, 0.65),
+      transparent
+    );
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section-content {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0 18px;
+    -webkit-overflow-scrolling: touch;
+
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 18px), transparent 100%);
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-related-parent {
+    margin: 0 0 10px;
+    font-style: normal;
+  }
+
+  /* List pages: desktop should not show mobile filter/sort summary. */
+  #codex-content.codex-list-page .codex-mobile-list-summary {
+    display: none !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-scroll-shell {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 22px), transparent 100%) !important;
+    mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 22px), transparent 100%) !important;
+  }
+
+  /* Stable dynamic filter control sizing across desktop POI/NPC/Hex. */
+  #codex-content.codex-list-page .codex-list-control-rail,
+  #codex-content.codex-list-page .codex-list-controls-shell,
+  #codex-content.codex-list-page .codex-mobile-controls-panel,
+  #codex-content.codex-list-page .codex-filter-row,
+  #codex-content.codex-list-page .codex-dynamic-filter,
+  #codex-content.codex-list-page .codex-sort-label {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-filter-row select,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter select,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-label select {
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter .codex-filter-field-select,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-filter-field-select {
+    width: 66.666% !important;
+    min-width: 0 !important;
+    max-width: 66.666% !important;
+    flex: 0 0 auto !important;
+    align-self: flex-start !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter select:not(.codex-filter-field-select) {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    align-self: stretch !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-label select {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+}

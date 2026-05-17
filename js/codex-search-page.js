@@ -47,13 +47,6 @@ function renderCodexSearchPage() {
 
       <div id="codex-search-results" class="codex-search-results-shell"></div>
     </div>
-
-    <div
-      id="codex-search-results-modal"
-      class="codex-search-results-modal"
-      aria-hidden="true"
-      onclick="handleCodexSearchModalBackdropClick(event)"
-    ></div>
   `;
 
   bindCodexSearchInput();
@@ -66,6 +59,9 @@ function bindCodexSearchInput() {
   input.addEventListener("input", function () {
     codexSearchQuery = input.value;
     codexSearchActiveGroup = "all";
+
+    if (isMobileCodexSearchLayout()) return;
+
     scheduleCodexSearchResultsRender(input.value);
   });
 
@@ -74,13 +70,19 @@ function bindCodexSearchInput() {
 
     event.preventDefault();
     input.blur();
+
+    if (isMobileCodexSearchLayout()) {
+      openCodexSearchResults(input.value, { replace: true });
+    }
   });
 
   if (codexSearchQuery.trim()) {
     renderCodexSearchResults(codexSearchQuery);
   }
 
-  input.focus();
+  if (!isMobileCodexSearchLayout()) {
+    input.focus();
+  }
 }
 
 function isMobileCodexSearchLayout() {
@@ -101,6 +103,10 @@ function renderCodexSearchResults(query) {
   }
 
   const results = buildCodexSearchResults(cleanQuery);
+
+  if (isMobileCodexSearchLayout()) {
+    updateCodexMobileSearchQuerySummary?.(results);
+  }
 
   resultsEl.innerHTML = isMobileCodexSearchLayout()
     ? renderMobileCodexSearchResultGroups(results)
@@ -410,13 +416,41 @@ function getCodexSearchMatchLabel(count) {
   return `${count} matches`;
 }
 
+function getCodexSearchMobileActiveRows(results) {
+  const activeGroup = CODEX_SEARCH_GROUPS.find(group => group.type === codexSearchActiveGroup);
+  return activeGroup
+    ? getCodexSearchGroupRows(activeGroup, results)
+    : getCodexSearchOrderedRows(results);
+}
+
 function renderMobileCodexSearchResultGroups(results) {
+  normalizeCodexSearchActiveGroup(results);
+
+  const rows = getCodexSearchMobileActiveRows(results);
+  const emptyText = codexSearchActiveGroup === "all"
+    ? "No matching records."
+    : `No matching ${getCodexMobileSearchActiveCategoryLabel?.() || "records"}.`;
+
   return `
-    <div class="codex-mobile-search-summary">
-      ${CODEX_SEARCH_GROUPS
-        .map(group => renderMobileCodexSearchSummaryButton(group, results))
-        .join("")}
+    <div class="codex-mobile-search-results-page codex-mobile-search-results-flat">
+      ${renderCodexSearchRowList(rows, emptyText)}
     </div>
+  `;
+}
+
+function renderMobileCodexSearchGroupSection(group, results) {
+  const rows = getCodexSearchGroupRows(group, results);
+  if (!rows.length) return "";
+
+  return `
+    <section class="codex-mobile-search-group">
+      <h3 class="codex-mobile-search-group-title">
+        ${escapeHtml(group.label)}
+        <span>${escapeHtml(getCodexSearchMatchLabel(rows.length))}</span>
+      </h3>
+
+      ${renderCodexSearchRowList(rows, `No matching ${group.label}.`)}
+    </section>
   `;
 }
 

@@ -1,0 +1,578 @@
+/* =========================================================
+   MOBILE CODEX FOUNDATION
+   =========================================================
+
+   Mobile_Codex.png native size: 1600 x 2400.
+   Main mobile layout is anchored to that image, using native-coordinate
+   percentage zones instead of loose viewport padding.
+
+   Desktop book-stage behavior remains owned by codex-book-stage.css under:
+   (min-width: 1100px) and (min-height: 700px).
+*/
+
+@media (max-width: 1099px), (max-height: 699px) {
+  #codex-overlay {
+    align-items: stretch;
+    justify-content: stretch;
+    overflow: hidden;
+  }
+
+  #codex-modal {
+    --codex-mobile-safe-area-top: env(safe-area-inset-top, 0px);
+    --codex-mobile-safe-area-right: env(safe-area-inset-right, 0px);
+    --codex-mobile-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --codex-mobile-safe-area-left: env(safe-area-inset-left, 0px);
+
+    --codex-mobile-image-height: calc(100dvh - var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom));
+    --codex-mobile-image-width: calc(var(--codex-mobile-image-height) * 2 / 3);
+
+    /* Native Mobile_Codex.png zones, expressed as percentages. */
+    --codex-mobile-safe-x: 5%;
+    --codex-mobile-safe-y: calc(3.333333% + var(--codex-mobile-safe-area-top));
+    --codex-mobile-safe-w: 90%;
+    --codex-mobile-safe-h: calc(93.333333% - var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom));
+
+    /*
+      Height-first scaling can make the rendered Codex wider than the viewport.
+      This inset keeps interactive zones inside BOTH the asset safe zone and
+      the actually visible viewport slice of the centered image.
+    */
+    --codex-mobile-visible-edge-inset: max(
+      var(--codex-mobile-safe-x),
+      calc((var(--codex-mobile-image-width) - 100vw) / 2 + max(14px, 2.6vw) + var(--codex-mobile-safe-area-left))
+    );
+
+    --codex-mobile-header-left: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-left));
+    --codex-mobile-header-right: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-right));
+    --codex-mobile-header-y: var(--codex-mobile-safe-y);
+    --codex-mobile-header-h: 9.166667%;
+
+    --codex-mobile-utility-left: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-left));
+    --codex-mobile-utility-right: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-right));
+    --codex-mobile-utility-y: 12.916667%;
+    --codex-mobile-utility-h: 5.833333%;
+
+    --codex-mobile-content-left: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-left));
+    --codex-mobile-content-right: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-right));
+    --codex-mobile-content-y: 14.166667%;
+    --codex-mobile-content-h: calc(71.75% - var(--codex-mobile-safe-area-bottom));
+
+    --codex-mobile-nav-left: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-left));
+    --codex-mobile-nav-right: max(var(--codex-mobile-visible-edge-inset), var(--codex-mobile-safe-area-right));
+    --codex-mobile-nav-y: 87%;
+    --codex-mobile-nav-h: calc(9.666667% - var(--codex-mobile-safe-area-bottom));
+
+    position: relative;
+
+    width: 100vw;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+
+    display: block;
+
+    margin: 0;
+    padding: 0;
+
+    overflow: hidden;
+    background: transparent;
+  }
+
+  #codex-modal::before {
+    content: "";
+    position: absolute;
+    top: calc(50% + (var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom)) / 2);
+    left: 50%;
+
+    width: var(--codex-mobile-image-width);
+    height: var(--codex-mobile-image-height);
+
+    transform: translate(-50%, -50%);
+
+    background-image: url("../assets/codex/Mobile_Codex.png");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+
+    opacity: 1;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  #codex-book-stage {
+    position: absolute;
+    top: calc(50% + (var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom)) / 2);
+    left: 50%;
+    z-index: 1;
+
+    width: var(--codex-mobile-image-width);
+    height: var(--codex-mobile-image-height);
+    min-height: 0;
+
+    display: block;
+
+    box-sizing: border-box;
+    overflow: hidden;
+
+    padding: 0;
+    transform: translate(-50%, -50%);
+
+    pointer-events: none;
+  }
+
+  #codex-left-manuscript,
+  #codex-desktop-persistent-search {
+    display: none !important;
+  }
+
+  #codex-header,
+  #codex-content,
+  .codex-panel-nav,
+  #codex-global-search-modal {
+    position: absolute;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+
+  #codex-overlay.open #codex-header,
+  #codex-overlay.open #codex-content,
+  #codex-overlay.open .codex-panel-nav,
+  #codex-overlay.open #codex-global-search-modal.open {
+    pointer-events: auto;
+  }
+
+  #codex-header {
+    left: var(--codex-mobile-header-left) !important;
+    right: var(--codex-mobile-header-right) !important;
+    top: var(--codex-mobile-header-y) !important;
+    width: auto !important;
+    max-width: none !important;
+    height: var(--codex-mobile-header-h);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    margin: 0;
+    padding: 0 4%;
+
+    text-align: center;
+  }
+
+  #codex-title {
+    margin: 0;
+
+    font-size: clamp(1.25rem, calc(var(--codex-mobile-image-width) * 0.075), 2.25rem);
+    line-height: 1.05;
+    letter-spacing: clamp(0.8px, 0.32vw, 1.5px);
+    white-space: normal;
+  }
+
+  #codex-header::after {
+    width: min(78%, 320px);
+    margin-top: clamp(8px, 1.5dvh, 14px);
+  }
+
+  #codex-content {
+    left: var(--codex-mobile-content-left) !important;
+    right: var(--codex-mobile-content-right) !important;
+    top: var(--codex-mobile-content-y) !important;
+    width: auto !important;
+    max-width: none !important;
+    height: var(--codex-mobile-content-h);
+    min-height: 0;
+
+    margin: 0 !important;
+    padding: 0 2px 12px;
+
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+
+    font-size: clamp(1rem, calc(var(--codex-mobile-image-width) * 0.038), 1.18rem);
+    line-height: 1.48;
+  }
+
+  #codex-content.codex-home {
+    display: block;
+    width: auto !important;
+    max-width: none;
+  }
+
+  #codex-home-section-buttons,
+  .codex-home-section-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: clamp(10px, 2dvh, 16px);
+  }
+
+  .codex-home-section-row,
+  .codex-row {
+    min-height: 58px;
+    box-sizing: border-box;
+  }
+
+  .codex-row-main {
+    min-width: 0;
+  }
+
+  .codex-row-title {
+    line-height: 1.12;
+  }
+
+  .codex-row-meta {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  #codex-overlay .codex-panel-nav,
+  #codex-overlay .panel-nav.codex-panel-nav {
+    position: absolute !important;
+    left: var(--codex-mobile-nav-left) !important;
+    right: var(--codex-mobile-nav-right) !important;
+    top: var(--codex-mobile-nav-y) !important;
+    bottom: auto !important;
+    width: auto !important;
+    max-width: none !important;
+
+    height: max(76px, var(--codex-mobile-nav-h));
+
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 6px;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    pointer-events: none;
+  }
+
+  #codex-overlay #codex-breadcrumbs {
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+
+    grid-column: 1;
+    grid-row: 1;
+    align-self: end;
+
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-height: 1.2em;
+
+    margin: 0;
+    padding: 0 4px;
+    box-sizing: border-box;
+
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+    text-align: center;
+    font-size: clamp(0.72rem, calc(var(--codex-mobile-image-width) * 0.028), 0.95rem);
+    line-height: 1.2;
+
+    pointer-events: auto;
+  }
+
+  .codex-breadcrumbs-desktop {
+    display: none !important;
+  }
+
+  .codex-breadcrumbs-mobile {
+    display: inline-block;
+    max-width: 100%;
+
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .codex-control-cluster {
+    grid-column: 1;
+    grid-row: 2;
+
+    display: flex;
+    align-items: center;
+    justify-content: stretch;
+    gap: 10px;
+
+    width: 100%;
+    margin: 0;
+
+    pointer-events: auto;
+  }
+
+  #codex-mobile-page-control {
+    flex: 0 0 clamp(132px, 34%, 198px);
+    min-width: 0;
+  }
+
+  #codex-mobile-page-control[hidden] {
+    display: inline-flex !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  #codex-mobile-debug-toggle {
+    position: static !important;
+    transform: none !important;
+    flex: 1 1 auto;
+    min-width: 48px;
+  }
+
+  #codex-back,
+  #codex-search-button,
+  #codex-close {
+    flex: 0 0 auto;
+  }
+
+  .codex-panel-nav button,
+  #codex-back,
+  #codex-search-button,
+  #codex-close,
+  #codex-mobile-page-control,
+  #codex-mobile-debug-toggle {
+    min-width: 52px;
+    min-height: 52px;
+    height: 52px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    padding: 0 16px;
+
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  #codex-back,
+  #codex-close {
+    width: 52px;
+    min-width: 52px;
+    padding: 0;
+  }
+
+  #codex-search-button {
+    display: inline-flex !important;
+    min-width: 86px;
+  }
+
+  #app-panel {
+    display: none !important;
+  }
+
+  .codex-list-page-shell,
+  .codex-search-page-shell,
+  .codex-detail-page-shell,
+  .codex-detail-rail-page {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+  }
+
+  #codex-modal.codex-debug-guides-visible #codex-header,
+  #codex-modal.codex-debug-guides-visible #codex-content,
+  #codex-modal.codex-debug-guides-visible .codex-panel-nav {
+    outline: 2px solid;
+    outline-offset: -2px;
+  }
+
+  #codex-modal.codex-debug-guides-visible #codex-header {
+    background: rgba(255, 224, 64, 0.24);
+    outline-color: rgba(255, 224, 64, 0.95);
+  }
+
+  #codex-modal.codex-debug-guides-visible #codex-content {
+    background: rgba(180, 96, 255, 0.16);
+    outline-color: rgba(180, 96, 255, 0.92);
+  }
+
+  #codex-modal.codex-debug-guides-visible .codex-panel-nav {
+    background: rgba(64, 192, 255, 0.16);
+    outline-color: rgba(64, 192, 255, 0.92);
+  }
+
+  #codex-modal.codex-debug-guides-visible #codex-book-stage::before,
+  #codex-modal.codex-debug-guides-visible #codex-book-stage::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    box-sizing: border-box;
+    z-index: 20;
+  }
+
+  #codex-modal.codex-debug-guides-visible #codex-book-stage::before {
+    inset: 0;
+    border: 2px solid rgba(255, 255, 255, 0.86);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  #codex-modal.codex-debug-guides-visible #codex-book-stage::after {
+    left: var(--codex-mobile-safe-x);
+    top: var(--codex-mobile-safe-y);
+    width: var(--codex-mobile-safe-w);
+    height: var(--codex-mobile-safe-h);
+    border: 2px dashed rgba(64, 255, 128, 0.86);
+    background: rgba(64, 255, 128, 0.06);
+  }
+}
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  #codex-mobile-page-control,
+  #codex-mobile-debug-toggle {
+    display: none !important;
+  }
+}
+
+@media (max-width: 700px) {
+  #codex-content.codex-search-page {
+    overflow: hidden;
+  }
+
+  .codex-search-page-shell {
+    min-height: 0;
+    height: 100%;
+
+    display: flex;
+    flex-direction: column;
+
+    overflow: hidden;
+  }
+
+  .codex-search-controls-shell {
+    flex: 0 0 auto;
+    display: block !important;
+    padding: 0 0 12px;
+  }
+
+  .codex-search-results-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+
+    display: block !important;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+
+    padding: 2px 0 24px;
+
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .codex-mobile-search-results-page {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .codex-mobile-search-result-count {
+    margin: 0 0 2px;
+
+    font-family: 'Marcellus SC', Georgia, serif;
+    font-size: 0.96rem;
+    letter-spacing: 0.04em;
+    opacity: 0.78;
+  }
+
+  .codex-mobile-search-group {
+    display: grid;
+    gap: 8px;
+  }
+
+  #codex-content .codex-mobile-search-group-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+
+    margin: 0;
+
+    font-size: 1.05rem;
+    line-height: 1.15;
+  }
+
+  #codex-content .codex-mobile-search-group-title::after {
+    display: none;
+  }
+
+  .codex-mobile-search-group-title span {
+    flex: 0 0 auto;
+
+    font-family: 'Spectral', Georgia, serif;
+    font-size: 0.82rem;
+    letter-spacing: 0;
+    opacity: 0.72;
+  }
+
+  .codex-mobile-search-group .codex-list {
+    display: grid;
+    gap: 7px;
+  }
+
+  .codex-mobile-search-group .codex-record-button {
+    min-height: 52px;
+    padding: 10px 12px;
+  }
+
+  .codex-mobile-search-group .codex-row-meta {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 420px) {
+  #codex-title {
+    font-size: clamp(1.18rem, calc(var(--codex-mobile-image-width) * 0.07), 1.85rem);
+  }
+
+  .codex-panel-nav button,
+  #codex-back,
+  #codex-search-button,
+  #codex-close,
+  #codex-mobile-page-control,
+  #codex-mobile-debug-toggle {
+    min-height: 50px;
+    height: 50px;
+  }
+
+  #codex-search-button {
+    min-width: 78px;
+    padding-inline: 12px;
+  }
+
+  #codex-mobile-page-control {
+    flex-basis: clamp(112px, 31%, 150px);
+    padding-inline: 8px;
+    font-size: 0.72rem;
+  }
+
+  #codex-mobile-debug-toggle {
+    min-width: 48px;
+    padding-inline: 8px;
+    font-size: 0.72rem;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 699px) {
+  #codex-modal {
+    --codex-mobile-image-height: calc(100dvh - var(--codex-mobile-safe-area-top) - var(--codex-mobile-safe-area-bottom));
+    --codex-mobile-image-width: calc(var(--codex-mobile-image-height) * 2 / 3);
+  }
+
+  #codex-title {
+    font-size: clamp(1.1rem, calc(var(--codex-mobile-image-height) * 0.045), 1.7rem);
+  }
+}

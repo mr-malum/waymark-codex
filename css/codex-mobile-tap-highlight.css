@@ -1,0 +1,95 @@
+/* =========================================================
+   MOBILE TAP / HOVER HIGHLIGHT POLISH
+   ========================================================= */
+
+@media (max-width: 1099px), (max-height: 699px), (hover: none), (pointer: coarse) {
+  button,
+  a,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  .codex-row,
+  .codex-link-button,
+  .codex-section-button,
+  .codex-image-modal,
+  .leaflet-container,
+  .leaflet-interactive {
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-touch-callout: none !important;
+  }
+
+  button,
+  a,
+  [role="button"],
+  .codex-row,
+  .codex-link-button,
+  .codex-section-button,
+  .leaflet-interactive {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+
+  button:focus,
+  a:focus,
+  [role="button"]:focus,
+  .codex-row:focus,
+  .codex-link-button:focus,
+  .codex-section-button:focus {
+    outline: none !important;
+  }
+
+  button:focus:not(:focus-visible),
+  a:focus:not(:focus-visible),
+  [role="button"]:focus:not(:focus-visible),
+  .codex-row:focus:not(:focus-visible),
+  .codex-link-button:focus:not(:focus-visible),
+  .codex-section-button:focus:not(:focus-visible) {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  #codex-overlay .codex-control-cluster > button,
+  #codex-overlay .codex-control-cluster > button:hover,
+  #codex-overlay .codex-control-cluster > button:focus,
+  #codex-overlay .codex-control-cluster > button:focus-visible,
+  #codex-overlay .codex-control-cluster > button:visited {
+    background: rgba(246, 232, 196, 0.42) !important;
+    border-color: rgba(72, 43, 18, 0.24) !important;
+    color: #2f1d10 !important;
+    transform: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+
+  #codex-overlay .codex-control-cluster > button:active {
+    background: rgba(94, 55, 22, 0.12) !important;
+    border-color: rgba(72, 43, 18, 0.38) !important;
+    color: #241409 !important;
+    transform: scale(0.985) !important;
+    box-shadow: inset 0 1px 2px rgba(45, 25, 8, 0.16) !important;
+    outline: none !important;
+  }
+
+  #codex-overlay .codex-control-cluster > button[disabled],
+  #codex-overlay .codex-control-cluster > button[disabled]:hover,
+  #codex-overlay .codex-control-cluster > button[disabled]:focus,
+  #codex-overlay .codex-control-cluster > button[disabled]:active {
+    opacity: 0.45 !important;
+    background: rgba(246, 232, 196, 0.28) !important;
+    border-color: rgba(72, 43, 18, 0.14) !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  @media (hover: none) {
+    button:hover,
+    a:hover,
+    [role="button"]:hover,
+    .codex-row:hover,
+    .codex-link-button:hover,
+    .codex-section-button:hover {
+      -webkit-tap-highlight-color: transparent !important;
+    }
+  }
+}

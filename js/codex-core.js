@@ -24,6 +24,8 @@ function openCodex() {
   if (typeof ensureAppBrowserBackTrap === "function") {
     ensureAppBrowserBackTrap();
   }
+
+  requestAnimationFrame(fitCodexHeaderText);
 }
 
 function closeCodex(options = {}) {
@@ -51,8 +53,52 @@ function closeCodex(options = {}) {
 }
 
 function setCodexTitle(title) {
-  getCodexTitle().textContent = title;
+  const titleEl = getCodexTitle();
+  titleEl.textContent = title;
+  titleEl.querySelectorAll?.("[data-codex-fit-line]").forEach(line => {
+    line.removeAttribute("data-codex-fit-line");
+  });
+  requestAnimationFrame(fitCodexHeaderText);
 }
+
+function getCodexHeaderFitLines() {
+  const titleEl = getCodexTitle();
+  if (!titleEl) return [];
+
+  const explicitLines = [...titleEl.querySelectorAll(".codex-superheader, .codex-mainheader, .codex-subheader")];
+  if (explicitLines.length) return explicitLines;
+
+  return [titleEl];
+}
+
+function fitCodexHeaderText() {
+  const titleEl = getCodexTitle();
+  const headerEl = document.getElementById("codex-header");
+  if (!titleEl || !headerEl) return;
+
+  const availableWidth = titleEl.clientWidth || headerEl.clientWidth;
+  if (!availableWidth) return;
+
+  getCodexHeaderFitLines().forEach(line => {
+    if (!line.dataset.codexBaseFontSize) {
+      line.dataset.codexBaseFontSize = String(parseFloat(getComputedStyle(line).fontSize) || 16);
+    }
+
+    const baseFontSize = Number(line.dataset.codexBaseFontSize) || 16;
+    line.style.fontSize = `${baseFontSize}px`;
+    line.style.whiteSpace = "nowrap";
+
+    const lineWidth = line.scrollWidth;
+    if (lineWidth <= availableWidth) return;
+
+    const nextFontSize = Math.max(10, baseFontSize * (availableWidth / lineWidth));
+    line.style.fontSize = `${nextFontSize}px`;
+  });
+}
+
+window.addEventListener("resize", function () {
+  requestAnimationFrame(fitCodexHeaderText);
+});
 
 function getCodexBreadcrumbLabel(label) {
   if (label === "Points of Interest") return "POIs";
@@ -78,6 +124,20 @@ function renderCodexBreadcrumbItem(crumb, isLast) {
   `;
 }
 
+function renderCodexMobileBreadcrumbItem(crumb, isLast, className = "") {
+  const labelClass = className ? ` class="${className}"` : "";
+
+  return `
+    ${crumb.clickable && !isLast
+      ? `<button class="codex-breadcrumb-button ${className}" type="button" onclick="${crumb.onclick}">
+          ${escapeHtml(crumb.label)}
+        </button>`
+      : `<span${labelClass}>${escapeHtml(crumb.label)}</span>`
+    }
+    ${!isLast ? `<span class="codex-breadcrumb-separator">/</span>` : ""}
+  `;
+}
+
 function renderCodexBreadcrumbs(breadcrumbs = []) {
   const breadcrumbsEl = document.getElementById("codex-breadcrumbs");
   if (!breadcrumbsEl) return;
@@ -96,20 +156,28 @@ function renderCodexBreadcrumbs(breadcrumbs = []) {
     ))
     .join("");
 
-  const mobileCrumbs = displayCrumbs.slice(-2);
+  const leadingMobileCrumbs = displayCrumbs.length > 2
+    ? displayCrumbs.slice(0, 2)
+    : displayCrumbs.slice(0, -1);
+  const currentMobileCrumb = displayCrumbs[displayCrumbs.length - 1];
 
   const mobileHtml = `
-    ${displayCrumbs.length > 2
-      ? `<span class="codex-breadcrumb-ellipsis">...</span><span class="codex-breadcrumb-separator">/</span>`
-      : ""
-    }
-
-    ${mobileCrumbs
-      .map((crumb, index) => renderCodexBreadcrumbItem(
+    ${leadingMobileCrumbs
+      .map((crumb, index) => renderCodexMobileBreadcrumbItem(
         crumb,
-        index === mobileCrumbs.length - 1
+        false,
+        "codex-breadcrumb-fixed"
       ))
       .join("")}
+
+    ${currentMobileCrumb
+      ? renderCodexMobileBreadcrumbItem(
+        currentMobileCrumb,
+        true,
+        "codex-breadcrumb-current"
+      )
+      : ""
+    }
   `;
 
   breadcrumbsEl.innerHTML = `
@@ -208,6 +276,7 @@ function prepareCodexNavigation() {
 function openCodexPage(type = "index", id = null, options = {}) {
   const shouldPush = options.push !== false;
   const state = options.state || {};
+  const wasOpen = getCodexOverlay().classList.contains("open");
 
   prepareCodexNavigation();
 
@@ -222,7 +291,16 @@ function openCodexPage(type = "index", id = null, options = {}) {
   const currentPage = getCurrentCodexPage();
   applyCodexHistoryEntryState(currentPage);
   renderCodexPage(type, id);
+  fitCodexHeaderText();
   updateCodexBackButton();
+
+  if (
+    wasOpen &&
+    shouldPush &&
+    typeof pushAppBrowserHistoryStep === "function"
+  ) {
+    pushAppBrowserHistoryStep();
+  }
 }
 
 function openCodexSearchResults(query, options = {}) {
@@ -238,6 +316,7 @@ function openCodexSearchResults(query, options = {}) {
     prepareCodexNavigation();
     replaceCurrentCodexHistory("search", null, { query: cleanQuery });
     renderCodexPage("search", null);
+    fitCodexHeaderText();
     updateCodexBackButton();
     return;
   }
@@ -278,6 +357,7 @@ function restoreCodexLiveSearchReturnPage() {
   syncCodexDesktopPersistentSearchInput("");
 
   renderCodexPage(returnPage.type, returnPage.id);
+  fitCodexHeaderText();
   updateCodexBackButton();
 }
 
@@ -314,6 +394,7 @@ function goBackCodex() {
 
   applyCodexHistoryEntryState(previous);
   renderCodexPage(previous.type, previous.id);
+  fitCodexHeaderText();
   updateCodexBackButton();
 }
 
@@ -346,12 +427,14 @@ function renderCodexPage(type, id) {
       <p>The records could not be gathered.</p>
       <p>Please refresh the page and consult the Codex again.</p>
     `);
+    fitCodexHeaderText();
     return;
   }
 
   if (!db) {
     setCodexTitle("The Codex of Kadesh");
     setCodexContent(`<p>The records are still being gathered...</p>`);
+    fitCodexHeaderText();
     return;
   }
 
@@ -372,6 +455,10 @@ function renderCodexPage(type, id) {
 function renderCodexIndex() {
   setCodexTitle("The Codex of Kadesh");
   renderCodexBreadcrumbs([]);
+
+  clearCodexMobileUtility?.();
+  resetCodexMobileListState?.();
+  codexSearchActiveGroup = "all";
 
   codexSearchQuery = "";
   syncCodexDesktopPersistentSearchInput("");
@@ -418,6 +505,8 @@ function renderCodexIndex() {
       </button>
     </div>
   `;
+
+  requestAnimationFrame(fitCodexHeaderText);
 }
 
 function openCodexMobileControls() {
@@ -443,3 +532,4 @@ window.goBackCodex = goBackCodex;
 window.resetCodexToIndex = resetCodexToIndex;
 window.openCodexMobileControls = openCodexMobileControls;
 window.closeCodexMobileControls = closeCodexMobileControls;
+window.fitCodexHeaderText = fitCodexHeaderText;

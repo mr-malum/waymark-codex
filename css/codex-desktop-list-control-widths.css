@@ -1,0 +1,120 @@
+/* =========================================================
+   DESKTOP LIST FILTER CONTROL WIDTH LOCK
+   =========================================================
+
+   Targeted desktop-only hardening for the dynamic POI/NPC/Hex filter rails.
+   Mobile filter controls are intentionally untouched; mobile owns the same
+   moved DOM under .codex-mobile-list-controls-mount.
+
+   The important fix here is #codex-list-controls-home. The mobile utility
+   introduced that wrapper inside the desktop rail, and because it was an
+   auto-sized flex child, the rail controls could still shrink/grow according
+   to the currently selected option text even when the inner controls were
+   given percentage widths.
+*/
+
+@media (hover: hover) and (pointer: fine) {
+  #codex-content.codex-list-page .codex-list-control-rail,
+  #codex-content.codex-list-page .codex-list-control-rail * {
+    box-sizing: border-box !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail {
+    inline-size: var(--codex-rail-width, 190px) !important;
+    min-inline-size: var(--codex-rail-width, 190px) !important;
+    max-inline-size: var(--codex-rail-width, 190px) !important;
+    width: var(--codex-rail-width, 190px) !important;
+    min-width: var(--codex-rail-width, 190px) !important;
+    max-width: var(--codex-rail-width, 190px) !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail > #codex-list-controls-home {
+    inline-size: 100% !important;
+    width: 100% !important;
+    min-inline-size: 0 !important;
+    min-width: 0 !important;
+    max-inline-size: 100% !important;
+    max-width: 100% !important;
+    flex: 0 1 var(--codex-rail-width, 190px) !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-list-controls-shell,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-mobile-controls-panel,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-mobile-controls-panel > .codex-filter-row,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-filter-row,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-label {
+    inline-size: 100% !important;
+    width: 100% !important;
+    min-inline-size: 0 !important;
+    min-width: 0 !important;
+    max-inline-size: 100% !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-filter-row {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-label {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail select,
+  #codex-content.codex-list-page .codex-list-control-rail button.codex-sort-direction {
+    min-inline-size: 0 !important;
+    min-width: 0 !important;
+    max-inline-size: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail select.codex-filter-field-select,
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter > select.codex-filter-field-select {
+    display: block !important;
+    inline-size: 66.666% !important;
+    width: 66.666% !important;
+    min-inline-size: 0 !important;
+    min-width: 0 !important;
+    max-inline-size: 66.666% !important;
+    max-width: 66.666% !important;
+    flex: 0 0 auto !important;
+    align-self: flex-start !important;
+    justify-self: start !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-dynamic-filter > select:not(.codex-filter-field-select),
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-label > select {
+    display: block !important;
+    inline-size: 100% !important;
+    width: 100% !important;
+    min-inline-size: 0 !important;
+    min-width: 0 !important;
+    max-inline-size: 100% !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    align-self: stretch !important;
+    justify-self: stretch !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-rail .codex-sort-topline {
+    inline-size: 100% !important;
+    width: 100% !important;
+    min-inline-size: 0 !important;
+    min-width: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: center !important;
+  }
+}

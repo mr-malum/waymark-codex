@@ -1,0 +1,332 @@
+We are working on my Kadesh Codex / map web app repo.
+
+Repository:
+mr-malum/kadesh-codex
+
+Current branch:
+desktop-mobile-parity
+
+Important branch context:
+I merged the previous completed desktop UX/image-system work into main, then recreated/reused the same branch name `desktop-mobile-parity` as a fresh post-merge working branch. Treat all prior completed work as baseline/main-equivalent unless the repo says otherwise.
+
+Project direction:
+We are now moving into a mobile overhaul / mobile parity refinement pass. Desktop UX is currently in a good stable place and should not be broken while iterating.
+
+============================================================
+SUMMARY CHANGELOG FROM THE PREVIOUS CHAT
+============================================================
+
+Major desktop/Codex changes completed:
+
+1. Desktop/mobile map popup parity
+- Deprecated the old desktop `#app-panel` behavior.
+- Kept the old app panel code in the repo for now, but it is no longer the active interaction path.
+- Desktop hex clicks now use the same Leaflet popup/preview-card style as mobile.
+- Popup uses the existing map preview/card flow.
+- Details from popup opens the relevant Codex detail page.
+- This was done for consistency and to simplify map interaction logic.
+
+2. Codex glyph/icon cleanup
+- Kept Maps, Hexes, and NPCs mostly as-is.
+- POIs use `◎`.
+- Regions use `✥`.
+- Search uses the mirrored/overridden `⌕`.
+- Lore uses `▤`.
+- The glyph overrides were committed into the main files.
+- Future possibility: replace glyphs with SVG icons, but not now.
+
+3. Left page pseudo-manuscript / pseudo-language system
+- Added decorative pseudo-language text to the left Codex page.
+- It generates from syllable fragments and occasional marks.
+- Syllables can combine into word-like clusters, sometimes with apostrophes/hyphens.
+- Random seed generation happens per Codex page render.
+- It should not regenerate on every search input keystroke.
+- Search page should generate once when results page opens and again when navigating away, not per character.
+- Mark fragments are pulled less often than syllable fragments.
+- Text was made more visible, multi-column, and less slanted.
+- Safe-area placement was adjusted leftward to stay in the ink-safe left-page area.
+
+4. Google Drive image resolver / asset system
+- Added Codex asset resolver support.
+- Image fields can contain:
+  - Google Drive file IDs
+  - Google Drive share links
+  - normal relative paths / URLs
+- Supported/future-friendly fields include:
+  - `Image_File_ID`
+  - `Image`
+  - `Image_URL`
+  - `Region_Image_File_ID`
+  - `POI_Image_File_ID`
+  - `POI_Group_Image_File_ID`
+  - `NPC_Image_File_ID`
+  - `Portrait_File_ID`
+  - `Map_Image_File_ID`
+- Google Drive images resolve to:
+  `https://drive.google.com/thumbnail?id=FILE_ID&sz=w1600`
+- Map/image click targets use the thumbnail URL, not the Drive shell page.
+- Blank image fields use normal placeholders.
+- Broken/unavailable images show missing indicators:
+  - `Image unavailable`
+  - `Map unavailable`
+  - `Map not recorded`
+
+5. Detail/record images
+- NPC images use `contain` so full portraits show.
+- Map images use `contain`.
+- POI/POI group/region scenic images use `cover`.
+- Region index tiles remain more scenic/tile-like.
+- Resolved images are rendered as real image layers above placeholders.
+- For contain images, JS calculates rendered image dimensions so the edge fade follows the actual image bounds rather than the entire container.
+- The separate outlines/borders around images were removed/suppressed; edge transparency itself is the only intended “outline.”
+- A cleanup stylesheet was added to suppress slot backgrounds once real images load.
+
+6. Map tile visual polish
+- Map tiles were made to more closely match region tiles.
+- Added stronger bottom transparency fade.
+- Added region-tile-style title glow/stroke.
+- Map tile text/lower title treatment was adjusted.
+
+7. Image modal
+- Clicking resolved Codex images now opens an in-page modal instead of a new tab.
+- The modal was first tried with `Mobile_Panel.png`, then simplified to no panel background because the image looked better clean.
+- Current modal:
+  - clean image-first presentation
+  - subtle down/right shadow
+  - close button floating close to the image edge
+  - backdrop click closes
+  - Escape closes
+  - scroll wheel zooms
+  - keyboard zoom:
+    - `+` / `=` zoom in
+    - `-` zoom out
+    - `0` reset
+  - drag-to-pan when zoomed
+  - panning constrained inside modal viewport/frame
+  - cursor changes to grab/grabbing when zoomed
+  - map groups get circular left/right cycling
+  - arrow keys cycle left/right through map group images
+- Image modal controls may need additional mobile-specific refinement later.
+
+8. Breadcrumb fix
+- Hex detail pages now include the missing breadcrumb layer:
+  `Codex › Hexes › Hex [ID]`
+- Clicking `Hexes` should return to the Hexes index.
+- A syntax break caused by an accidental literal `\n` in `js/codex-detail-pages.js` was fixed.
+
+9. Desktop sanity checks completed by me
+The following were checked and seemed good:
+- console/navigation stability
+- breadcrumb paths
+- image modal edge cases
+- search result behavior
+- deprecated app panel not interfering
+
+10. Asset/CSS cleanup
+- Moved the large injected asset-state style block out of `js/codex-assets.js`.
+- Added real stylesheet:
+  `css/codex-assets.css`
+- Loaded it in `index.html`.
+- Removed runtime style injection from `codex-assets.js`.
+- Removed old `window.open(...)` click/keyboard behavior from `codex-assets.js` because `codex-image-modal.js` owns image opening now.
+- Left resolver/hydrator behavior intact.
+
+============================================================
+MOBILE LAYOUT OVERHAUL REQUIREMENTS
+============================================================
+
+General:
+- Work from the ground up for scalability across devices, resolutions, and viewports like we did with the main desktop Codex.
+- Treat mobile as a separate layout mode, not just a smaller desktop Codex.
+- Keep desktop behavior untouched while iterating.
+- Avoid patching random desktop rules unless absolutely necessary.
+- Prefer mobile-specific CSS files or clearly scoped media blocks.
+
+Mobile background/assets:
+- Replace mobile Codex background with:
+  `../assets/codex/Mobile_Codex.png`
+- Replace modal/popout background with:
+  `../assets/codex/Mobile_Panel.png`
+  only where it makes sense.
+- Note: the current image modal intentionally removed its panel background because clean image display looked better. For mobile, use `Mobile_Panel.png` only if it improves usability.
+
+Core mobile layout goals:
+- one-column flow
+- large tap targets
+- minimal persistent chrome
+- no left-page utility pane dependency
+- no hover-dependent interactions
+- no tiny multi-column controls
+- avoid fixed-height traps unless an inner pane is intentionally scrollable
+- use viewport-safe sizing:
+  - `dvh` / `svh` where useful
+  - `clamp()`
+  - `min()` / `max()`
+  - safe-area insets where needed
+
+Codex shell:
+- Mobile Codex should use `Mobile_Codex.png`.
+- Confirm it scales cleanly across:
+  - small phones
+  - large phones
+  - tablets
+  - portrait
+  - landscape
+- Account for browser UI bars on mobile Safari/Chrome.
+
+Navbar/navigation:
+- Navbar controls still include:
+  - Back
+  - Search
+  - Close
+- Keep these visible and thumb-accessible.
+- Back behavior should match desktop history stack behavior exactly.
+
+Mobile search:
+- Search button opens a text input prompt/state.
+- No live results on mobile.
+- Search should render a dedicated full results page, not a modal popup.
+- Back behavior should preserve search flow:
+  - Search → display results → click result → detail page → Back returns to the previous search results page
+  - original input should remain intact
+  - ideally remember scroll position in result list
+- Results page on mobile should be a dedicated rendered Codex page.
+- Modal popup should be reserved for filters, not search results.
+
+Search/filter distinction:
+- Search results = full rendered page.
+- Filter/sort controls = modal/panel popup.
+- Modal popups in general should primarily be for:
+  - filter controls
+  - sort controls
+  - anything that would be displayed in the left utility pane on desktop
+- Modal popups should not become primary content pages.
+
+Indexes/lists:
+- For list items, either remove all metadata or find a compact way to include it without sacrificing too much space.
+- Removing all metadata is not ideal, but better than cramped unreadable mobile rows.
+- Preferred mobile row/card structure:
+  - primary title line
+  - one compact secondary line
+  - count badge or tiny icon chips only where useful
+- Avoid wrapping metadata into tall rows unless it is essential.
+
+Detail pages:
+- Desktop rail navigation will not fit as-is.
+- Replace desktop rail with one of:
+  - stacked sections
+  - collapsible accordions
+  - sticky section selector
+  - compact “jump to” control
+- Overview should appear first.
+- Images should remain tappable into the image modal.
+- Long lore/journal fields need comfortable mobile reading/scroll behavior.
+
+Image modal mobile:
+- Make sure image zoom/cycle buttons are constrained to fit inside the viewport.
+- Current desktop modal already supports:
+  - wheel zoom
+  - drag-to-pan
+  - circular map cycling
+  - keyboard controls
+- Mobile-specific touch controls to consider:
+  - drag-to-pan when zoomed
+  - pinch-to-zoom eventually
+  - explicit left/right buttons first
+  - maybe swipe left/right to cycle maps only when not panning/zoomed
+- Avoid controls being hidden under browser gesture areas or notches.
+- Respect `safe-area-inset-*`.
+
+Map popup parity:
+- Mobile and desktop now share the Leaflet popup/preview card direction.
+- Do not revive `#app-panel` unless intentionally reversing that architecture.
+- Core flow should remain:
+  Hex popup → Details → Codex detail page.
+
+Suggested development order:
+1. Establish mobile Codex shell/background and viewport sizing.
+2. Fix navbar control placement and tap sizing.
+3. Convert mobile search to full-page results flow.
+4. Adapt indexes/list rows for mobile density.
+5. Adapt detail pages/rail sections for mobile.
+6. Polish image modal controls for mobile.
+7. Final pass on tablet/landscape edge cases.
+
+Most important architectural warning:
+Do not start with tiny visual tweaks. Start by defining the mobile shell and navigation model, then let each page type adapt into it. That prevents the mobile overhaul from turning into a pile of emergency media-query overrides.
+
+============================================================
+FUTURE TENTPOLE GOALS AFTER MOBILE OVERHAUL
+============================================================
+
+1. AppScript / write functionality
+Eventually we want frontend write functionality through Google Apps Script:
+- add/edit records from frontend
+- write back to the Google Sheet database
+- upload images from the frontend
+- place uploaded images into the correct Google Drive subfolder
+- capture the Drive file ID
+- write that image/file ID back into the correct database row
+- preserve the current image resolver architecture that expects Drive IDs or links
+
+2. Drive image folder architecture
+Current rough Drive/database organization:
+- database file lives in a `database` folder
+- images folder contains:
+  - `maps`
+  - `records`
+- inside `records`:
+  - `npcs`
+  - `poi-groups`
+  - `pois`
+  - `regions`
+- inside `maps`:
+  - similar categories, but no `npcs`
+- Sheet currently uses image fields that may contain Drive IDs directly.
+- Keep this architecture in mind for future write/upload features.
+
+3. Internal image modal refinement
+Current modal is good enough for desktop, but later:
+- maybe build a richer in-Codex image viewer
+- pinch zoom
+- smoother pan
+- better mobile gesture support
+- maybe captions/titles
+- maybe map gallery controls/counts
+- maybe modal should use a panel asset for certain content types but not normal image viewing
+
+4. SVG/icon future
+Current Unicode glyphs are acceptable.
+Future possible pass:
+- replace section icons/glyphs with custom SVGs
+- make them scalable/themeable
+- keep the current glyph system as fallback
+
+5. Larger architecture cleanup
+Later, after mobile:
+- consolidate some visual override CSS files if they become stable
+- consider moving more render helpers into focused modules
+- avoid giant monolithic files if the app keeps growing
+- but do not restructure destructively; Gemini previously attempted a skeleton rewrite and stripped too much
+
+6. Database/Codex functionality expansion
+Longer-term direction is to make this feel like an AppSheet-like campaign atlas:
+- searchable database over map
+- linked records
+- image-backed detail pages
+- maps associated with records
+- frontend record editing/creation eventually
+- possibly better filter/sort UX
+- eventually more robust POI groups / nested areas / region relationships
+
+============================================================
+IMMEDIATE NEXT TASK
+============================================================
+
+Start mobile overhaul on the fresh post-merge `desktop-mobile-parity` branch.
+
+First step should probably be:
+- inspect current mobile CSS and Codex shell structure
+- establish a clean mobile layout foundation using `Mobile_Codex.png`
+- keep desktop untouched
+- then proceed through the mobile development order above.

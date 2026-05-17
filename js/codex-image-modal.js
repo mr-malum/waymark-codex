@@ -14,7 +14,16 @@ const codexImageModalState = {
   panStartX: 0,
   panStartY: 0,
   panOriginX: 0,
-  panOriginY: 0
+  panOriginY: 0,
+  activePointers: new Map(),
+  isPinching: false,
+  pinchStartDistance: 0,
+  pinchStartScale: 1,
+  pinchStartPanX: 0,
+  pinchStartPanY: 0,
+  pinchCenterX: 0,
+  pinchCenterY: 0,
+  lastTapTime: 0
 };
 
 function ensureCodexImageModal() {
@@ -44,6 +53,7 @@ function ensureCodexImageModal() {
       <div class="codex-image-modal-frame">
         <img class="codex-image-modal-img" alt="">
       </div>
+      <div class="codex-image-modal-counter" aria-live="polite"></div>
       <button
         class="codex-image-modal-nav codex-image-modal-next"
         type="button"
@@ -79,6 +89,12 @@ function ensureCodexImageModal() {
 
   document.body.appendChild(modal);
   return modal;
+}
+
+function isCodexImageModalOpen() {
+  return document
+    .getElementById("codex-image-modal")
+    ?.classList.contains("open") || false;
 }
 
 function getCodexImageModalImage() {
@@ -129,7 +145,19 @@ function applyCodexImageModalTransform() {
 
   image.style.transform = `translate(${codexImageModalState.panX}px, ${codexImageModalState.panY}px) scale(${codexImageModalState.scale})`;
   image.classList.toggle("zoomed", codexImageModalState.scale > 1.01);
-  image.classList.toggle("panning", codexImageModalState.isPanning);
+  image.classList.toggle("panning", codexImageModalState.isPanning || codexImageModalState.isPinching);
+}
+
+function getCodexImageModalFramePoint(clientX, clientY) {
+  const image = getCodexImageModalImage();
+  const frame = image?.closest(".codex-image-modal-frame");
+  if (!frame) return { x: 0, y: 0 };
+
+  const frameRect = frame.getBoundingClientRect();
+  return {
+    x: clientX - frameRect.left - frameRect.width / 2,
+    y: clientY - frameRect.top - frameRect.height / 2
+  };
 }
 
 function setCodexImageModalScale(value, anchorEvent = null) {
@@ -137,18 +165,11 @@ function setCodexImageModalScale(value, anchorEvent = null) {
   const newScale = clampCodexImageModalScale(value);
 
   if (anchorEvent && oldScale > 0 && newScale !== oldScale) {
-    const image = getCodexImageModalImage();
-    const frame = image?.closest(".codex-image-modal-frame");
+    const point = getCodexImageModalFramePoint(anchorEvent.clientX, anchorEvent.clientY);
+    const zoomRatio = newScale / oldScale;
 
-    if (image && frame) {
-      const frameRect = frame.getBoundingClientRect();
-      const offsetX = anchorEvent.clientX - frameRect.left - frameRect.width / 2;
-      const offsetY = anchorEvent.clientY - frameRect.top - frameRect.height / 2;
-      const zoomRatio = newScale / oldScale;
-
-      codexImageModalState.panX = offsetX - (offsetX - codexImageModalState.panX) * zoomRatio;
-      codexImageModalState.panY = offsetY - (offsetY - codexImageModalState.panY) * zoomRatio;
-    }
+    codexImageModalState.panX = point.x - (point.x - codexImageModalState.panX) * zoomRatio;
+    codexImageModalState.panY = point.y - (point.y - codexImageModalState.panY) * zoomRatio;
   }
 
   codexImageModalState.scale = newScale;
@@ -166,6 +187,8 @@ function resetCodexImageModalScale() {
   codexImageModalState.panX = 0;
   codexImageModalState.panY = 0;
   codexImageModalState.isPanning = false;
+  codexImageModalState.isPinching = false;
+  codexImageModalState.activePointers.clear();
   applyCodexImageModalTransform();
 }
 
@@ -194,6 +217,14 @@ function updateCodexImageModalNav() {
     button.hidden = !hasMultiple;
     button.disabled = !hasMultiple;
   });
+
+  const counter = modal.querySelector(".codex-image-modal-counter");
+  if (counter) {
+    counter.hidden = !hasMultiple;
+    counter.textContent = hasMultiple
+      ? `${codexImageModalState.index + 1} / ${codexImageModalState.sources.length}`
+      : "";
+  }
 }
 
 function stepCodexImageModal(delta) {
@@ -267,6 +298,7 @@ function openCodexImageModal(srcOrOptions) {
 
   modal.classList.add("open");
   modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("codex-image-modal-open");
 
   setCodexImageModalImage(codexImageModalState.index);
 
@@ -279,6 +311,7 @@ function closeCodexImageModal() {
 
   modal.classList.remove("open");
   modal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("codex-image-modal-open");
 
   const image = modal.querySelector(".codex-image-modal-img");
   if (image) {
@@ -293,6 +326,8 @@ function closeCodexImageModal() {
   codexImageModalState.panX = 0;
   codexImageModalState.panY = 0;
   codexImageModalState.isPanning = false;
+  codexImageModalState.isPinching = false;
+  codexImageModalState.activePointers.clear();
   updateCodexImageModalNav();
 
   if (codexImageModalLastFocus?.focus) {
@@ -308,6 +343,86 @@ function getCodexImageModalTriggerFromTarget(target) {
   return trigger;
 }
 
+function getCodexPointerDistance(a, b) {
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+
+function getCodexPointerCenter(a, b) {
+  return {
+    clientX: (a.clientX + b.clientX) / 2,
+    clientY: (a.clientY + b.clientY) / 2
+  };
+}
+
+function getCodexImageModalPointerList() {
+  return [...codexImageModalState.activePointers.values()];
+}
+
+function startCodexImageModalPinch() {
+  const pointers = getCodexImageModalPointerList();
+  if (pointers.length < 2) return;
+
+  const [a, b] = pointers;
+  const center = getCodexPointerCenter(a, b);
+  const point = getCodexImageModalFramePoint(center.clientX, center.clientY);
+
+  codexImageModalState.isPinching = true;
+  codexImageModalState.isPanning = false;
+  codexImageModalState.pinchStartDistance = Math.max(1, getCodexPointerDistance(a, b));
+  codexImageModalState.pinchStartScale = codexImageModalState.scale;
+  codexImageModalState.pinchStartPanX = codexImageModalState.panX;
+  codexImageModalState.pinchStartPanY = codexImageModalState.panY;
+  codexImageModalState.pinchCenterX = point.x;
+  codexImageModalState.pinchCenterY = point.y;
+
+  applyCodexImageModalTransform();
+}
+
+function updateCodexImageModalPinch() {
+  const pointers = getCodexImageModalPointerList();
+  if (!codexImageModalState.isPinching || pointers.length < 2) return;
+
+  const [a, b] = pointers;
+  const currentDistance = Math.max(1, getCodexPointerDistance(a, b));
+  const nextScale = clampCodexImageModalScale(
+    codexImageModalState.pinchStartScale * (currentDistance / codexImageModalState.pinchStartDistance)
+  );
+
+  const center = getCodexPointerCenter(a, b);
+  const currentPoint = getCodexImageModalFramePoint(center.clientX, center.clientY);
+  const zoomRatio = nextScale / codexImageModalState.pinchStartScale;
+
+  codexImageModalState.scale = nextScale;
+  codexImageModalState.panX = currentPoint.x - (codexImageModalState.pinchCenterX - codexImageModalState.pinchStartPanX) * zoomRatio;
+  codexImageModalState.panY = currentPoint.y - (codexImageModalState.pinchCenterY - codexImageModalState.pinchStartPanY) * zoomRatio;
+
+  if (codexImageModalState.scale <= 1.01) {
+    codexImageModalState.panX = 0;
+    codexImageModalState.panY = 0;
+  }
+
+  applyCodexImageModalTransform();
+}
+
+function handleCodexImageModalDoubleTap(event) {
+  const now = Date.now();
+  const elapsed = now - codexImageModalState.lastTapTime;
+  codexImageModalState.lastTapTime = now;
+
+  if (elapsed > 280) return false;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (codexImageModalState.scale > 1.01) {
+    resetCodexImageModalScale();
+  } else {
+    setCodexImageModalScale(2.2, event);
+  }
+
+  return true;
+}
+
 function bindCodexImageModalPanEvents(modal) {
   const image = modal.querySelector(".codex-image-modal-img");
   if (!image || image.dataset.codexPanBound === "true") return;
@@ -315,10 +430,27 @@ function bindCodexImageModalPanEvents(modal) {
   image.dataset.codexPanBound = "true";
 
   image.addEventListener("pointerdown", event => {
-    if (codexImageModalState.scale <= 1.01) return;
+    if (!isCodexImageModalOpen()) return;
 
     event.preventDefault();
+    event.stopPropagation();
     image.setPointerCapture?.(event.pointerId);
+
+    codexImageModalState.activePointers.set(event.pointerId, {
+      clientX: event.clientX,
+      clientY: event.clientY
+    });
+
+    if (codexImageModalState.activePointers.size >= 2) {
+      startCodexImageModalPinch();
+      return;
+    }
+
+    if (event.pointerType === "touch" && handleCodexImageModalDoubleTap(event)) {
+      return;
+    }
+
+    if (codexImageModalState.scale <= 1.01) return;
 
     codexImageModalState.isPanning = true;
     codexImageModalState.panStartX = event.clientX;
@@ -330,18 +462,52 @@ function bindCodexImageModalPanEvents(modal) {
   });
 
   image.addEventListener("pointermove", event => {
-    if (!codexImageModalState.isPanning) return;
+    if (!isCodexImageModalOpen()) return;
+    if (!codexImageModalState.activePointers.has(event.pointerId)) return;
 
     event.preventDefault();
+    event.stopPropagation();
+
+    codexImageModalState.activePointers.set(event.pointerId, {
+      clientX: event.clientX,
+      clientY: event.clientY
+    });
+
+    if (codexImageModalState.isPinching) {
+      updateCodexImageModalPinch();
+      return;
+    }
+
+    if (!codexImageModalState.isPanning) return;
+
     codexImageModalState.panX = codexImageModalState.panOriginX + event.clientX - codexImageModalState.panStartX;
     codexImageModalState.panY = codexImageModalState.panOriginY + event.clientY - codexImageModalState.panStartY;
     applyCodexImageModalTransform();
   });
 
   ["pointerup", "pointercancel", "lostpointercapture"].forEach(eventName => {
-    image.addEventListener(eventName, () => {
-      if (!codexImageModalState.isPanning) return;
-      codexImageModalState.isPanning = false;
+    image.addEventListener(eventName, event => {
+      codexImageModalState.activePointers.delete(event.pointerId);
+
+      if (codexImageModalState.activePointers.size < 2) {
+        codexImageModalState.isPinching = false;
+      }
+
+      if (codexImageModalState.activePointers.size === 0) {
+        codexImageModalState.isPanning = false;
+        applyCodexImageModalTransform();
+        return;
+      }
+
+      if (codexImageModalState.scale > 1.01) {
+        const pointer = getCodexImageModalPointerList()[0];
+        codexImageModalState.isPanning = true;
+        codexImageModalState.panStartX = pointer.clientX;
+        codexImageModalState.panStartY = pointer.clientY;
+        codexImageModalState.panOriginX = codexImageModalState.panX;
+        codexImageModalState.panOriginY = codexImageModalState.panY;
+      }
+
       applyCodexImageModalTransform();
     });
   });
@@ -415,5 +581,6 @@ window.addEventListener("resize", () => {
 
 window.openCodexImageModal = openCodexImageModal;
 window.closeCodexImageModal = closeCodexImageModal;
+window.isCodexImageModalOpen = isCodexImageModalOpen;
 window.stepCodexImageModal = stepCodexImageModal;
 window.setCodexImageModalScale = setCodexImageModalScale;

@@ -113,22 +113,16 @@ function bindCodexEvents() {
     .getElementById("codex-search-button")
     .addEventListener("click", openCodexGlobalSearchModal);
 
+  document
+    .getElementById("codex-mobile-debug-toggle")
+    ?.addEventListener("click", toggleCodexDebugGuides);
+
   bindCodexDesktopPersistentSearch();
 
   document
     .getElementById("codex-back")
     .addEventListener("click", function () {
-      if (isMobileBrowserBackEnabled() && appBrowserHistoryDepth > 0) {
-        history.back();
-        return;
-      }
-
-      if (codexHistory.length <= 1) {
-        closeCodex();
-        return;
-      }
-
-      goBackCodex();
+      handleCodexBackAction();
     });
 
   document
@@ -138,6 +132,47 @@ function bindCodexEvents() {
         closeCodex();
       }
     });
+}
+
+function isCodexGlobalSearchModalOpen() {
+  return document
+    .getElementById("codex-global-search-modal")
+    ?.classList.contains("open") || false;
+}
+
+function closeTopCodexLayer() {
+  if (isCodexGlobalSearchModalOpen()) {
+    closeCodexGlobalSearchModal();
+    return true;
+  }
+
+  if (typeof isCodexImageModalOpen === "function" && isCodexImageModalOpen()) {
+    closeCodexImageModal();
+    return true;
+  }
+
+  if (document.getElementById("codex-mobile-utility-panel")?.classList.contains("open")) {
+    closeCodexMobileUtilityPanel?.();
+    return true;
+  }
+
+  return false;
+}
+
+function handleCodexBackAction() {
+  if (closeTopCodexLayer()) return;
+
+  if (isMobileBrowserBackEnabled() && appBrowserHistoryDepth > 0) {
+    history.back();
+    return;
+  }
+
+  if (codexHistory.length > 1) {
+    goBackCodex();
+    return;
+  }
+
+  closeCodex();
 }
 
 function isDesktopCodexBookLayout() {
@@ -232,6 +267,8 @@ function openCodexGlobalSearchModal() {
   modal.classList.add("open");
   modal.setAttribute("aria-hidden", "false");
 
+  const currentQuery = String(codexSearchQuery || "");
+
   modal.innerHTML = `
     <div class="codex-global-search-panel" role="dialog" aria-modal="true" aria-label="Search the Codex">
       <input
@@ -239,18 +276,20 @@ function openCodexGlobalSearchModal() {
         type="search"
         placeholder="Consult the Codex..."
         autocomplete="off"
-        value=""
+        value="${escapeHtml(currentQuery)}"
       >
     </div>
   `;
 
   const input = document.getElementById("codex-global-search-input");
   input?.focus();
+  input?.select?.();
 
   input?.addEventListener("keydown", function (event) {
     if (event.key !== "Enter") return;
 
     event.preventDefault();
+    input.blur();
     commitCodexGlobalSearch(input.value);
   });
 }
@@ -259,6 +298,7 @@ function commitCodexGlobalSearch(query) {
   const cleanQuery = String(query || "").trim();
   if (!cleanQuery) return;
 
+  document.activeElement?.blur?.();
   closeCodexGlobalSearchModal();
   openCodexSearchResults(cleanQuery);
 }
@@ -345,13 +385,25 @@ function isAppPanelOpen() {
     ?.classList.contains("open");
 }
 
-function ensureAppBrowserBackTrap() {
+function pushAppBrowserHistoryState() {
   if (!isMobileBrowserBackEnabled()) return;
 
+  appBrowserHistoryDepth += 1;
+  history.pushState({ kadeshApp: true }, "");
+}
+
+function ensureAppBrowserBackTrap() {
+  if (!isMobileBrowserBackEnabled()) return;
   if (appBrowserHistoryDepth > 0) return;
 
-  appBrowserHistoryDepth = 1;
-  history.pushState({ appPanelTrap: true }, "");
+  pushAppBrowserHistoryState();
+}
+
+function pushAppBrowserHistoryStep() {
+  if (!isMobileBrowserBackEnabled()) return;
+  if (!isCodexOpen()) return;
+
+  pushAppBrowserHistoryState();
 }
 
 function releaseAppBrowserBackTrap() {
@@ -363,10 +415,12 @@ function releaseAppBrowserBackTrap() {
 
   if (appBrowserHistoryDepth <= 0) return;
 
-  appBrowserHistoryReleaseCount += 1;
-  appBrowserHistoryDepth -= 1;
+  const stepsToRelease = appBrowserHistoryDepth;
 
-  history.back();
+  appBrowserHistoryReleaseCount += stepsToRelease;
+  appBrowserHistoryDepth = 0;
+
+  history.go(-stepsToRelease);
 }
 
 window.addEventListener("popstate", function () {
@@ -379,7 +433,16 @@ window.addEventListener("popstate", function () {
     appBrowserHistoryDepth -= 1;
   }
 
+  if (closeTopCodexLayer()) {
+    return;
+  }
+
   if (isCodexOpen()) {
+    if (codexHistory.length > 1) {
+      goBackCodex();
+      return;
+    }
+
     closeCodex({ syncHistory: false });
     return;
   }
@@ -427,10 +490,13 @@ function initializeApp() {
   bindMapEvents();
   bindPanelEvents();
   bindCodexEvents();
+  initializeCodexMobileUtility?.();
   bindCodexLongPressEvents();
   bindKeyboardEasterEggEvents();
 
   loadDatabase();
 }
+
+window.pushAppBrowserHistoryStep = pushAppBrowserHistoryStep;
 
 initializeApp();

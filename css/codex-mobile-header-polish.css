@@ -1,0 +1,118 @@
+/* =========================================================
+   MOBILE CODEX HEADER POLISH
+   =========================================================
+
+   Mirrors the desktop header treatment on mobile: centered title,
+   left/right flourishes, and a centered divider line.
+*/
+
+@media (hover: none) and (pointer: coarse), (max-width: 700px) {
+  #codex-overlay #codex-header {
+    display: grid !important;
+    grid-template-columns: minmax(22px, 1fr) minmax(0, auto) minmax(22px, 1fr) !important;
+    align-items: center !important;
+    justify-items: center !important;
+    column-gap: clamp(8px, calc(var(--codex-mobile-image-width) * 0.025), 18px) !important;
+
+    padding: 0 clamp(8px, calc(var(--codex-mobile-image-width) * 0.035), 24px) !important;
+    overflow: visible !important;
+  }
+
+  #codex-overlay #codex-header::before,
+  #codex-overlay #codex-header::after {
+    content: "" !important;
+    position: static !important;
+    display: block !important;
+
+    width: min(100%, clamp(34px, calc(var(--codex-mobile-image-width) * 0.18), 116px)) !important;
+    height: clamp(11px, calc(var(--codex-mobile-image-width) * 0.03), 24px) !important;
+    margin: 0 !important;
+
+    background-image: url("../assets/codex/Header_Flourish_L.svg") !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: contain !important;
+
+    opacity: 0.62 !important;
+    pointer-events: none !important;
+  }
+
+  #codex-overlay #codex-header::before {
+    transform: none !important;
+  }
+
+  #codex-overlay #codex-header::after {
+    transform: scaleX(-1) !important;
+  }
+
+  #codex-overlay #codex-title {
+    grid-column: 2 !important;
+    position: relative !important;
+
+    max-width: min(100%, calc(var(--codex-mobile-image-width) * 0.56)) !important;
+    margin: 0 !important;
+
+    font-size: clamp(1.12rem, calc(var(--codex-mobile-image-width) * 0.056), 2rem) !important;
+    line-height: 1.04 !important;
+    letter-spacing: clamp(0.08em, 1vw, 0.14em) !important;
+    text-align: center !important;
+
+    white-space: nowrap !important;
+    overflow: visible !important;
+    overflow-wrap: normal !important;
+    text-wrap: nowrap;
+  }
+
+  #codex-overlay #codex-title > div,
+  #codex-overlay #codex-title .codex-superheader,
+  #codex-overlay #codex-title .codex-mainheader,
+  #codex-overlay #codex-title .codex-subheader {
+    display: block !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    overflow-wrap: normal !important;
+    text-wrap: nowrap;
+  }
+
+  #codex-overlay #codex-title::after {
+    content: "" !important;
+    position: absolute !important;
+    left: 50% !important;
+    bottom: clamp(-10px, calc(var(--codex-mobile-image-width) * -0.018), -6px) !important;
+
+    width: min(118%, calc(var(--codex-mobile-image-width) * 0.62)) !important;
+    height: 1px !important;
+
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(72, 43, 18, 0.6),
+      transparent
+    ) !important;
+
+    opacity: 0.8 !important;
+    transform: translateX(-50%) !important;
+    pointer-events: none !important;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (max-width: 420px), (max-width: 420px) {
+  #codex-overlay #codex-header {
+    grid-template-columns: minmax(14px, 0.8fr) minmax(0, auto) minmax(14px, 0.8fr) !important;
+    column-gap: 7px !important;
+    padding-inline: 6px !important;
+  }
+
+  #codex-overlay #codex-header::before,
+  #codex-overlay #codex-header::after {
+    width: min(100%, clamp(24px, calc(var(--codex-mobile-image-width) * 0.14), 64px)) !important;
+    opacity: 0.56 !important;
+  }
+
+  #codex-overlay #codex-title {
+    max-width: min(100%, calc(var(--codex-mobile-image-width) * 0.64)) !important;
+    font-size: clamp(1rem, calc(var(--codex-mobile-image-width) * 0.052), 1.55rem) !important;
+    letter-spacing: 0.08em !important;
+  }
+}

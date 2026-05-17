@@ -1,0 +1,48 @@
+@media (max-width: 1099px), (max-height: 699px) {
+  #codex-content.codex-list-page {
+    overflow: hidden !important;
+    padding-bottom: 0 !important;
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-page-shell {
+    height: 100% !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    gap: 10px !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-list-page .codex-mobile-list-summary {
+    margin: 0 0 2px !important;
+    padding: 4px 2px 8px !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-control-split-view {
+    height: 100% !important;
+    min-height: 0 !important;
+    display: block !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-scroll-shell {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  #codex-content.codex-list-page .codex-list-scroll-shell.codex-scroll-fade {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%) !important;
+    mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%) !important;
+    -webkit-mask-size: 100% 100% !important;
+    mask-size: 100% 100% !important;
+    -webkit-mask-repeat: no-repeat !important;
+    mask-repeat: no-repeat !important;
+  }
+}

@@ -25,6 +25,22 @@
   <link rel="stylesheet" href="css/codex-image-modal.css">
   <link rel="stylesheet" href="css/codex-image-edge-cleanup.css">
   <link rel="stylesheet" href="css/mobile.css">
+  <link rel="stylesheet" href="css/codex-mobile-foundation.css">
+  <link rel="stylesheet" href="css/codex-mobile-nav-cluster.css">
+  <link rel="stylesheet" href="css/codex-mobile-breadcrumbs.css">
+  <link rel="stylesheet" href="css/codex-mobile-search-cleanup.css">
+  <link rel="stylesheet" href="css/codex-mobile-utility.css">
+  <link rel="stylesheet" href="css/codex-mobile-header-polish.css">
+  <link rel="stylesheet" href="css/codex-mobile-regions.css">
+  <link rel="stylesheet" href="css/codex-mobile-list-utility.css">
+  <link rel="stylesheet" href="css/codex-mobile-list-content-fade.css">
+  <link rel="stylesheet" href="css/codex-mobile-detail-sections.css">
+  <link rel="stylesheet" href="css/codex-mobile-detail-content.css">
+  <link rel="stylesheet" href="css/codex-mobile-home.css">
+  <link rel="stylesheet" href="css/codex-mobile-tap-highlight.css">
+  <link rel="stylesheet" href="css/codex-mobile-landscape-blocker.css">
+  <link rel="stylesheet" href="css/codex-desktop-normalization.css">
+  <link rel="stylesheet" href="css/codex-desktop-list-control-widths.css">
 </head>
 
 <body>
@@ -34,6 +50,16 @@
 
 <div id="map-reset-button" role="button" aria-label="Center Map"></div>
 <div id="codex-button" role="button" aria-label="Open Codex"></div>
+
+<div id="codex-mobile-landscape-blocker" aria-hidden="true">
+  <div class="codex-mobile-landscape-card">
+    <div class="codex-mobile-landscape-icon" aria-hidden="true">ROTATE</div>
+    <h1 class="codex-mobile-landscape-title">Use Portrait</h1>
+    <p class="codex-mobile-landscape-copy">
+      Rotate your device to continue using the Codex.
+    </p>
+  </div>
+</div>
 
 <div id="codex-overlay" class="closed">
   <div id="codex-modal">
@@ -77,6 +103,18 @@
         <div id="codex-breadcrumbs"></div>
 
         <div class="codex-control-cluster" aria-label="Codex controls">
+          <button
+            id="codex-mobile-page-control"
+            type="button"
+            hidden
+          ></button>
+
+          <button
+            id="codex-mobile-debug-toggle"
+            type="button"
+            aria-label="Toggle mobile layout guides"
+          >Guides</button>
+
           <button id="codex-back" type="button" disabled aria-label="Back">❮</button>
           <button id="codex-search-button" type="button">Search</button>
           <button id="codex-close" type="button" aria-label="Close">✕</button>
@@ -114,17 +152,28 @@
 <script src="js/map-ui.js"></script>
 <script src="js/codex-icons.js"></script>
 <script src="js/codex-core.js"></script>
+<script src="js/codex-header-fit-scope.js"></script>
 <script src="js/codex-render.js"></script>
 <script src="js/codex-labels.js"></script>
 <script src="js/codex-query.js"></script>
 <script src="js/codex-detail-pages.js"></script>
+<script src="js/codex-region-terrain-section.js"></script>
+<script src="js/codex-detail-normalization.js"></script>
+<script src="js/codex-detail-section-state.js"></script>
 <script src="js/codex-assets.js"></script>
 <script src="js/codex-list-pages.js"></script>
 <script src="js/codex-list-config.js"></script>
 <script src="js/codex-search-page.js"></script>
+<script src="js/codex-mobile-search-cleanup.js"></script>
+<script src="js/codex-mobile-utility.js"></script>
+<script src="js/codex-mobile-list-utility.js"></script>
+<script src="js/codex-mobile-detail-sections.js"></script>
+<script src="js/codex-mobile-detail-content.js"></script>
+<script src="js/codex-mobile-button-state-cleanup.js"></script>
 <script src="js/codex-left-manuscript.js"></script>
 <script src="js/codex-pages.js"></script>
 <script src="js/codex-image-modal.js"></script>
+<script src="js/codex-image-modal-swipe.js"></script>
 <script src="js/app-events.js"></script>
 
 </body>

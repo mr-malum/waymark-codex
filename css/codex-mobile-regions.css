@@ -1,0 +1,24 @@
+/* =========================================================
+   MOBILE REGIONS INDEX
+   ========================================================= */
+
+@media (max-width: 1099px), (max-height: 699px) {
+  #codex-content.codex-regions-index .codex-region-tile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: clamp(10px, calc(var(--codex-mobile-image-width) * 0.028), 16px) !important;
+  }
+
+  #codex-content.codex-regions-index .codex-region-tile {
+    min-width: 0;
+  }
+
+  #codex-content.codex-regions-index .codex-region-tile-name {
+    font-size: clamp(0.78rem, calc(var(--codex-mobile-image-width) * 0.032), 1.02rem);
+    line-height: 1.1;
+  }
+
+  #codex-content.codex-regions-index .codex-region-tile-details {
+    font-size: clamp(0.68rem, calc(var(--codex-mobile-image-width) * 0.026), 0.86rem);
+    line-height: 1.15;
+  }
+}

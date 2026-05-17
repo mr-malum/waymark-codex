@@ -156,12 +156,36 @@ const npcCodexListConfig = {
 };
 
 const hexCodexListConfig = {
+  fieldOptions: [
+    { value: "Region", label: "Region" },
+    { value: "Terrain", label: "Terrain" }
+  ],
+
+  filters: [
+    {
+      id: "codex-hex-filter-1-value",
+      fieldId: "codex-hex-filter-1-field",
+      label: "Region",
+      fieldValue: "Region",
+      selectedValue: "all"
+    },
+    {
+      id: "codex-hex-filter-2-value",
+      fieldId: "codex-hex-filter-2-field",
+      label: "Terrain",
+      fieldValue: "Terrain",
+      selectedValue: "all"
+    }
+  ],
+
   sortId: "codex-hex-sort",
   directionId: "codex-hex-direction",
   selectedSort: "hex-id",
 
   sortOptions: [
     { value: "hex-id", label: "Hex ID" },
+    { value: "region", label: "Region" },
+    { value: "terrain", label: "Terrain" },
     { value: "poi-count", label: "POI Count" },
     { value: "npc-count", label: "NPC Count" }
   ],
@@ -173,6 +197,10 @@ const hexCodexListConfig = {
       { numeric: true, sensitivity: "base" }
     ),
 
+    region: compareByTextThenName(row => getHexRegionLabel(row)),
+
+    terrain: compareByTextThenName(row => row.Terrain),
+
     "poi-count": compareByNumberThenName(row =>
       getHexCounts(row.Hex_ID).poiCount
     ),
@@ -180,5 +208,29 @@ const hexCodexListConfig = {
     "npc-count": compareByNumberThenName(row =>
       getHexCounts(row.Hex_ID).npcCount
     )
-  }
+  },
+
+  bindControls: () => bindCodexListControls({
+    filters: [
+      {
+        fieldId: "codex-hex-filter-1-field",
+        valueId: "codex-hex-filter-1-value",
+        updateOptions: () => updateHexFilterValueOptions(
+          "codex-hex-filter-1-field",
+          "codex-hex-filter-1-value"
+        )
+      },
+      {
+        fieldId: "codex-hex-filter-2-field",
+        valueId: "codex-hex-filter-2-value",
+        updateOptions: () => updateHexFilterValueOptions(
+          "codex-hex-filter-2-field",
+          "codex-hex-filter-2-value"
+        )
+      }
+    ],
+    sortId: "codex-hex-sort",
+    directionId: "codex-hex-direction",
+    render: renderHexListIntoContainer
+  })
 };

@@ -1,0 +1,99 @@
+/* =========================================================
+   MOBILE DETAIL SECTIONS
+   ========================================================= */
+
+@media (max-width: 1099px), (max-height: 699px) {
+  #codex-content.codex-detail-page .codex-detail-rail {
+    display: none !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-page,
+  #codex-content.codex-detail-page .codex-detail-lower-pane {
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-lower-pane {
+    display: block !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-main {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section {
+    display: none !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    margin-bottom: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section.active {
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section > h3 {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 8px 0 8px !important;
+    text-align: center !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section > h3::before {
+    content: none !important;
+    display: none !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section > h3::after {
+    content: "" !important;
+    display: block !important;
+    width: min(72%, 360px) !important;
+    height: 1px !important;
+    margin: 7px auto 0 !important;
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(72, 43, 18, 0.65),
+      transparent
+    ) !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section-content {
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 4px 0 0 !important;
+    -webkit-overflow-scrolling: touch !important;
+
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 18px), transparent 100%) !important;
+    mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 18px), transparent 100%) !important;
+    -webkit-mask-size: 100% 100% !important;
+    mask-size: 100% 100% !important;
+    -webkit-mask-repeat: no-repeat !important;
+    mask-repeat: no-repeat !important;
+  }
+
+  .codex-mobile-detail-section-picker {
+    margin: 0 !important;
+  }
+
+  .codex-mobile-detail-section-row {
+    min-height: 48px !important;
+  }
+}

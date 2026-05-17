@@ -1,0 +1,99 @@
+/* =========================================================
+   MOBILE LANDSCAPE PORTRAIT BLOCKER
+   ========================================================= */
+
+#codex-mobile-landscape-blocker {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 699px) and (pointer: coarse) {
+  #codex-mobile-landscape-blocker {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    padding:
+      max(24px, env(safe-area-inset-top, 0px))
+      max(24px, env(safe-area-inset-right, 0px))
+      max(24px, env(safe-area-inset-bottom, 0px))
+      max(24px, env(safe-area-inset-left, 0px));
+
+    background:
+      radial-gradient(circle at center, rgba(246, 232, 196, 0.92), rgba(219, 188, 132, 0.96) 62%, rgba(47, 29, 16, 0.96));
+
+    color: #2f1d10;
+    text-align: center;
+
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #codex-mobile-landscape-blocker::before {
+    content: "";
+    position: absolute;
+    inset: max(14px, 3vw);
+
+    border: 1px solid rgba(72, 43, 18, 0.38);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 242, 210, 0.22),
+      0 14px 34px rgba(0, 0, 0, 0.32);
+
+    pointer-events: none;
+  }
+
+  .codex-mobile-landscape-card {
+    position: relative;
+    z-index: 1;
+
+    width: min(560px, 86vw);
+    display: grid;
+    gap: 12px;
+
+    font-family: 'Spectral', Georgia, serif;
+  }
+
+  .codex-mobile-landscape-icon {
+    font-family: 'Marcellus SC', Georgia, serif;
+    font-size: clamp(2.6rem, 10vh, 4.8rem);
+    line-height: 1;
+    opacity: 0.9;
+  }
+
+  .codex-mobile-landscape-title {
+    margin: 0;
+
+    font-family: 'Marcellus SC', Georgia, serif;
+    font-size: clamp(1.25rem, 5vh, 2.2rem);
+    line-height: 1.05;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .codex-mobile-landscape-title::after {
+    content: "";
+    display: block;
+    width: min(72%, 320px);
+    height: 1px;
+    margin: 12px auto 0;
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(72, 43, 18, 0.65),
+      transparent
+    );
+  }
+
+  .codex-mobile-landscape-copy {
+    margin: 0 auto;
+    max-width: 32em;
+
+    font-size: clamp(0.98rem, 3.4vh, 1.26rem);
+    line-height: 1.35;
+  }
+}

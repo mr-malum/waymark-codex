@@ -1,0 +1,122 @@
+/* =========================================================
+   CODEX MOBILE UTILITY PANEL
+   ========================================================= */
+
+@media (max-width: 1099px), (max-height: 699px) {
+  .codex-mobile-utility-panel {
+    position: absolute;
+    inset: 0;
+    z-index: 10030;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    box-sizing: border-box;
+
+    background: rgba(24, 13, 5, 0.18);
+    backdrop-filter: blur(0.8px);
+
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+
+  .codex-mobile-utility-panel.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .codex-mobile-utility-sheet {
+    position: relative;
+    isolation: isolate;
+
+    width: min(calc(100vw - 28px), 440px);
+    max-width: calc(100vw - 28px);
+    max-height: min(78dvh, 620px);
+
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 12px;
+
+    box-sizing: border-box;
+    padding: clamp(26px, 7vw, 38px) clamp(22px, 6vw, 34px);
+
+    color: #2f1d10;
+  }
+
+  .codex-mobile-utility-sheet::before {
+    content: "";
+    position: absolute;
+    inset: -36px -28px;
+    z-index: -1;
+
+    background-image: url("../assets/codex/Mobile_Panel.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 100% 100%;
+
+    opacity: 0.96;
+    pointer-events: none;
+  }
+
+  .codex-mobile-utility-heading h3 {
+    margin: 0;
+
+    font-family: 'Marcellus SC', Georgia, serif;
+    font-size: clamp(1.02rem, 5vw, 1.28rem);
+    line-height: 1.15;
+    text-align: center;
+    letter-spacing: 0.06em;
+  }
+
+  .codex-mobile-utility-body {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+
+    display: grid;
+    gap: 9px;
+  }
+
+  .codex-mobile-utility-close,
+  .codex-mobile-utility-option {
+    appearance: none;
+    -webkit-appearance: none;
+
+    min-height: 46px;
+    box-sizing: border-box;
+    padding: 8px 12px;
+
+    border: 1px solid rgba(72, 43, 18, 0.24);
+    border-radius: 4px;
+
+    background: rgba(246, 232, 196, 0.52);
+    color: #2f1d10;
+
+    font-family: 'Marcellus SC', Georgia, serif;
+    font-size: 0.96rem;
+    line-height: 1;
+    letter-spacing: 0.035em;
+    text-align: center;
+  }
+
+  .codex-mobile-utility-option.is-active {
+    background: rgba(94, 55, 22, 0.14);
+    border-color: rgba(72, 43, 18, 0.42);
+    font-weight: 600;
+  }
+
+  .codex-mobile-utility-close {
+    justify-self: center;
+    min-width: 120px;
+  }
+}
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  .codex-mobile-utility-panel {
+    display: none !important;
+  }
+}
