@@ -1,0 +1,46 @@
+/* =========================================================
+   MOBILE DETAIL SECTIONS
+   ========================================================= */
+
+@media (max-width: 1099px), (max-height: 699px) {
+  #codex-content.codex-detail-page .codex-detail-rail {
+    display: none !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-page,
+  #codex-content.codex-detail-page .codex-detail-lower-pane {
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-lower-pane {
+    display: block !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-main {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 0 0 24px !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section {
+    display: none !important;
+    min-height: 100% !important;
+    margin-bottom: 0 !important;
+  }
+
+  #codex-content.codex-detail-page .codex-detail-rail-section.active {
+    display: block !important;
+  }
+
+  .codex-mobile-detail-section-picker {
+    margin: 0 !important;
+  }
+
+  .codex-mobile-detail-section-row {
+    min-height: 48px !important;
+  }
+}
