@@ -39,41 +39,6 @@ function setCodexHexStackedHeader(hexId) {
   requestAnimationFrame(() => fitCodexHeaderText?.());
 }
 
-function getCodexDirectChildByClass(parent, className) {
-  if (!parent) return null;
-  return Array.from(parent.children).find(child => child.classList?.contains(className)) || null;
-}
-
-function injectCodexMobileLoreOverview() {
-  const loreContent = document.querySelector("#codex-detail-lore .codex-detail-rail-section-content");
-  if (!loreContent || loreContent.querySelector(".codex-mobile-lore-overview")) return;
-
-  const fixedOverview = document.querySelector(".codex-detail-overview-locked .codex-detail-fixed");
-  const image = fixedOverview?.querySelector(".codex-detail-portrait-slot")?.cloneNode(true) || null;
-  const meta = getCodexDirectChildByClass(fixedOverview, "codex-detail-meta")?.cloneNode(true) || null;
-
-  if (!image && !meta) return;
-
-  const wrapper = document.createElement("div");
-  wrapper.className = "codex-mobile-lore-overview";
-
-  const grid = document.createElement("div");
-  grid.className = "codex-mobile-lore-overview-grid";
-
-  if (image) {
-    image.classList.add("codex-mobile-lore-overview-image");
-    grid.appendChild(image);
-  }
-
-  if (meta) {
-    meta.classList.add("codex-mobile-lore-overview-meta");
-    grid.appendChild(meta);
-  }
-
-  wrapper.appendChild(grid);
-  loreContent.prepend(wrapper);
-}
-
 function installCodexPoiGroupAreasSectionPatch() {
   if (typeof renderCodexDetailRailPage !== "function") return;
   if (renderCodexDetailRailPage.__mobileAreasSectionPatched) return;
@@ -160,12 +125,9 @@ function initializeCodexMobileDetailContent() {
   installCodexPoiGroupAreasSectionPatch();
 
   patchCodexMobileDetailContentRenderer("renderCodexHexPage", setCodexHexStackedHeader);
-  patchCodexMobileDetailContentRenderer("renderCodexRegionPage", injectCodexMobileLoreOverview);
-  patchCodexMobileDetailContentRenderer("renderCodexPoiPage", injectCodexMobileLoreOverview);
-  patchCodexMobileDetailContentRenderer("renderCodexNpcPage", injectCodexMobileLoreOverview);
   patchCodexMobileDetailContentRenderer(
     "renderCodexPoiGroupPage",
-    injectCodexMobileLoreOverview,
+    null,
     function (groupId) {
       codexPoiGroupAreasContext = {
         pois: getPoisForGroup(groupId)
