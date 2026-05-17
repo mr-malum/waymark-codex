@@ -53,6 +53,7 @@ function ensureCodexImageModal() {
       <div class="codex-image-modal-frame">
         <img class="codex-image-modal-img" alt="">
       </div>
+      <div class="codex-image-modal-counter" aria-live="polite"></div>
       <button
         class="codex-image-modal-nav codex-image-modal-next"
         type="button"
@@ -216,6 +217,14 @@ function updateCodexImageModalNav() {
     button.hidden = !hasMultiple;
     button.disabled = !hasMultiple;
   });
+
+  const counter = modal.querySelector(".codex-image-modal-counter");
+  if (counter) {
+    counter.hidden = !hasMultiple;
+    counter.textContent = hasMultiple
+      ? `${codexImageModalState.index + 1} / ${codexImageModalState.sources.length}`
+      : "";
+  }
 }
 
 function stepCodexImageModal(delta) {
