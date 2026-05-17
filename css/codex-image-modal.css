@@ -2,6 +2,10 @@
    CODEX IMAGE POPOUT MODAL
    ========================================================= */
 
+body.codex-image-modal-open {
+  overscroll-behavior: none;
+}
+
 .codex-image-modal {
   position: fixed;
   inset: 0;
@@ -15,6 +19,9 @@
   pointer-events: none;
 
   transition: opacity 160ms ease;
+
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 .codex-image-modal.open {
@@ -47,6 +54,9 @@
   box-sizing: border-box;
 
   isolation: isolate;
+
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 .codex-image-modal-panel::before {
@@ -65,6 +75,7 @@
 
   overflow: hidden;
   touch-action: none;
+  overscroll-behavior: none;
 }
 
 .codex-image-modal-img {
@@ -82,7 +93,10 @@
   transform-origin: center;
   transition: transform 80ms ease-out;
   user-select: none;
+  -webkit-user-select: none;
   -webkit-user-drag: none;
+  touch-action: none;
+  overscroll-behavior: none;
 
   box-shadow:
     12px 14px 22px rgba(0, 0, 0, 0.42),
@@ -171,9 +185,9 @@
 
 @media (max-width: 700px) {
   .codex-image-modal-panel {
-    width: 88vw;
-    height: 78vh;
-    height: 78dvh;
+    width: 92vw;
+    height: 80vh;
+    height: 80dvh;
   }
 
   .codex-image-modal-close {
