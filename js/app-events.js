@@ -134,7 +134,18 @@ function bindCodexEvents() {
     });
 }
 
+function isCodexGlobalSearchModalOpen() {
+  return document
+    .getElementById("codex-global-search-modal")
+    ?.classList.contains("open") || false;
+}
+
 function closeTopCodexLayer() {
+  if (isCodexGlobalSearchModalOpen()) {
+    closeCodexGlobalSearchModal();
+    return true;
+  }
+
   if (typeof isCodexImageModalOpen === "function" && isCodexImageModalOpen()) {
     closeCodexImageModal();
     return true;
