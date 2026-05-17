@@ -116,15 +116,14 @@ body.codex-image-modal-open {
 }
 
 .codex-image-modal-close,
-.codex-image-modal-nav {
+.codex-image-modal-nav,
+.codex-image-modal-counter {
   position: absolute;
   z-index: 3;
 
   display: flex;
   align-items: center;
   justify-content: center;
-
-  padding: 0;
 
   border: 1px solid rgba(72, 43, 18, 0.26);
   border-radius: 999px;
@@ -135,11 +134,15 @@ body.codex-image-modal-open {
   font-family: 'Marcellus SC', Georgia, serif;
   line-height: 1;
 
-  cursor: pointer;
-
   box-shadow:
     5px 6px 10px rgba(0, 0, 0, 0.36),
     inset 0 1px 0 rgba(255, 242, 210, 0.28);
+}
+
+.codex-image-modal-close,
+.codex-image-modal-nav {
+  padding: 0;
+  cursor: pointer;
 }
 
 .codex-image-modal-close {
@@ -161,6 +164,25 @@ body.codex-image-modal-open {
 
   font-size: 2rem;
   font-weight: 700;
+}
+
+.codex-image-modal-counter {
+  left: 50%;
+  bottom: clamp(-42px, -4.2vh, -28px);
+  transform: translateX(-50%);
+
+  min-width: 54px;
+  height: 28px;
+  padding: 0 12px;
+
+  font-size: 0.82rem;
+  letter-spacing: 0.055em;
+
+  pointer-events: none;
+}
+
+.codex-image-modal-counter[hidden] {
+  display: none;
 }
 
 .codex-image-modal-prev {
@@ -193,6 +215,10 @@ body.codex-image-modal-open {
   .codex-image-modal-close {
     top: -42px;
     right: -4px;
+  }
+
+  .codex-image-modal-counter {
+    bottom: calc(-38px - env(safe-area-inset-bottom, 0px));
   }
 
   .codex-image-modal-nav {
