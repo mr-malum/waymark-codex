@@ -40,6 +40,7 @@ window.addEventListener("campaign-authenticated", () => {
 
 const map = L.map("map", {
   crs: L.CRS.Simple,
+  zoomControl: false,
   minZoom: -3,
   maxZoom: 0,
   maxBoundsViscosity: 0.5

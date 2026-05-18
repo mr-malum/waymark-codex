@@ -36,13 +36,36 @@
 <div id="parchment-bg"></div>
 <div id="map"></div>
 
+  <div id="campaign-settings-shell" class="campaign-settings-shell hidden">
+  <button
+    id="campaign-settings-button"
+    type="button"
+    aria-haspopup="true"
+    aria-expanded="false"
+  >⚙</button>
+
+  <div id="campaign-settings-menu" class="campaign-settings-menu hidden" role="dialog" aria-modal="true" aria-labelledby="campaign-settings-title">
+    <h2 id="campaign-settings-title">Settings</h2>
+    <div class="campaign-settings-actions">
+      <button id="campaign-settings-guides-button" type="button">Guides</button>
+      <button id="campaign-settings-signout-button" type="button">Sign Out</button>
+    </div>
+    <button id="campaign-settings-close-button" type="button">Close</button>
+  </div>
+</div>
+
 <div id="campaign-auth-gate" class="campaign-auth-gate" aria-live="polite">
   <div class="campaign-auth-card">
     <p class="campaign-auth-kicker">Campaign Codex</p>
     <h1 id="campaign-auth-title">Sign in</h1>
     <p id="campaign-auth-copy">Enter your account details to open your campaigns.</p>
 
-    <form id="campaign-auth-form">
+    <div id="campaign-auth-tabs" class="campaign-auth-tabs">
+      <button id="campaign-auth-tab-signin" type="button" class="active">Sign In</button>
+      <button id="campaign-auth-tab-signup" type="button">Create Account</button>
+    </div>
+
+    <form id="campaign-auth-signin-form">
       <label>
         <span>Email</span>
         <input id="campaign-auth-email" type="email" autocomplete="email" required>
@@ -53,10 +76,48 @@
         <input id="campaign-auth-password" type="password" autocomplete="current-password" required>
       </label>
 
-      <button id="campaign-auth-submit" type="submit">Open Codex</button>
+      <button id="campaign-auth-submit" type="submit">Open Campaigns</button>
+    </form>
+
+    <form id="campaign-auth-signup-form" hidden>
+      <label>
+        <span>Username</span>
+        <input id="campaign-signup-username" type="text" autocomplete="username" required>
+      </label>
+
+      <label>
+        <span>Email</span>
+        <input id="campaign-signup-email" type="email" autocomplete="email" required>
+      </label>
+
+      <label>
+        <span>Password</span>
+        <input id="campaign-signup-password" type="password" autocomplete="new-password" required>
+      </label>
+
+      <button id="campaign-signup-submit" type="submit">Create Account</button>
     </form>
 
     <p id="campaign-auth-status" class="campaign-auth-status" role="status"></p>
+  </div>
+</div>
+
+<div id="campaign-picker-gate" class="campaign-picker-gate hidden" aria-live="polite">
+  <div class="campaign-picker-card">
+    <div class="campaign-picker-header">
+      <p class="campaign-auth-kicker">Campaign Codex</p>
+      <h1>Choose a Campaign</h1>
+    </div>
+
+    <p id="campaign-picker-welcome"></p>
+    <div id="campaign-picker-list" class="campaign-picker-list"></div>
+
+    <button id="campaign-create-button" type="button" disabled>
+      Create Campaign
+      <span>Coming later</span>
+    </button>
+
+    <button id="campaign-signout-button" type="button">Sign Out</button>
   </div>
 </div>
 
@@ -120,12 +181,6 @@
             type="button"
             hidden
           ></button>
-
-          <button
-            id="codex-mobile-debug-toggle"
-            type="button"
-            aria-label="Toggle mobile layout guides"
-          >Guides</button>
 
           <button id="codex-back" type="button" disabled aria-label="Back">❮</button>
           <button id="codex-search-button" type="button">Search</button>
