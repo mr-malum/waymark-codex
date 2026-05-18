@@ -285,15 +285,30 @@ async function bootstrapCampaignSession() {
 async function handleCampaignAuthSubmit(event) {
   event.preventDefault();
 
-  const email = document.getElementById("campaign-auth-email")?.value.trim();
+  const identifier = document.getElementById("campaign-auth-identifier")?.value.trim();
   const password = document.getElementById("campaign-auth-password")?.value;
 
-  if (!email || !password) return;
+  if (!identifier || !password) return;
 
   setCampaignAuthBusy(true);
   setCampaignAuthStatus("Signing in...");
 
   try {
+    let email = identifier;
+
+    if (!identifier.includes("@")) {
+      const { data, error: resolveError } = await campaignSupabase.rpc("resolve_login_email_by_username", {
+        target_username: identifier
+      });
+
+      if (resolveError) throw resolveError;
+      email = data || "";
+    }
+
+    if (!email) {
+      throw new Error("Invalid login credentials");
+    }
+
     const { error } = await campaignSupabase.auth.signInWithPassword({
       email,
       password
@@ -328,7 +343,10 @@ async function handleCampaignSignupSubmit(event) {
       email,
       password,
       options: {
-        data: { username }
+        data: {
+          username,
+          display_name: username
+        }
       }
     });
 
