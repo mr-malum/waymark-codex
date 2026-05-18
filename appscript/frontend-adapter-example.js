@@ -27,7 +27,16 @@ async function prototypeCreatePoi(fields) {
   return postKadeshWriteback({
     action: "createRecord",
     entityType: "poi",
-    fields
+    fields: {
+      POI_Group_ID: fields.POI_Group_ID || "",
+      Name: fields.Name || "",
+      Hex_ID_Ref: fields.Hex_ID_Ref || "",
+      POI_Type: fields.POI_Type || "",
+      "Notoriety Tier": fields["Notoriety Tier"] || "",
+      Population: fields.Population || "",
+      Lore: fields.Lore || "",
+      Image: fields.Image || ""
+    }
   });
 }
 
@@ -37,6 +46,35 @@ async function prototypeUpdatePoi(id, fields) {
     entityType: "poi",
     id,
     fields
+  });
+}
+
+async function prototypeCreateNpc(fields) {
+  return postKadeshWriteback({
+    action: "createRecord",
+    entityType: "npc",
+    fields: {
+      Home_ID_Ref: fields.Home_ID_Ref || "",
+      Title: fields.Title || "",
+      Name: fields.Name || "",
+      Organization: fields.Organization || "",
+      Race: fields.Race || "",
+      Occupation: fields.Occupation || "",
+      Lore: fields.Lore || "",
+      Image: fields.Image || ""
+    }
+  });
+}
+
+async function prototypeCreateJournalEntry({ sourceType, sourceId, entryType = "note", body, sessionId = "", visibility = "dm" }) {
+  return postKadeshWriteback({
+    action: "createDmJournalEntry",
+    sourceType,
+    sourceId,
+    entryType,
+    body,
+    sessionId,
+    visibility
   });
 }
 
@@ -52,18 +90,18 @@ async function fileToBase64(file) {
   });
 }
 
-async function prototypeUploadPoiImageAndLink(poiId, file) {
+async function prototypeUploadImageAndLink(entityType, id, file) {
   return postKadeshWriteback({
     action: "uploadAndLinkFile",
-    entityType: "poi",
+    entityType,
     file: {
       name: file.name,
       mimeType: file.type,
       base64: await fileToBase64(file)
     },
     linkTo: {
-      entityType: "poi",
-      id: poiId
+      entityType,
+      id
     }
   });
 }
