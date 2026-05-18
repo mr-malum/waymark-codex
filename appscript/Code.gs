@@ -72,7 +72,18 @@ function withWriteLock_(fn) {
 function handleCreateRecord_(payload, actor) {
   const validated = validateCreatePayload_(payload);
   const entity = validated.entity;
-  const id = generateNextId_(entity);
+  const id = entity.manualId
+    ? sanitizeString_(validated.fields[entity.idField])
+    : generateNextId_(entity);
+
+  if (!id) {
+    throw new Error(`${entity.idField} is required for ${entity.label}.`);
+  }
+
+  if (entityIdExists_(entity, id)) {
+    throw new Error(`${entity.label} already exists with ${entity.idField}: ${id}`);
+  }
+
   const fields = Object.assign({}, validated.fields, {
     [entity.idField]: id
   });
