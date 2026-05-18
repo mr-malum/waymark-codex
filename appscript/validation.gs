@@ -134,7 +134,7 @@ function validateJournalPayload_(payload) {
       Entry_Type: payload.entryType || "note",
       Entry_Body: payload.body,
       Session_ID: payload.sessionId || "",
-      Player_Visible: payload.playerVisible === true ? "TRUE" : "FALSE"
+      Visibility: payload.visibility || (payload.playerVisible === true ? "player" : "dm")
     }
   };
 
