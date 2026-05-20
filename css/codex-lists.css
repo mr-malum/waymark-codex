@@ -119,7 +119,98 @@
   min-height: 0;
 
   display: flex;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.codex-audit-rail-block {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-height: 48%;
+  overflow: auto;
+  margin-top: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(70, 47, 24, 0.28);
+}
+
+.codex-audit-rail-heading {
+  cursor: default;
+}
+
+.codex-audit-index-button {
+  width: calc(100% - 8px);
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  margin: 0 4px 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(70, 47, 24, 0.34);
+  background: rgba(255, 249, 235, 0.45);
+  color: #26190f;
+  font-family: "Marcellus SC", serif;
+  cursor: pointer;
+}
+
+.codex-audit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.codex-audit-entry {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid rgba(70, 47, 24, 0.22);
+  background: rgba(255, 249, 235, 0.34);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.codex-audit-entry strong {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.codex-audit-entry span,
+.codex-audit-empty {
+  margin: 0;
+  color: rgba(47, 29, 16, 0.72);
+  font-size: 0.72rem;
+}
+
+.codex-audit-metadata-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 12px 0 0;
+}
+
+.codex-audit-metadata-list dt {
+  font-family: "Marcellus SC", serif;
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.codex-audit-metadata-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-audit-modal-subhead {
+  margin: 12px 0 0;
+  font-family: "Marcellus SC", serif;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .codex-list-controls-shell {

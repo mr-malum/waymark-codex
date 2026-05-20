@@ -253,9 +253,9 @@ function patchCodexMobileDetailRailCapture() {
 
   const originalRenderCodexDetailRailPage = renderCodexDetailRailPage;
 
-  renderCodexDetailRailPage = function (overviewHtml, items, sectionsHtml) {
+  renderCodexDetailRailPage = function (overviewHtml, items, sectionsHtml, auditOptions = {}) {
     codexMobileDetailSectionItems = Array.isArray(items) ? items : [];
-    return originalRenderCodexDetailRailPage(overviewHtml, items, sectionsHtml);
+    return originalRenderCodexDetailRailPage(overviewHtml, items, sectionsHtml, auditOptions);
   };
 
   renderCodexDetailRailPage.__mobileDetailCapturePatched = true;

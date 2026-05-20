@@ -722,6 +722,7 @@ function renderCodexSearchCategoryRail(results) {
         }))
         .join("")}
     </nav>
+    ${renderCodexAuditRailBlock?.() || ""}
   `;
 }
 

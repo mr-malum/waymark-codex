@@ -362,7 +362,11 @@ function renderCodexJournalContent(record) {
   `;
 }
 
-function renderCodexDetailRailPage(overviewHtml, items, sectionsHtml) {
+function renderCodexDetailRailPage(overviewHtml, items, sectionsHtml, auditOptions = {}) {
+  const auditDetail = appendCodexAuditDetailRail?.(items, sectionsHtml, auditOptions) || { items, sectionsHtml };
+  items = auditDetail.items;
+  sectionsHtml = auditDetail.sectionsHtml;
+
   const sectionIds = Array.isArray(items) ? items.map(item => item.id).filter(Boolean) : [];
   const activeSectionId = getCachedCodexDetailSection(sectionIds);
 
@@ -487,7 +491,10 @@ function renderCodexHexPage(hexId) {
     renderCodexDetailRailSection("codex-detail-maps", "Maps", renderCodexMapsContent(maps, "No maps recorded for this hex."), "", false, renderMapSectionActions("hex", hexId, maps))
   ].join("");
 
-  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections), buildCodexBreadcrumbTrail(`Hex ${hexId}`, {
+  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections, {
+    targetType: "hexes",
+    targetId: hex?.__uuid || ""
+  }), buildCodexBreadcrumbTrail(`Hex ${hexId}`, {
     label: "Hexes",
     pageType: "hexes"
   }));
@@ -574,7 +581,10 @@ function renderCodexRegionPage(regionId) {
     renderCodexDetailRailSection("codex-detail-maps", "Maps", renderCodexMapsContent(maps, "No maps recorded for this region."), "", false, renderMapSectionActions("region", regionId, maps))
   ].join("");
 
-  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections), buildCodexBreadcrumbTrail(regionName, {
+  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections, {
+    targetType: "regions",
+    targetId: region?.__uuid || ""
+  }), buildCodexBreadcrumbTrail(regionName, {
     label: "Regions",
     pageType: "regions"
   }));
@@ -708,7 +718,10 @@ function renderCodexPoiPage(poiId) {
     renderCodexDetailRailSection("codex-detail-maps", "Maps", renderCodexMapsContent(maps, "No maps recorded for this location."), "", false, renderMapSectionActions("poi", poiId, maps))
   ].join("");
 
-  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections), buildCodexGroupedPoiBreadcrumbTrail(poiName, group));
+  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections, {
+    targetType: "pois",
+    targetId: poi?.__uuid || ""
+  }), buildCodexGroupedPoiBreadcrumbTrail(poiName, group));
 
   document.getElementById("codex-content").classList.add("codex-detail-page", "codex-poi-detail-page");
 }
@@ -767,7 +780,10 @@ function renderCodexPoiGroupPage(groupId) {
     renderCodexDetailRailSection("codex-detail-maps", "Maps", renderCodexMapsContent(maps, "No maps recorded for this place."), "", false, renderMapSectionActions("poi-group", groupId, maps))
   ].join("");
 
-  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections), buildCodexBreadcrumbTrail(groupName, {
+  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections, {
+    targetType: "poi_groups",
+    targetId: group?.__uuid || ""
+  }), buildCodexBreadcrumbTrail(groupName, {
     label: "Points of Interest",
     pageType: "pois"
   }));
@@ -824,7 +840,10 @@ function renderCodexNpcPage(npcId) {
     renderCodexDetailRailSection("codex-detail-journal", "DM Journal", renderCodexJournalContent(npc), "", false, renderAddJournalAction("npc", npcId))
   ].join("");
 
-  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections), buildCodexBreadcrumbTrail(npcName, {
+  setCodexContent(renderCodexDetailRailPage(overview, railItems, sections, {
+    targetType: "npcs",
+    targetId: npc?.__uuid || ""
+  }), buildCodexBreadcrumbTrail(npcName, {
     label: "NPCs",
     pageType: "npcs"
   }));
@@ -865,6 +884,10 @@ function renderCodexRegionsIndex() {
   setCodexTitle("Regions");
 
   setCodexContent(`
+    ${renderCodexAuditIndexButton?.({
+      title: "Regions Audit",
+      targetTypes: ["regions"]
+    }) || ""}
     <div class="codex-region-tile-grid">
       ${regions.map(renderCodexRegionTile).join("") || `<p>No regions recorded.</p>`}
     </div>

@@ -81,6 +81,22 @@ async function fetchCampaignRows(campaignId) {
   };
 }
 
+async function fetchCampaignAuditRows(campaignId) {
+  if (getActiveCampaign?.()?.currentUserRole !== "owner") return [];
+
+  const { data, error } = await campaignSupabase.rpc("get_campaign_audit_log", {
+    target_campaign_id: campaignId,
+    result_limit: 30
+  });
+
+  if (error) {
+    console.warn("Campaign audit log could not be loaded:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
 async function fetchCampaignAssets(campaignId) {
   const { data, error } = await campaignSupabase
     .from("assets")
@@ -458,6 +474,7 @@ async function loadDatabase() {
   ]);
 
   const appData = adaptCampaignRows(rows, assetsById);
+  appData.auditLog = await fetchCampaignAuditRows(campaign.id);
 
   const dmJournalBySourceKey = hydrateCentralJournal(appData);
 
@@ -471,6 +488,7 @@ async function loadDatabase() {
     poiGroupsById: indexById(appData.poiGroups, "POI_Group_ID"),
     mapsById: indexById(appData.maps, "Map_ID"),
     dmJournalById: indexById(appData.dmJournal, "Entry_ID"),
+    auditLog: appData.auditLog,
 
     poisByHexId: groupBy(appData.pois, "Hex_ID_Ref"),
     npcsByHomeId: groupBy(appData.npcs, "Home_ID_Ref"),

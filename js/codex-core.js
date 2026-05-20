@@ -63,6 +63,13 @@ function setCodexTitle(title) {
   requestAnimationFrame(fitCodexHeaderText);
 }
 
+function getActiveCampaignCodexTitle() {
+  const campaignName = getActiveCampaign?.()?.name?.trim();
+  return campaignName
+    ? `The Codex of ${campaignName}`
+    : "The Codex";
+}
+
 function getCodexHeaderFitLines() {
   const titleEl = getCodexTitle();
   if (!titleEl) return [];
@@ -461,7 +468,7 @@ function renderCodexPage(type, id) {
   maybeRefreshCodexLeftManuscript(type);
 
   if (databaseLoadError) {
-    setCodexTitle("The Codex of Kadesh");
+    setCodexTitle(getActiveCampaignCodexTitle());
     setCodexContent(`
       <p>The records could not be gathered.</p>
       <p>Please refresh the page and consult the Codex again.</p>
@@ -471,7 +478,7 @@ function renderCodexPage(type, id) {
   }
 
   if (!db) {
-    setCodexTitle("The Codex of Kadesh");
+    setCodexTitle(getActiveCampaignCodexTitle());
     setCodexContent(`<p>The records are still being gathered...</p>`);
     fitCodexHeaderText();
     return;
@@ -492,7 +499,7 @@ function renderCodexPage(type, id) {
 }
 
 function renderCodexIndex() {
-  setCodexTitle("The Codex of Kadesh");
+  setCodexTitle(getActiveCampaignCodexTitle());
   renderCodexBreadcrumbs([]);
 
   clearCodexMobileUtility?.();
@@ -560,6 +567,15 @@ function closeCodexMobileControls() {
     .getElementById("codex-list-controls-shell")
     ?.classList.remove("open");
 }
+
+window.addEventListener("campaign-renamed", () => {
+  const overlay = getCodexOverlay();
+  const currentPage = getCurrentCodexPage();
+  if (!overlay?.classList.contains("open") || !currentPage) return;
+
+  renderCodexPage(currentPage.type, currentPage.id);
+  fitCodexHeaderText();
+});
 
 window.openCodex = openCodex;
 window.closeCodex = closeCodex;

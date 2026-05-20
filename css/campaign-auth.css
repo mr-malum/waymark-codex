@@ -223,6 +223,12 @@
   margin: 22px 0;
 }
 
+.campaign-picker-actions {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+}
+
 .campaign-picker-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -246,7 +252,7 @@
 
 .campaign-picker-item,
 .campaign-picker-leave-button,
-#campaign-picker-user-settings-button,
+.campaign-light-button,
 #campaign-create-button,
 #campaign-signout-button {
   cursor: pointer;
@@ -258,21 +264,32 @@
     border-color 120ms ease;
 }
 
-#campaign-picker-user-settings-button {
-  width: 100%;
+.campaign-light-button {
   min-height: 42px;
   margin: 0;
+  padding: 8px 14px;
   border: 1px solid rgba(70, 47, 24, 0.72);
   background: rgba(255, 249, 235, 0.58);
   color: #26190f;
+  letter-spacing: 0.04em;
+}
+
+#campaign-picker-user-settings-button {
+  width: min(220px, 78%);
+}
+
+.campaign-small-button {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 0.86rem;
 }
 
 .campaign-picker-item:hover,
 .campaign-picker-item:focus-visible,
 .campaign-picker-leave-button:hover,
 .campaign-picker-leave-button:focus-visible,
-#campaign-picker-user-settings-button:hover,
-#campaign-picker-user-settings-button:focus-visible,
+.campaign-light-button:hover,
+.campaign-light-button:focus-visible,
 #campaign-create-button:not(:disabled):hover,
 #campaign-create-button:not(:disabled):focus-visible,
 #campaign-signout-button:hover,
@@ -284,7 +301,7 @@
 
 .campaign-picker-item:active,
 .campaign-picker-leave-button:active,
-#campaign-picker-user-settings-button:active,
+.campaign-light-button:active,
 #campaign-create-button:not(:disabled):active,
 #campaign-signout-button:active {
   transform: translateY(1px) scale(0.99);
@@ -333,6 +350,38 @@
   padding: 18px;
   border: 1px dashed rgba(70, 47, 24, 0.5);
   background: rgba(255, 249, 235, 0.32);
+}
+
+.campaign-join-code-form {
+  display: grid;
+  gap: 10px;
+  margin: 0 auto;
+  width: min(320px, 100%);
+}
+
+.campaign-join-code-form label {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+}
+
+.campaign-join-code-form label span {
+  font-family: "Marcellus SC", serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.campaign-join-code-form input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid rgba(70, 47, 24, 0.72);
+  background: rgba(255, 249, 235, 0.72);
+  color: #26190f;
+  font: inherit;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 #campaign-create-button {
@@ -486,6 +535,38 @@
   opacity: 0.72;
 }
 
+.campaign-member-role-select {
+  min-width: 112px;
+  padding: 5px 6px;
+  border: 1px solid rgba(70, 47, 24, 0.5);
+  background: rgba(255, 249, 235, 0.72);
+  color: #26190f;
+  font: inherit;
+  text-transform: capitalize;
+}
+
+.campaign-share-code-role-label {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+}
+
+.campaign-share-code-role-label span {
+  font-family: "Marcellus SC", serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.campaign-share-code-role-label select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(70, 47, 24, 0.72);
+  background: rgba(255, 249, 235, 0.72);
+  color: #26190f;
+  font: inherit;
+}
+
 .campaign-remove-member-button {
   min-height: 30px !important;
   padding: 4px 8px;
@@ -537,7 +618,15 @@
   margin-top: 10px;
 }
 
-#campaign-picker-user-settings-button,
+.campaign-share-code-box {
+  width: 100%;
+  padding: 9px 10px;
+  font-family: "Marcellus SC", serif;
+  font-size: 0.92rem;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
 .campaign-settings-form input,
 .campaign-settings-form select,
 #campaign-add-member-form input,
@@ -561,8 +650,7 @@
 #campaign-open-add-member-button,
 #campaign-manage-back-button,
 #campaign-add-member-back-button,
-#campaign-user-settings-back-button,
-#campaign-picker-user-settings-button {
+#campaign-user-settings-back-button {
   min-height: 42px;
 }
 
@@ -584,6 +672,12 @@
   box-shadow: 0 2px 8px rgba(63, 39, 19, 0.16);
 }
 
+.campaign-settings-menu button.active,
+.campaign-settings-menu button[aria-pressed="true"] {
+  background: rgba(74, 48, 25, 0.94);
+  color: #f7ead1;
+}
+
 .campaign-settings-menu button:active {
   transform: translateY(1px) scale(0.985);
   background: rgba(216, 177, 113, 0.54);
@@ -591,7 +685,7 @@
 }
 
 #campaign-settings-close-button,
-#campaign-user-settings-signout-button {
+#campaign-settings-signout-button {
   margin-top: 4px;
   background: rgba(74, 48, 25, 0.94);
   color: #f7ead1;

@@ -274,6 +274,11 @@ function toggleCodexDebugGuides() {
 
   const shouldShow = !modal.classList.contains("codex-debug-guides-visible");
   modal.classList.toggle("codex-debug-guides-visible", shouldShow);
+  document.getElementById("campaign-settings-guides-button")?.classList.toggle("active", shouldShow);
+  document.getElementById("campaign-settings-guides-button")?.setAttribute(
+    "aria-pressed",
+    shouldShow ? "true" : "false"
+  );
 }
 
 function updateCodexDesktopSearchAction() {

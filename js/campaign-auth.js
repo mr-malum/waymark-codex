@@ -3,6 +3,7 @@ let activeSession = null;
 let campaignBootstrapPromise = null;
 let availableCampaigns = [];
 let activeProfile = null;
+const pendingMemberRoleChanges = new Map();
 
 function getCampaignAuthGate() {
   return document.getElementById("campaign-auth-gate");
@@ -45,6 +46,27 @@ function setCampaignMemberStatus(message = "") {
   }
 }
 
+function setCampaignNameStatus(message = "") {
+  const status = document.getElementById("campaign-name-status");
+  if (status) {
+    status.textContent = message;
+  }
+}
+
+function setCampaignRenameStatus(message = "") {
+  const status = document.getElementById("campaign-rename-status");
+  if (status) {
+    status.textContent = message;
+  }
+}
+
+function setCampaignShareCodeStatus(message = "") {
+  const status = document.getElementById("campaign-share-code-status");
+  if (status) {
+    status.textContent = message;
+  }
+}
+
 function setCampaignAddMemberStatus(message = "") {
   const status = document.getElementById("campaign-add-member-status");
   if (status) {
@@ -59,8 +81,68 @@ function setCampaignUserSettingsStatus(message = "") {
   }
 }
 
+function setCampaignJoinCodeStatus(message = "") {
+  const status = document.getElementById("campaign-join-code-status");
+  if (status) {
+    status.textContent = message;
+  }
+}
+
 function getCurrentUserEmail() {
   return activeSession?.user?.email || "";
+}
+
+function canViewCampaignDebug() {
+  return ["owner", "superuser"].includes(activeCampaign?.currentUserRole || "");
+}
+
+function canManageCampaignMembers() {
+  return ["owner", "superuser"].includes(activeCampaign?.currentUserRole || "");
+}
+
+function canManageMemberRole(memberRole) {
+  if (activeCampaign?.currentUserRole === "owner") return memberRole !== "owner";
+  if (activeCampaign?.currentUserRole === "superuser") {
+    return ["editor", "viewer"].includes(memberRole || "");
+  }
+  return false;
+}
+
+function getAssignableMemberRoles() {
+  return activeCampaign?.currentUserRole === "owner"
+    ? ["superuser", "editor", "viewer"]
+    : ["editor", "viewer"];
+}
+
+function formatCampaignRole(role) {
+  if (role === "owner") return "Owner";
+  if (role === "superuser") return "Superuser";
+  if (role === "editor") return "Editor";
+  if (role === "viewer") return "Viewer";
+  return role || "";
+}
+
+function getCampaignRoleSortRank(role) {
+  const ranks = {
+    owner: 0,
+    superuser: 1,
+    editor: 2,
+    viewer: 3
+  };
+  return ranks[role] ?? 99;
+}
+
+async function verifyCurrentPassword(currentPassword) {
+  const email = getCurrentUserEmail();
+  if (!email) throw new Error("Unable to verify current account.");
+
+  const { data, error } = await campaignSupabase.auth.signInWithPassword({
+    email,
+    password: currentPassword
+  });
+
+  if (error) throw new Error("Current password is incorrect.");
+  if (data?.session) activeSession = data.session;
 }
 
 function isValidCampaignUsername(username) {
@@ -113,15 +195,31 @@ function clearActiveCampaignState() {
 function openCampaignSettingsMenu() {
   document.getElementById("campaign-settings-menu")?.classList.remove("hidden");
   document.getElementById("campaign-settings-button")?.setAttribute("aria-expanded", "true");
+  document.getElementById("campaign-settings-debug-button")?.toggleAttribute("hidden", !canViewCampaignDebug());
   refreshCampaignMembers();
 }
 
 function closeCampaignSettingsMenu() {
   document.getElementById("campaign-settings-menu")?.classList.add("hidden");
+  document.getElementById("campaign-debug-menu")?.classList.add("hidden");
   document.getElementById("campaign-manage-menu")?.classList.add("hidden");
+  document.getElementById("campaign-members-menu")?.classList.add("hidden");
+  document.getElementById("campaign-rename-menu")?.classList.add("hidden");
   document.getElementById("campaign-add-member-menu")?.classList.add("hidden");
   document.getElementById("campaign-user-settings-menu")?.classList.add("hidden");
   document.getElementById("campaign-settings-button")?.setAttribute("aria-expanded", "false");
+}
+
+function openCampaignDebugMenu() {
+  if (!canViewCampaignDebug()) return;
+
+  document.getElementById("campaign-settings-menu")?.classList.add("hidden");
+  document.getElementById("campaign-debug-menu")?.classList.remove("hidden");
+  document.getElementById("campaign-manage-menu")?.classList.add("hidden");
+  document.getElementById("campaign-members-menu")?.classList.add("hidden");
+  document.getElementById("campaign-rename-menu")?.classList.add("hidden");
+  document.getElementById("campaign-add-member-menu")?.classList.add("hidden");
+  document.getElementById("campaign-user-settings-menu")?.classList.add("hidden");
 }
 
 function toggleCampaignSettingsMenu() {
@@ -164,26 +262,56 @@ async function fetchCampaignMembers(campaignId) {
 function renderCampaignMembers(members) {
   const list = document.getElementById("campaign-settings-member-list");
   if (!list) return;
+  pendingMemberRoleChanges.clear();
+  updateSaveMemberRolesButton();
 
   if (!members.length) {
     list.innerHTML = `<div class="campaign-picker-empty">No members recorded.</div>`;
     return;
   }
 
-  list.innerHTML = members.map(member => `
+  const sortedMembers = [...members].sort((left, right) => {
+    const roleComparison = getCampaignRoleSortRank(left.role) - getCampaignRoleSortRank(right.role);
+    if (roleComparison !== 0) return roleComparison;
+
+    const leftName = left.username || "Unknown user";
+    const rightName = right.username || "Unknown user";
+    return leftName.localeCompare(rightName, undefined, { sensitivity: "base" });
+  });
+
+  list.innerHTML = sortedMembers.map(member => `
     <div class="campaign-settings-member-row">
       <span class="campaign-settings-member-name">${escapeCampaignHtml(member.username || "Unknown user")}</span>
-      <span class="campaign-settings-member-role">${escapeCampaignHtml(member.role === "owner" ? "Owner" : member.role || "")}</span>
+      ${canManageMemberRole(member.role)
+        ? `<select
+            class="campaign-member-role-select"
+            data-user-id="${escapeCampaignHtml(member.user_id)}"
+            data-username="${escapeCampaignHtml(member.username || "Unknown user")}"
+            data-original-role="${escapeCampaignHtml(member.role || "")}"
+          >
+            ${getAssignableMemberRoles().map(role => `
+              <option value="${escapeCampaignHtml(role)}" ${member.role === role ? "selected" : ""}>${escapeCampaignHtml(formatCampaignRole(role))}</option>
+            `).join("")}
+          </select>`
+        : `<span class="campaign-settings-member-role">${escapeCampaignHtml(formatCampaignRole(member.role))}</span>`}
       ${member.role === "owner"
         ? `<span class="campaign-settings-member-locked">—</span>`
-        : `<button
+        : canManageMemberRole(member.role)
+          ? `<button
             class="campaign-remove-member-button"
             type="button"
             data-user-id="${escapeCampaignHtml(member.user_id)}"
             data-username="${escapeCampaignHtml(member.username || "Unknown user")}"
-          >Remove</button>`}
+          >Remove</button>`
+          : `<span class="campaign-settings-member-locked">—</span>`}
     </div>
   `).join("");
+}
+
+function updateSaveMemberRolesButton() {
+  const button = document.getElementById("campaign-save-member-roles-button");
+  if (!button) return;
+  button.hidden = pendingMemberRoleChanges.size === 0;
 }
 
 async function refreshCampaignMembers() {
@@ -198,26 +326,99 @@ async function refreshCampaignMembers() {
   }
 }
 
+function syncCampaignNameSettings() {
+  const section = document.getElementById("campaign-name-section");
+  const nameValue = document.getElementById("campaign-current-name-value");
+  const isOwner = activeCampaign?.currentUserRole === "owner";
+
+  section?.toggleAttribute("hidden", !isOwner);
+  if (nameValue) nameValue.textContent = activeCampaign?.name || "Unknown";
+  setCampaignNameStatus("");
+}
+
+function syncCampaignShareCodeSettings() {
+  const section = document.getElementById("campaign-share-code-section");
+  const codeBox = document.getElementById("campaign-share-code-box");
+  const canGenerate = canManageCampaignMembers();
+
+  section?.toggleAttribute("hidden", !canGenerate);
+  if (codeBox) {
+    codeBox.hidden = true;
+    codeBox.textContent = "";
+    delete codeBox.dataset.shareCode;
+  }
+  setCampaignShareCodeStatus("");
+}
+
 function openCampaignManageMenu() {
   document.getElementById("campaign-settings-menu")?.classList.add("hidden");
+  document.getElementById("campaign-debug-menu")?.classList.add("hidden");
   document.getElementById("campaign-manage-menu")?.classList.remove("hidden");
+  document.getElementById("campaign-members-menu")?.classList.add("hidden");
+  document.getElementById("campaign-rename-menu")?.classList.add("hidden");
+  document.getElementById("campaign-add-member-menu")?.classList.add("hidden");
+  document.getElementById("campaign-user-settings-menu")?.classList.add("hidden");
+  syncCampaignNameSettings();
+}
+
+function openCampaignMembersMenu() {
+  document.getElementById("campaign-settings-menu")?.classList.add("hidden");
+  document.getElementById("campaign-debug-menu")?.classList.add("hidden");
+  document.getElementById("campaign-manage-menu")?.classList.add("hidden");
+  document.getElementById("campaign-members-menu")?.classList.add("hidden");
+  document.getElementById("campaign-members-menu")?.classList.remove("hidden");
+  document.getElementById("campaign-rename-menu")?.classList.add("hidden");
   document.getElementById("campaign-add-member-menu")?.classList.add("hidden");
   document.getElementById("campaign-user-settings-menu")?.classList.add("hidden");
   setCampaignMemberStatus("");
+  document.getElementById("campaign-open-add-member-button")?.toggleAttribute("hidden", !canManageCampaignMembers());
+  document.getElementById("campaign-save-member-roles-button")?.setAttribute("hidden", "");
+  syncCampaignShareCodeSettings();
   refreshCampaignMembers();
 }
 
-function openCampaignAddMemberMenu() {
+function openCampaignRenameMenu() {
+  if (activeCampaign?.currentUserRole !== "owner") return;
+
   document.getElementById("campaign-settings-menu")?.classList.add("hidden");
+  document.getElementById("campaign-debug-menu")?.classList.add("hidden");
   document.getElementById("campaign-manage-menu")?.classList.add("hidden");
+  document.getElementById("campaign-members-menu")?.classList.add("hidden");
+  document.getElementById("campaign-rename-menu")?.classList.remove("hidden");
+  document.getElementById("campaign-add-member-menu")?.classList.add("hidden");
+  document.getElementById("campaign-user-settings-menu")?.classList.add("hidden");
+  document.getElementById("campaign-name-form")?.reset();
+
+  const currentNameValue = document.getElementById("campaign-rename-current-name-value");
+  const nameInput = document.getElementById("campaign-name-input");
+  if (currentNameValue) currentNameValue.textContent = activeCampaign?.name || "Unknown";
+  if (nameInput) nameInput.value = activeCampaign?.name || "";
+  setCampaignRenameStatus("");
+}
+
+function openCampaignAddMemberMenu() {
+  if (!canManageCampaignMembers()) return;
+
+  document.getElementById("campaign-settings-menu")?.classList.add("hidden");
+  document.getElementById("campaign-debug-menu")?.classList.add("hidden");
+  document.getElementById("campaign-manage-menu")?.classList.add("hidden");
+  document.getElementById("campaign-rename-menu")?.classList.add("hidden");
   document.getElementById("campaign-add-member-menu")?.classList.remove("hidden");
   document.getElementById("campaign-user-settings-menu")?.classList.add("hidden");
+  const roleSelect = document.getElementById("campaign-add-member-role");
+  if (roleSelect) {
+    roleSelect.innerHTML = getAssignableMemberRoles().map(role =>
+      `<option value="${escapeCampaignHtml(role)}">${escapeCampaignHtml(formatCampaignRole(role))}</option>`
+    ).join("");
+  }
   setCampaignAddMemberStatus("");
 }
 
 function openCampaignUserSettingsMenu({ fromPicker = false } = {}) {
   document.getElementById("campaign-settings-menu")?.classList.add("hidden");
+  document.getElementById("campaign-debug-menu")?.classList.add("hidden");
   document.getElementById("campaign-manage-menu")?.classList.add("hidden");
+  document.getElementById("campaign-rename-menu")?.classList.add("hidden");
   document.getElementById("campaign-add-member-menu")?.classList.add("hidden");
   document.getElementById("campaign-user-settings-menu")?.classList.remove("hidden");
   document.getElementById("campaign-user-settings-menu")?.classList.toggle("from-picker", fromPicker);
@@ -264,7 +465,10 @@ function returnFromUserSettingsMenu() {
 
 function returnToMainSettingsMenu() {
   document.getElementById("campaign-settings-menu")?.classList.remove("hidden");
+  document.getElementById("campaign-debug-menu")?.classList.add("hidden");
   document.getElementById("campaign-manage-menu")?.classList.add("hidden");
+  document.getElementById("campaign-members-menu")?.classList.add("hidden");
+  document.getElementById("campaign-rename-menu")?.classList.add("hidden");
   document.getElementById("campaign-add-member-menu")?.classList.add("hidden");
   document.getElementById("campaign-user-settings-menu")?.classList.add("hidden");
 }
@@ -275,10 +479,6 @@ function setCampaignAuthMode(mode) {
   document.getElementById("campaign-auth-tab-signup")?.classList.toggle("active", isSignup);
   document.getElementById("campaign-auth-signin-form").hidden = isSignup;
   document.getElementById("campaign-auth-signup-form").hidden = !isSignup;
-  document.getElementById("campaign-auth-title").textContent = isSignup ? "Create account" : "Sign in";
-  document.getElementById("campaign-auth-copy").textContent = isSignup
-    ? "Choose a username and create your account."
-    : "Enter your account details to open your campaigns.";
   setCampaignAuthStatus("");
 }
 
@@ -442,6 +642,46 @@ async function showCampaignPickerForCurrentUser() {
   hideCampaignAuthGate();
   hideCampaignSettings();
   showCampaignPickerGate();
+}
+
+function openCampaignJoinCodeForm() {
+  const menu = document.getElementById("campaign-join-code-menu");
+  const input = document.getElementById("campaign-join-code-input");
+  document.getElementById("campaign-join-code-form")?.reset();
+  menu?.classList.remove("hidden");
+  input?.focus();
+  setCampaignJoinCodeStatus("");
+}
+
+function closeCampaignJoinCodeForm() {
+  document.getElementById("campaign-join-code-menu")?.classList.add("hidden");
+  document.getElementById("campaign-join-code-form")?.reset();
+  setCampaignJoinCodeStatus("");
+}
+
+async function handleJoinCampaignByCode(event) {
+  event.preventDefault();
+
+  const input = document.getElementById("campaign-join-code-input");
+  const code = input?.value.trim() || "";
+  if (!code) return;
+
+  setCampaignJoinCodeStatus("Joining campaign...");
+
+  try {
+    const { error } = await campaignSupabase.rpc("redeem_campaign_share_code", {
+      raw_code: code
+    });
+
+    if (error) throw error;
+
+    document.getElementById("campaign-join-code-form")?.reset();
+    closeCampaignJoinCodeForm();
+    await showCampaignPickerForCurrentUser();
+  } catch (error) {
+    console.error("Failed to join campaign by code:", error);
+    setCampaignJoinCodeStatus(error.message || "Unable to join campaign.");
+  }
 }
 
 async function bootstrapCampaignSession() {
@@ -700,6 +940,112 @@ async function handleChangePassword(event) {
   }
 }
 
+async function handleChangeCampaignName(event) {
+  event.preventDefault();
+
+  if (!activeCampaign) return;
+
+  const name = document.getElementById("campaign-name-input")?.value.trim() || "";
+  const currentPassword = document.getElementById("campaign-name-current-password")?.value || "";
+  if (!name) {
+    setCampaignRenameStatus("Campaign name is required.");
+    return;
+  }
+
+  if (!currentPassword) return;
+
+  if (activeCampaign.currentUserRole !== "owner") {
+    setCampaignRenameStatus("Only campaign owners can rename campaigns.");
+    return;
+  }
+
+  if (name === activeCampaign.name) {
+    setCampaignRenameStatus("That is already the campaign name.");
+    return;
+  }
+
+  setCampaignRenameStatus("Saving campaign name...");
+
+  try {
+    await verifyCurrentPassword(currentPassword);
+
+    const { data, error } = await campaignSupabase.rpc("change_campaign_name", {
+      target_campaign_id: activeCampaign.id,
+      new_name: name,
+      rate_limit_hours: 24
+    });
+
+    if (error) throw error;
+
+    activeCampaign.name = data || name;
+    availableCampaigns = availableCampaigns.map(campaign =>
+      campaign.id === activeCampaign.id
+        ? { ...campaign, name: activeCampaign.name }
+        : campaign
+    );
+
+    setCampaignDocumentTitle(activeCampaign);
+    syncCampaignNameSettings();
+    document.getElementById("campaign-name-form")?.reset();
+    window.dispatchEvent(new CustomEvent("campaign-renamed", {
+      detail: { campaign: activeCampaign }
+    }));
+    openCampaignManageMenu();
+    setCampaignNameStatus("Campaign name saved.");
+  } catch (error) {
+    console.error("Failed to change campaign name:", error);
+    setCampaignRenameStatus(error.message || "Unable to change campaign name.");
+  }
+}
+
+async function handleGenerateCampaignShareCode() {
+  if (!activeCampaign) return;
+
+  if (!canManageCampaignMembers()) {
+    setCampaignShareCodeStatus("Only campaign owners and superusers can generate share codes.");
+    return;
+  }
+
+  setCampaignShareCodeStatus("Generating share code...");
+
+  try {
+    const { data, error } = await campaignSupabase.rpc("generate_campaign_share_code", {
+      target_campaign_id: activeCampaign.id,
+      role_to_grant: document.getElementById("campaign-share-code-role")?.value || "editor",
+      max_uses: 1,
+      expires_in_hours: 168
+    });
+
+    if (error) throw error;
+
+    const code = data || "";
+    const codeBox = document.getElementById("campaign-share-code-box");
+    if (codeBox) {
+      codeBox.textContent = code;
+      codeBox.dataset.shareCode = code;
+      codeBox.hidden = false;
+    }
+    setCampaignShareCodeStatus("Click the code to copy it.");
+  } catch (error) {
+    console.error("Failed to generate campaign share code:", error);
+    setCampaignShareCodeStatus(error.message || "Unable to generate share code.");
+  }
+}
+
+async function handleCopyCampaignShareCode() {
+  const codeBox = document.getElementById("campaign-share-code-box");
+  const code = codeBox?.dataset.shareCode || "";
+  if (!code) return;
+
+  try {
+    await navigator.clipboard.writeText(code);
+    setCampaignShareCodeStatus("Share code copied.");
+  } catch (error) {
+    console.error("Failed to copy campaign share code:", error);
+    setCampaignShareCodeStatus("Unable to copy automatically.");
+  }
+}
+
 async function handleAddCampaignMember(event) {
   event.preventDefault();
 
@@ -756,6 +1102,54 @@ async function handleRemoveCampaignMember(event) {
     console.error("Failed to remove campaign member:", error);
     setCampaignMemberStatus(error.message || "Unable to remove member.");
     button.disabled = false;
+  }
+}
+
+async function handleChangeCampaignMemberRole(event) {
+  const select = event.target.closest(".campaign-member-role-select");
+  if (!select || !activeCampaign) return;
+
+  const userId = select.dataset.userId;
+  const role = select.value;
+  if (!userId || !role) return;
+
+  if (role === select.dataset.originalRole) {
+    pendingMemberRoleChanges.delete(userId);
+  } else {
+    pendingMemberRoleChanges.set(userId, role);
+  }
+
+  updateSaveMemberRolesButton();
+  setCampaignMemberStatus(pendingMemberRoleChanges.size ? "Unsaved member changes." : "");
+}
+
+async function handleSaveCampaignMemberRoles() {
+  if (!activeCampaign || !pendingMemberRoleChanges.size) return;
+
+  const changes = [...pendingMemberRoleChanges.entries()];
+  document.getElementById("campaign-save-member-roles-button")?.setAttribute("disabled", "");
+  setCampaignMemberStatus("Saving member changes...");
+
+  try {
+    for (const [userId, role] of changes) {
+      const { error } = await campaignSupabase.rpc("set_campaign_member_role", {
+        target_campaign_id: activeCampaign.id,
+        target_user_id: userId,
+        target_role: role
+      });
+
+      if (error) throw error;
+    }
+
+    pendingMemberRoleChanges.clear();
+    setCampaignMemberStatus("Member changes saved.");
+    await refreshCampaignMembers();
+  } catch (error) {
+    console.error("Failed to save member roles:", error);
+    setCampaignMemberStatus(error.message || "Unable to save member changes.");
+    await refreshCampaignMembers();
+  } finally {
+    document.getElementById("campaign-save-member-roles-button")?.removeAttribute("disabled");
   }
 }
 
@@ -829,18 +1223,26 @@ document.addEventListener("DOMContentLoaded", () => {
     ?.addEventListener("click", () => setCampaignAuthMode("signin"));
   document.getElementById("campaign-auth-tab-signup")
     ?.addEventListener("click", () => setCampaignAuthMode("signup"));
-  document.getElementById("campaign-user-settings-signout-button")
+  document.getElementById("campaign-settings-signout-button")
     ?.addEventListener("click", handleCampaignSignOut);
   document.getElementById("campaign-settings-close-button")
     ?.addEventListener("click", closeCampaignSettingsMenu);
   document.getElementById("campaign-settings-campaign-button")
     ?.addEventListener("click", openCampaignManageMenu);
+  document.getElementById("campaign-settings-members-button")
+    ?.addEventListener("click", openCampaignMembersMenu);
   document.getElementById("campaign-settings-user-button")
     ?.addEventListener("click", () => openCampaignUserSettingsMenu());
   document.getElementById("campaign-settings-picker-button")
     ?.addEventListener("click", returnToCampaignList);
   document.getElementById("campaign-picker-user-settings-button")
     ?.addEventListener("click", () => openCampaignUserSettingsMenu({ fromPicker: true }));
+  document.getElementById("campaign-open-join-code-button")
+    ?.addEventListener("click", openCampaignJoinCodeForm);
+  document.getElementById("campaign-join-code-back-button")
+    ?.addEventListener("click", closeCampaignJoinCodeForm);
+  document.getElementById("campaign-join-code-form")
+    ?.addEventListener("submit", handleJoinCampaignByCode);
   document.getElementById("campaign-user-settings-back-button")
     ?.addEventListener("click", returnFromUserSettingsMenu);
   document.getElementById("campaign-open-change-username-button")
@@ -855,6 +1257,16 @@ document.addEventListener("DOMContentLoaded", () => {
     ?.addEventListener("submit", handleChangeUsername);
   document.getElementById("campaign-change-password-form")
     ?.addEventListener("submit", handleChangePassword);
+  document.getElementById("campaign-name-form")
+    ?.addEventListener("submit", handleChangeCampaignName);
+  document.getElementById("campaign-open-rename-button")
+    ?.addEventListener("click", openCampaignRenameMenu);
+  document.getElementById("campaign-rename-back-button")
+    ?.addEventListener("click", openCampaignManageMenu);
+  document.getElementById("campaign-generate-share-code-button")
+    ?.addEventListener("click", handleGenerateCampaignShareCode);
+  document.getElementById("campaign-share-code-box")
+    ?.addEventListener("click", handleCopyCampaignShareCode);
   document.getElementById("campaign-settings-leave-button")
     ?.addEventListener("click", handleLeaveActiveCampaign);
   document.getElementById("campaign-open-add-member-button")
@@ -862,18 +1274,29 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("campaign-manage-back-button")
     ?.addEventListener("click", returnToMainSettingsMenu);
   document.getElementById("campaign-add-member-back-button")
+    ?.addEventListener("click", openCampaignMembersMenu);
+  document.getElementById("campaign-members-back-button")
     ?.addEventListener("click", openCampaignManageMenu);
+  document.getElementById("campaign-save-member-roles-button")
+    ?.addEventListener("click", handleSaveCampaignMemberRoles);
   document.getElementById("campaign-add-member-form")
     ?.addEventListener("submit", handleAddCampaignMember);
   document.getElementById("campaign-settings-member-list")
     ?.addEventListener("click", handleRemoveCampaignMember);
+  document.getElementById("campaign-settings-member-list")
+    ?.addEventListener("change", handleChangeCampaignMemberRole);
   document.getElementById("campaign-settings-button")
     ?.addEventListener("click", toggleCampaignSettingsMenu);
+  document.getElementById("campaign-settings-debug-button")
+    ?.addEventListener("click", openCampaignDebugMenu);
+  document.getElementById("campaign-debug-back-button")
+    ?.addEventListener("click", returnToMainSettingsMenu);
   document.getElementById("campaign-settings-guides-button")
     ?.addEventListener("click", () => {
       toggleCodexDebugGuides?.();
-      closeCampaignSettingsMenu();
     });
+  document.getElementById("campaign-settings-audit-button")
+    ?.addEventListener("click", toggleCodexAuditLog);
   document.getElementById("campaign-picker-list")
     ?.addEventListener("click", handleCampaignPickerClick);
 });

@@ -271,6 +271,10 @@ function renderCodexListPage(config) {
         </aside>
 
         <div class="codex-list-scroll-shell codex-scroll-fade">
+          ${renderCodexAuditIndexButton?.({
+            title: `${config.title} Audit`,
+            targetTypes: config.auditTargetTypes || []
+          }) || ""}
           <div id="${escapeHtml(config.listId)}"></div>
         </div>
       </div>
@@ -297,6 +301,7 @@ function renderCodexPoisIndex() {
     ],
 
     getFilterOptions: getPoiFilterOptions,
+    auditTargetTypes: ["pois", "poi_groups"],
 
     renderList: renderPoiListIntoContainer
   });
@@ -316,6 +321,7 @@ function renderCodexNpcsIndex() {
     ],
 
     getFilterOptions: getNpcFilterOptions,
+    auditTargetTypes: ["npcs"],
 
     renderList: renderNpcListIntoContainer
   });
@@ -343,6 +349,7 @@ function renderCodexHexesIndex() {
     ],
 
     getFilterOptions: getHexFilterOptions,
+    auditTargetTypes: ["hexes"],
 
     renderList: renderHexListIntoContainer
   });

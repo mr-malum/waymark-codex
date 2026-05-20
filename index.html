@@ -48,26 +48,94 @@
   <div id="campaign-settings-menu" class="campaign-settings-menu hidden" role="dialog" aria-modal="true" aria-labelledby="campaign-settings-title">
     <h2 id="campaign-settings-title">Settings</h2>
     <div class="campaign-settings-actions">
-      <button id="campaign-settings-guides-button" type="button">Debug</button>
+      <button id="campaign-settings-debug-button" type="button" hidden>Debug</button>
       <button id="campaign-settings-campaign-button" type="button">Campaign Settings</button>
       <button id="campaign-settings-user-button" type="button">User Settings</button>
       <button id="campaign-settings-picker-button" type="button">Return to Campaign List</button>
+      <button id="campaign-settings-signout-button" type="button">Sign Out</button>
     </div>
     <button id="campaign-settings-close-button" type="button">Close</button>
+  </div>
+
+  <div id="campaign-debug-menu" class="campaign-settings-menu hidden" role="dialog" aria-modal="true" aria-labelledby="campaign-debug-title">
+    <h2 id="campaign-debug-title">Debug</h2>
+    <div class="campaign-settings-actions">
+      <button id="campaign-settings-guides-button" type="button" aria-pressed="false">Guides</button>
+      <button id="campaign-settings-audit-button" type="button" aria-pressed="false">Audit</button>
+    </div>
+    <button id="campaign-debug-back-button" type="button">Back</button>
   </div>
 
   <div id="campaign-manage-menu" class="campaign-settings-menu hidden" role="dialog" aria-modal="true" aria-labelledby="campaign-manage-title">
     <h2 id="campaign-manage-title">Campaign Settings</h2>
 
+    <section id="campaign-name-section" class="campaign-settings-section" aria-label="Campaign name" hidden>
+      <h3>Campaign Name</h3>
+      <div class="campaign-settings-readonly-field">
+        <span>Current Name</span>
+        <strong id="campaign-current-name-value"></strong>
+      </div>
+      <button id="campaign-open-rename-button" type="button">Change Campaign Name</button>
+      <p id="campaign-name-status" class="campaign-member-status" role="status"></p>
+    </section>
+
+    <button id="campaign-settings-members-button" type="button">Members</button>
+    <button id="campaign-settings-leave-button" type="button">Leave Campaign</button>
+    <button id="campaign-manage-back-button" type="button">Back</button>
+  </div>
+
+  <div id="campaign-members-menu" class="campaign-settings-menu hidden" role="dialog" aria-modal="true" aria-labelledby="campaign-members-title">
+    <h2 id="campaign-members-title">Members</h2>
+
     <section class="campaign-settings-members" aria-label="Campaign members">
       <h3>Members</h3>
       <div id="campaign-settings-member-list" class="campaign-settings-member-list"></div>
+      <button id="campaign-save-member-roles-button" type="button" hidden>Save Member Changes</button>
       <button id="campaign-open-add-member-button" type="button">Add Member</button>
+      <section id="campaign-share-code-section" class="campaign-settings-section" aria-label="Campaign share code" hidden>
+        <label class="campaign-share-code-role-label">
+          <span>Share Code Role</span>
+          <select id="campaign-share-code-role">
+            <option value="editor">Editor</option>
+            <option value="viewer">Viewer</option>
+          </select>
+        </label>
+        <button id="campaign-generate-share-code-button" type="button">Generate Share Code</button>
+        <button id="campaign-share-code-box" class="campaign-share-code-box" type="button" hidden></button>
+        <p id="campaign-share-code-status" class="campaign-member-status" role="status"></p>
+      </section>
       <p id="campaign-member-status" class="campaign-member-status" role="status"></p>
     </section>
 
-    <button id="campaign-settings-leave-button" type="button">Leave Campaign</button>
-    <button id="campaign-manage-back-button" type="button">Back</button>
+    <button id="campaign-members-back-button" type="button">Back</button>
+  </div>
+
+  <div id="campaign-rename-menu" class="campaign-settings-menu hidden" role="dialog" aria-modal="true" aria-labelledby="campaign-rename-title">
+    <h2 id="campaign-rename-title">Change Campaign Name</h2>
+
+    <section class="campaign-settings-section" aria-label="Change campaign name">
+      <div class="campaign-settings-readonly-field">
+        <span>Current Name</span>
+        <strong id="campaign-rename-current-name-value"></strong>
+      </div>
+
+      <form id="campaign-name-form" class="campaign-settings-form">
+        <label>
+          <span>New Name</span>
+          <input id="campaign-name-input" type="text" autocomplete="off" required maxlength="80">
+        </label>
+
+        <label>
+          <span>Current Password</span>
+          <input id="campaign-name-current-password" type="password" autocomplete="current-password" required>
+        </label>
+
+        <button id="campaign-name-submit" type="submit">Save Campaign Name</button>
+      </form>
+      <p id="campaign-rename-status" class="campaign-member-status" role="status"></p>
+    </section>
+
+    <button id="campaign-rename-back-button" type="button">Back</button>
   </div>
 
   <div id="campaign-user-settings-menu" class="campaign-settings-menu hidden" role="dialog" aria-modal="true" aria-labelledby="campaign-user-settings-title">
@@ -76,7 +144,6 @@
     <div id="campaign-user-settings-main" class="campaign-settings-actions">
       <button id="campaign-open-change-username-button" type="button">Change Username</button>
       <button id="campaign-open-change-password-button" type="button">Change Password</button>
-      <button id="campaign-user-settings-signout-button" type="button">Sign Out</button>
     </div>
 
     <section id="campaign-change-username-section" class="campaign-settings-section" aria-label="Change username" hidden>
@@ -143,9 +210,9 @@
       <label>
         <span>Role</span>
         <select id="campaign-add-member-role">
+          <option value="superuser">Superuser</option>
           <option value="editor">Editor</option>
           <option value="viewer">Viewer</option>
-          <option value="player">Player</option>
         </select>
       </label>
 
@@ -159,9 +226,8 @@
 
 <div id="campaign-auth-gate" class="campaign-auth-gate" aria-live="polite">
   <div class="campaign-auth-card">
-    <p class="campaign-auth-kicker">Campaign Codex</p>
-    <h1 id="campaign-auth-title">Sign in</h1>
-    <p id="campaign-auth-copy">Enter your account details to open your campaigns.</p>
+    <h1 id="campaign-auth-title">Campaign Codex</h1>
+    <p id="campaign-auth-copy">A Living Campaign Atlas for Discerning GMs</p>
 
     <div id="campaign-auth-tabs" class="campaign-auth-tabs">
       <button id="campaign-auth-tab-signin" type="button" class="active">Sign In</button>
@@ -213,14 +279,34 @@
     </div>
 
     <p id="campaign-picker-welcome"></p>
-    <button id="campaign-picker-user-settings-button" type="button">User Settings</button>
+    <div class="campaign-picker-actions">
+      <button id="campaign-picker-user-settings-button" class="campaign-light-button" type="button">User Settings</button>
+    </div>
     <div id="campaign-picker-list" class="campaign-picker-list"></div>
+
+    <div class="campaign-picker-actions">
+      <button id="campaign-open-join-code-button" class="campaign-light-button campaign-small-button" type="button">Join by Code</button>
+    </div>
 
     <button id="campaign-create-button" type="button" disabled>
       Create Campaign
       <span>Coming later</span>
     </button>
 
+  </div>
+
+  <div id="campaign-join-code-menu" class="campaign-settings-menu hidden" role="dialog" aria-modal="true" aria-labelledby="campaign-join-code-title">
+    <h2 id="campaign-join-code-title">Join by Code</h2>
+
+    <form id="campaign-join-code-form" class="campaign-join-code-form">
+      <label>
+        <span>Share Code</span>
+        <input id="campaign-join-code-input" type="text" autocomplete="off" required>
+      </label>
+      <button id="campaign-join-code-submit" class="campaign-light-button" type="submit">Join Campaign</button>
+    </form>
+    <p id="campaign-join-code-status" class="campaign-auth-status" role="status"></p>
+    <button id="campaign-join-code-back-button" class="campaign-light-button" type="button">Back</button>
   </div>
 </div>
 
@@ -244,7 +330,7 @@
       <div id="codex-left-manuscript" aria-hidden="true"></div>
 
       <div id="codex-header">
-        <h2 id="codex-title">The Codex of Kadesh</h2>
+        <h2 id="codex-title">The Codex</h2>
       </div>
 
       <div id="codex-desktop-persistent-search" aria-label="Search the Codex">
@@ -552,6 +638,29 @@
     <p id="codex-journal-entry-status" class="campaign-member-status" role="status"></p>
   </div>
 </div>
+
+<div id="codex-audit-entry-modal" class="codex-editor-modal hidden" aria-hidden="true">
+  <div class="codex-editor-sheet codex-audit-entry-sheet">
+    <h2 id="codex-audit-entry-title">Audit Entry</h2>
+    <p id="codex-audit-entry-meta" class="codex-journal-entry-modal-meta"></p>
+    <div id="codex-audit-entry-body" class="codex-audit-entry-modal-body"></div>
+
+    <div class="codex-editor-actions">
+      <button id="codex-audit-entry-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="codex-audit-list-modal" class="codex-editor-modal hidden" aria-hidden="true">
+  <div class="codex-editor-sheet codex-audit-entry-sheet">
+    <h2 id="codex-audit-list-title">Audit</h2>
+    <div id="codex-audit-list-body" class="codex-audit-entry-modal-body"></div>
+
+    <div class="codex-editor-actions">
+      <button id="codex-audit-list-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
  
 <div id="app-panel" class="closed right">
   <div id="app-panel-inner">
@@ -586,6 +695,7 @@
 <script src="js/codex-render.js"></script>
 <script src="js/codex-labels.js"></script>
 <script src="js/codex-query.js"></script>
+<script src="js/codex-audit.js"></script>
 <script src="js/codex-detail-pages.js"></script>
 <script src="js/codex-assets.js"></script>
 <script src="js/codex-list-pages.js"></script>

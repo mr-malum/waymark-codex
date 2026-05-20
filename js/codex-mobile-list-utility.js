@@ -267,6 +267,10 @@ function renderCodexListPage(config) {
         </aside>
 
         <div class="codex-list-scroll-shell codex-scroll-fade">
+          ${renderCodexAuditIndexButton?.({
+            title: `${listConfig.title} Audit`,
+            targetTypes: listConfig.auditTargetTypes || []
+          }) || ""}
           <div id="${escapeHtml(listConfig.listId)}"></div>
         </div>
       </div>
