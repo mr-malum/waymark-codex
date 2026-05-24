@@ -104,11 +104,11 @@
     jungle_floor: ["jungle", "ridges"],
     desert: ["sand", "ridges", "cactus_scrub", "cliffs", "lone_mountain"],
     deep_desert: ["sand", "ridges", "cactus_scrub", "cliffs", "lone_mountain"],
-    barrens: ["shrub", "ridges", "cliffs", "lone_mountain"],
-    bleak_barrens: ["shrub", "ridges", "cliffs", "lone_mountain"],
+    barrens: ["woods", "forest", "shrub", "ridges", "cliffs", "lone_mountain"],
+    bleak_barrens: ["woods", "forest", "shrub", "ridges", "cliffs", "lone_mountain"],
     snow: ["ridges", "mountains", "snowcapped_mountains", "woods", "forest", "ice"],
     rock: ["ridges", "mountains", "woods", "forest", "cliffs", "lone_mountain", "volcano"],
-    wastes: ["ridges", "cliffs", "lone_mountain", "volcano"]
+    wastes: ["woods", "forest", "ridges", "cliffs", "lone_mountain", "volcano"]
   };
 
   const BASE_ELEVATION = {
@@ -173,11 +173,11 @@
     jungle_floor: { chance: 0.90, weights: { jungle: 7, ridges: 2, marsh: 1 } },
     desert: { chance: 0.45, weights: { sand: 2, ridges: 5, cactus_scrub: 4, cliffs: 2, lone_mountain: 1, shrub: 1 } },
     deep_desert: { chance: 0.50, weights: { sand: 2, ridges: 5, cactus_scrub: 2, cliffs: 3, lone_mountain: 2, shrub: 1 } },
-    barrens: { chance: 0.45, weights: { shrub: 3, ridges: 4, cliffs: 3, lone_mountain: 1, cactus_scrub: 1 } },
-    bleak_barrens: { chance: 0.50, weights: { shrub: 2, ridges: 4, cliffs: 4, lone_mountain: 2, volcano: 1 } },
+    barrens: { chance: 0.45, weights: { shrub: 3, ridges: 4, cliffs: 3, lone_mountain: 1, cactus_scrub: 1, woods: 0.28, forest: 0.06 } },
+    bleak_barrens: { chance: 0.50, weights: { shrub: 2, ridges: 4, cliffs: 4, lone_mountain: 2, volcano: 1, woods: 0.20, forest: 0.04 } },
     snow: { chance: 0.55, weights: { ridges: 3, snowcapped_mountains: 4, woods: 2, forest: 2, ice: 2 } },
     rock: { chance: 0.75, weights: { mountains: 5, ridges: 4, cliffs: 3, lone_mountain: 2, woods: 2, forest: 1, volcano: 1 } },
-    wastes: { chance: 0.50, weights: { ridges: 4, cliffs: 3, lone_mountain: 2, volcano: 2 } }
+    wastes: { chance: 0.50, weights: { ridges: 4, cliffs: 3, lone_mountain: 2, volcano: 2, woods: 0.12, forest: 0.02 } }
   };
 
   const SECONDARY_FEATURE_RULES = [
@@ -348,6 +348,8 @@
 
     if (baseTerrain === "barrens" || baseTerrain === "bleak_barrens") {
       const bleak = baseTerrain === "bleak_barrens";
+      if (has("forest")) return bleak ? "Bleak Dead Forest" : "Barren Dead Forest";
+      if (has("woods")) return bleak ? "Bleak Dead Woods" : "Barren Dead Woods";
       if (has("cliffs")) return bleak ? "Bleak Cliffs" : "Barren Cliffs";
       if (has("ridges") && has("shrub")) return bleak ? "Bleak Shrubland Hills" : "Shrubland Hills";
       if (has("ridges")) return bleak ? "Bleak Hills" : "Barren Hills";
@@ -356,6 +358,8 @@
     }
 
     if (baseTerrain === "wastes") {
+      if (has("forest")) return "Dead Forest Wastes";
+      if (has("woods")) return "Dead Woods Wastes";
       if (has("cliffs")) return "Wasted Cliffs";
       if (has("ridges")) return "Wasted Hills";
       if (has("shrub")) return "Ashen Scrub";
@@ -867,6 +871,15 @@
     const manualBrush = Boolean(options.manualBrush);
 
     if (!getValidFeaturesForBase(base).includes(featureId)) return false;
+    if (["barrens", "bleak_barrens", "wastes"].includes(base) && ["woods", "forest"].includes(featureId)) {
+      if (manualBrush) return true;
+      const chanceByBase = {
+        barrens: { woods: 24, forest: 6 },
+        bleak_barrens: { woods: 16, forest: 4 },
+        wastes: { woods: 10, forest: 2 }
+      };
+      return hashPercent(`${seed}:dead-tree:${base}:${featureId}`, hashNumber) < (chanceByBase[base]?.[featureId] || 0);
+    }
     if (featureId === "falls") return Boolean(context?.hasStrongWaterDrop?.(hex));
 
     if (featureId === "ice") {

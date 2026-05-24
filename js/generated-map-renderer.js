@@ -77,11 +77,11 @@
     jungle_floor: ["jungle", "ridges"],
     desert: ["sand", "ridges", "cactus_scrub", "cliffs", "lone_mountain"],
     deep_desert: ["sand", "ridges", "cactus_scrub", "cliffs", "lone_mountain"],
-    barrens: ["shrub", "ridges", "cliffs", "lone_mountain"],
-    bleak_barrens: ["shrub", "ridges", "cliffs", "lone_mountain"],
+    barrens: ["woods", "forest", "shrub", "ridges", "cliffs", "lone_mountain"],
+    bleak_barrens: ["woods", "forest", "shrub", "ridges", "cliffs", "lone_mountain"],
     snow: ["ridges", "mountains", "snowcapped_mountains", "woods", "forest", "ice"],
     rock: ["ridges", "mountains", "woods", "forest", "cliffs", "lone_mountain", "volcano"],
-    wastes: ["ridges", "cliffs", "lone_mountain", "volcano"]
+    wastes: ["woods", "forest", "ridges", "cliffs", "lone_mountain", "volcano"]
   };
   const BASE_ELEVATION = {
     deep_sea: -3,
@@ -133,6 +133,8 @@
   const STEEP_ROUTE_ELEVATION_DELTA = 2;
   const EXTREME_ROUTE_ELEVATION_DELTA = 3;
   const RIVER_FALLS_ELEVATION_DELTA = 2;
+  const RIVER_FALLS_CHANCE = 58;
+  const COASTAL_RIVER_FALLS_CHANCE = 18;
   const ROAD_WATER_PATH_COST = 8;
   const MAJOR_ROAD_WATER_PATH_COST = 10;
   const ROAD_IMPASSABLE_WATER_TERRAINS = new Set(["sea", "deep_sea"]);
@@ -343,8 +345,10 @@
   const FEATURE_ART_ASSET_FILES = [...new Set([
     ...Object.values(FEATURE_ART_FILES),
     "forest_con.svg",
+    "forest_dead.svg",
     "forest_dec.svg",
     "woods_con.svg",
+    "woods_dead.svg",
     "woods_dec.svg",
     "jungle_temp_1.svg",
     "jungle_temp_2.svg",
@@ -457,6 +461,10 @@
       generationMountains: 100,
       generationCompression: 100,
       generationContinuity: 100,
+      generationRoadAmount: 100,
+      generationRiverAmount: 100,
+      generationRiverLength: 100,
+      generationSection: "terrain",
       generationPreviewOriginals: new Map(),
       generationPreviewActions: [],
       undoStack: [],
@@ -749,8 +757,9 @@
     const generationMaxFeatures = document.getElementById("map-generation-max-features");
     const generationRefreshExisting = document.getElementById("map-generation-refresh-existing");
     const generationRunFeatures = document.getElementById("map-generation-run-features");
+    const generationRunRoads = document.getElementById("map-generation-run-roads");
+    const generationRunRivers = document.getElementById("map-generation-run-rivers");
     const generationResetSliders = document.getElementById("map-generation-reset-sliders");
-    const generationRandomSeed = document.getElementById("map-generation-random-seed");
     const generationPreviewTerrain = document.getElementById("map-generation-preview-terrain");
     const generationApplyPreview = document.getElementById("map-generation-apply-preview");
     const generationDiscardPreview = document.getElementById("map-generation-discard-preview");
@@ -1021,16 +1030,46 @@
       runGenerationFeaturePass();
     });
 
+    generationRunRoads?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      runGenerationRoadPass();
+    });
+
+    generationRunRivers?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      runGenerationRiverPass();
+    });
+
+    panel.querySelectorAll("[data-generation-section-button]").forEach(sectionButton => {
+      sectionButton.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        setGenerationSection(sectionButton.dataset.generationSectionButton || "terrain");
+      });
+    });
+
     generationResetSliders?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
       resetGenerationTerrainSliders();
     });
 
-    generationRandomSeed?.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      randomizeGenerationSeed();
+    panel.querySelectorAll("[data-generation-random-seed]").forEach(seedButton => {
+      seedButton.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        randomizeGenerationSeed();
+      });
+    });
+
+    panel.querySelectorAll("[data-generation-discard-section]").forEach(discardButton => {
+      discardButton.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        discardGenerationPreviewSection(discardButton.dataset.generationDiscardSection || "");
+      });
     });
 
     [
@@ -1043,7 +1082,10 @@
       ["map-generation-desert", "generationDesert"],
       ["map-generation-mountains", "generationMountains"],
       ["map-generation-compression", "generationCompression"],
-      ["map-generation-continuity", "generationContinuity"]
+      ["map-generation-continuity", "generationContinuity"],
+      ["map-generation-road", "generationRoadAmount"],
+      ["map-generation-river", "generationRiverAmount"],
+      ["map-generation-river-length", "generationRiverLength"]
     ].forEach(([inputId, drawingKey]) => {
       const input = document.getElementById(inputId);
       input?.addEventListener("input", () => {
@@ -1251,7 +1293,31 @@
     updateDrawRegionControls();
     updateDrawStyleControls();
     updateDrawHint();
+    updateGenerationPopout();
     if (normalized === "terrain") setMobileTerrainTab("tools");
+    if (normalized === "generation") setGenerationSection(renderer.drawing.generationSection || "terrain");
+  }
+
+  function setGenerationSection(section) {
+    const normalized = ["terrain", "features", "overlays"].includes(section) ? section : "terrain";
+    renderer.drawing.generationSection = normalized;
+    document.querySelectorAll("[data-generation-section]").forEach(sectionPane => {
+      sectionPane.classList.toggle("active", sectionPane.dataset.generationSection === normalized);
+    });
+    document.querySelectorAll("[data-generation-section-button]").forEach(sectionButton => {
+      sectionButton.classList.toggle("active", sectionButton.dataset.generationSectionButton === normalized);
+    });
+    document.querySelectorAll("[data-generation-action-panel]").forEach(actionPanel => {
+      actionPanel.classList.toggle("active", actionPanel.dataset.generationActionPanel === normalized);
+    });
+    updateGenerationPopout();
+    updateDrawHint();
+  }
+
+  function updateGenerationPopout() {
+    const popout = document.querySelector(".map-generation-popout");
+    const isGenerationActive = document.querySelector('[data-map-edit-section="generation"]')?.classList.contains("active");
+    if (popout) popout.hidden = !isGenerationActive;
   }
 
   function setMobileTerrainTab(tab) {
@@ -1833,7 +1899,7 @@
   }
 
   function refreshEditorBrushPreview() {
-    if (!["terrain", "feature", "feature-erase"].includes(renderer.drawing.tool) || !renderer.drawing.hoverBrushHexIds?.length) return;
+    if (!["terrain", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper"].includes(renderer.drawing.tool) || !renderer.drawing.hoverBrushHexIds?.length) return;
     const centerHex = renderer.hexes.find(hex => hex.id === renderer.drawing.hoverBrushHexIds[0]);
     renderer.drawing.hoverBrushHexIds = centerHex ? getEditorBrushHexIds(centerHex) : [];
   }
@@ -2052,8 +2118,9 @@
     const generationMaxFeaturesValue = document.getElementById("map-generation-max-features-value");
     const generationRefreshExisting = document.getElementById("map-generation-refresh-existing");
     const generationRunFeatures = document.getElementById("map-generation-run-features");
+    const generationRunRoads = document.getElementById("map-generation-run-roads");
+    const generationRunRivers = document.getElementById("map-generation-run-rivers");
     const generationResetSliders = document.getElementById("map-generation-reset-sliders");
-    const generationRandomSeed = document.getElementById("map-generation-random-seed");
     const generationPreviewTerrain = document.getElementById("map-generation-preview-terrain");
     const generationApplyPreview = document.getElementById("map-generation-apply-preview");
     const generationDiscardPreview = document.getElementById("map-generation-discard-preview");
@@ -2072,11 +2139,15 @@
     if (generationRunFeatures) {
       generationRunFeatures.disabled = Boolean(renderer.drawing.saving);
       generationRunFeatures.textContent = renderer.drawing.generationRefreshExisting
-        ? "Refresh Feature Pass"
-        : "Run Feature Pass";
+        ? "Preview Refresh"
+        : "Preview Features";
     }
+    if (generationRunRoads) generationRunRoads.disabled = Boolean(renderer.drawing.saving);
+    if (generationRunRivers) generationRunRivers.disabled = Boolean(renderer.drawing.saving);
     if (generationResetSliders) generationResetSliders.disabled = Boolean(renderer.drawing.saving);
-    if (generationRandomSeed) generationRandomSeed.disabled = Boolean(renderer.drawing.saving);
+    document.querySelectorAll("[data-generation-random-seed], [data-generation-discard-section]").forEach(button => {
+      button.disabled = Boolean(renderer.drawing.saving);
+    });
     [
       ["water", "generationWater"],
       ["coastal-edge", "generationCoastalEdge"],
@@ -2087,7 +2158,10 @@
       ["desert", "generationDesert"],
       ["mountains", "generationMountains"],
       ["compression", "generationCompression"],
-      ["continuity", "generationContinuity"]
+      ["continuity", "generationContinuity"],
+      ["road", "generationRoadAmount"],
+      ["river", "generationRiverAmount"],
+      ["river-length", "generationRiverLength"]
     ].forEach(([control, drawingKey]) => {
       const input = document.getElementById(`map-generation-${control}`);
       const value = document.getElementById(`map-generation-${control}-value`);
@@ -2095,7 +2169,7 @@
       if (input) input.value = String(numeric);
       if (value) value.textContent = `${numeric}%`;
     });
-    const hasPreview = renderer.drawing.generationPreviewActions.length > 0;
+    const hasPreview = hasGenerationPreview();
     if (generationPreviewTerrain) generationPreviewTerrain.disabled = Boolean(renderer.drawing.saving);
     if (generationApplyPreview) generationApplyPreview.disabled = Boolean(renderer.drawing.saving || !hasPreview);
     if (generationDiscardPreview) generationDiscardPreview.disabled = Boolean(renderer.drawing.saving || !hasPreview);
@@ -2112,7 +2186,10 @@
       generationDesert: 100,
       generationMountains: 100,
       generationCompression: 100,
-      generationContinuity: 100
+      generationContinuity: 100,
+      generationRoadAmount: 100,
+      generationRiverAmount: 100,
+      generationRiverLength: 100
     });
     updateGenerationControls();
   }
@@ -2127,6 +2204,10 @@
     }
     renderer.drawing.generationSeed = `seed-${bytes[0].toString(36)}-${bytes[1].toString(36)}`.slice(0, 80);
     updateGenerationControls();
+  }
+
+  function hasGenerationPreview() {
+    return (renderer.drawing.generationPreviewActions || []).length > 0;
   }
 
   function getAutoTerrainElevation(baseTerrain, features = []) {
@@ -2209,7 +2290,15 @@
       return;
     }
     if (activeSection === "generation") {
-      hint.textContent = "Run a shared-rules feature pass to repopulate compatible terrain features without changing base terrain or elevation.";
+      if (renderer.drawing.generationSection === "overlays") {
+        hint.textContent = "Generate starter roads and rivers as normal editable overlay segments.";
+        return;
+      }
+      if (renderer.drawing.generationSection === "features") {
+        hint.textContent = "Run a shared-rules feature pass to repopulate compatible terrain features without changing base terrain or elevation.";
+        return;
+      }
+      hint.textContent = "Preview a full terrain draft locally before applying it.";
       return;
     }
     hint.textContent = "Right-drag or middle-drag pans. Ctrl+Z undoes, Ctrl+Y redoes.";
@@ -2240,6 +2329,8 @@
       "map-clear-pol-regions",
       "map-clear-features",
       "map-generation-run-features",
+      "map-generation-run-roads",
+      "map-generation-run-rivers",
       "map-generation-reset-sliders",
       "map-generation-random-seed",
       "map-generation-preview-terrain",
@@ -2791,9 +2882,27 @@
         const delta = getElevationDelta(fromHex, toHex);
         if (!fromHex || !toHex || delta < RIVER_FALLS_ELEVATION_DELTA) return;
         const higherHex = Number(fromHex.elevation || 0) >= Number(toHex.elevation || 0) ? fromHex : toHex;
+        if (!shouldAutoRenderRiverFalls(overlay, higherHex)) return;
         fallsHexIds.add(higherHex.id);
       });
     return fallsHexIds;
+  }
+
+  function shouldAutoRenderRiverFalls(overlay, hex) {
+    const chance = isCoastalFallsCandidate(hex)
+      ? COASTAL_RIVER_FALLS_CHANCE
+      : RIVER_FALLS_CHANCE;
+    const seed = `${overlay.__uuid || ""}:${overlay.From_Hex_ID_Ref}:${overlay.To_Hex_ID_Ref}:auto-falls`;
+    return stableHash(seed) % 100 < chance;
+  }
+
+  function isCoastalFallsCandidate(hex) {
+    if (!hex) return false;
+    if (hex.baseTerrain === "beach" || hex.baseTerrain === "coastal_water") return true;
+    return EDGE_NAMES.some(edgeName => {
+      const neighbor = getNeighborHex(hex, edgeName);
+      return neighbor && ["deep_sea", "sea", "coastal_water", "beach"].includes(neighbor.baseTerrain);
+    });
   }
 
   function chooseFeatureArtFile(hex, featureId, features) {
@@ -2894,22 +3003,25 @@
 
   function chooseWoodsArt(hex) {
     const base = hex.baseTerrain;
+    if (["barrens", "bleak_barrens", "wastes"].includes(base)) return "woods_dead.svg";
     if (!["plains", "grassland", "lush_grassland", "wetland", "snow", "rock"].includes(base)) return null;
     if (base === "snow") return pickStableWeighted(hex, "woods", [["woods_con.svg", 6], ["woods_dec.svg", 1]]);
     if (base === "rock") return pickStableWeighted(hex, "woods", [["woods_con.svg", 5], ["woods_dec.svg", 2]]);
-    if (base === "wetland") return pickStableWeighted(hex, "woods", [["woods_con.svg", 2], ["woods_dec.svg", 3]]);
-    if (base === "lush_grassland") return pickStableWeighted(hex, "woods", [["woods_dec.svg", 6], ["woods_con.svg", 1]]);
-    return pickStableWeighted(hex, "woods", [["woods_dec.svg", 5], ["woods_con.svg", 1]]);
+    if (base === "wetland") return pickStableWeighted(hex, "woods", [["woods_con.svg", 2], ["woods_dec.svg", 3], ["woods_dead.svg", 1]]);
+    if (base === "lush_grassland") return pickStableWeighted(hex, "woods", [["woods_dec.svg", 8], ["woods_con.svg", 1], ["woods_dead.svg", 1]]);
+    if (base === "grassland") return pickStableWeighted(hex, "woods", [["woods_dec.svg", 7], ["woods_con.svg", 2], ["woods_dead.svg", 1]]);
+    return pickStableWeighted(hex, "woods", [["woods_dec.svg", 6], ["woods_con.svg", 1], ["woods_dead.svg", 1]]);
   }
 
   function chooseForestArt(hex) {
     const base = hex.baseTerrain;
+    if (["barrens", "bleak_barrens", "wastes"].includes(base)) return "forest_dead.svg";
     if (!["grassland", "lush_grassland", "wetland", "snow", "rock"].includes(base)) return null;
     if (base === "snow") return pickStableWeighted(hex, "forest", [["forest_con.svg", 6], ["forest_dec.svg", 1]]);
     if (base === "rock") return pickStableWeighted(hex, "forest", [["forest_con.svg", 5], ["forest_dec.svg", 2]]);
-    if (base === "wetland") return pickStableWeighted(hex, "forest", [["forest_con.svg", 3], ["forest_dec.svg", 3]]);
-    if (base === "lush_grassland") return pickStableWeighted(hex, "forest", [["forest_dec.svg", 6], ["forest_con.svg", 1]]);
-    return pickStableWeighted(hex, "forest", [["forest_dec.svg", 4], ["forest_con.svg", 2]]);
+    if (base === "wetland") return pickStableWeighted(hex, "forest", [["forest_con.svg", 3], ["forest_dec.svg", 4], ["forest_dead.svg", 1]]);
+    if (base === "lush_grassland") return pickStableWeighted(hex, "forest", [["forest_dec.svg", 8], ["forest_con.svg", 2], ["forest_dead.svg", 1]]);
+    return pickStableWeighted(hex, "forest", [["forest_dec.svg", 6], ["forest_con.svg", 3], ["forest_dead.svg", 1]]);
   }
 
   function chooseJungleArt(hex) {
@@ -2944,6 +3056,7 @@
     if (featureId === "falls") return isRiverFallsHex(hex) ? getReliefFeatureTint(hex) : "#d8eef2";
     if (file.includes("jungle_trop")) return "#155c38";
     if (file.includes("jungle_temp")) return "#244a35";
+    if (file.includes("_dead")) return ["barrens", "bleak_barrens", "wastes"].includes(base) ? "#8f6f68" : "#746852";
     if (file.includes("_con")) return base === "wetland" ? "#234d43" : "#203f35";
     if (file.includes("_dec")) return tints.vegetation;
     if (isVegetation) return tints.vegetation;
@@ -3111,7 +3224,7 @@
       renderMistBrushPreview(fragment, visibleHexes);
     }
 
-    if ((renderer.drawing.tool === "terrain" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase") && renderer.drawing.hoverBrushHexIds?.length) {
+    if ((renderer.drawing.tool === "terrain" || renderer.drawing.tool === "terrain-eyedropper" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase" || renderer.drawing.tool === "feature-eyedropper") && renderer.drawing.hoverBrushHexIds?.length) {
       renderEditorBrushPreview(fragment, visibleHexes);
     }
 
@@ -5778,6 +5891,9 @@
 
   function getEditorBrushHexIds(hex) {
     if (!hex) return [];
+    if (renderer.drawing.tool === "terrain-eyedropper" || renderer.drawing.tool === "feature-eyedropper") {
+      return [hex.id];
+    }
     if (renderer.drawing.tool === "terrain") {
       const size = resolveChaosNumber(renderer.drawing.terrainBrushSize, 1, 5, `terrain-preview-size:${hex.id}`);
       const noise = resolveChaosNumber(renderer.drawing.terrainNoise, 0, 90, `terrain-preview-noise:${hex.id}`, 5);
@@ -6034,14 +6150,11 @@
   async function runGenerationFeaturePass() {
     const campaign = getActiveCampaign?.();
     if (!campaign || renderer.drawing.saving) return;
-    if (renderer.drawing.generationPreviewActions.length) {
-      window.alert?.("Apply or discard the terrain preview before running a feature pass.");
-      return;
-    }
+    if (hasGenerationPreview()) discardGeneratedTerrainPreview({ silent: true });
 
     const refreshExisting = Boolean(renderer.drawing.generationRefreshExisting);
     if (refreshExisting && typeof window.confirm === "function") {
-      const confirmed = window.confirm("Refresh terrain features across the generated map? Existing terrain features will be replaced, but you can undo it.");
+      const confirmed = window.confirm("Preview refreshed terrain features across the generated map? Existing terrain features will be staged locally until you apply the preview.");
       if (!confirmed) return;
     }
 
@@ -6084,9 +6197,179 @@
       return;
     }
 
-    const historyAction = actions.length === 1 ? actions[0] : { type: "batch", actions };
-    const showBulkLoading = getMapEditActionSize(historyAction) >= BULK_OVERLAY_LOADING_THRESHOLD;
+    renderer.drawing.generationPreviewOriginals = new Map(renderer.hexes.map(hex => [hex.id, getTerrainSnapshot(hex.id)]));
+    renderer.drawing.generationPreviewActions = actions.map(action => ({ ...action, previewSection: "features" }));
+    actions.forEach(action => applyLocalTerrainSnapshot(action.hexId, action.after));
+    renderer.cacheDirty = true;
+    render();
+    updateGenerationControls();
+  }
 
+  async function runGenerationRoadPass() {
+    const campaign = getActiveCampaign?.();
+    if (!campaign || renderer.drawing.saving) return;
+    if (!confirmOverlayGeneration("road", "roads")) return;
+    const routes = buildGeneratedRoadRoutes(campaign.id);
+    if (!routes.length) {
+      window.alert?.("No road routes could be generated from the current POI layout.");
+      return;
+    }
+
+    previewGeneratedOverlayRoutes({
+      campaignId: campaign.id,
+      routes,
+      tool: "road",
+      style: "dark_brown",
+      routeMetadata: { isMajorRoute: false, routeName: "" },
+      emptyMessage: "Generated roads already matched existing road overlays."
+    });
+  }
+
+  async function runGenerationRiverPass() {
+    const campaign = getActiveCampaign?.();
+    if (!campaign || renderer.drawing.saving) return;
+    if (!confirmOverlayGeneration("river", "rivers")) return;
+    const routes = buildGeneratedRiverRoutes(campaign.id);
+    if (!routes.length) {
+      window.alert?.("No river routes could be generated from the current terrain.");
+      return;
+    }
+
+    previewGeneratedOverlayRoutes({
+      campaignId: campaign.id,
+      routes,
+      tool: "river",
+      style: composeOverlayStyle("river", []),
+      routeMetadata: { isMajorRoute: false, routeName: "" },
+      emptyMessage: "Generated rivers already matched existing river overlays."
+    });
+  }
+
+  function confirmOverlayGeneration(type, label) {
+    const replacingPreview = (renderer.drawing.generationPreviewActions || [])
+      .some(action => action.previewSection === "overlays" && action.previewOverlayType === type);
+    if (replacingPreview) return true;
+
+    const existing = (renderer.mapOverlays || [])
+      .filter(overlay => !overlay.__preview && overlay.Overlay_Type === type && overlay.To_Hex_ID_Ref)
+      .length;
+    if (!existing || typeof window.confirm !== "function") return true;
+    return window.confirm(`Preview ${label} on top of ${existing} existing ${label} segment${existing === 1 ? "" : "s"}? This only stages overlays locally until you apply the preview.`);
+  }
+
+  function previewGeneratedOverlayRoutes({ campaignId, routes, tool, style, routeMetadata, emptyMessage }) {
+    const replacedActions = (renderer.drawing.generationPreviewActions || [])
+      .filter(action => action.previewSection === "overlays" && action.previewOverlayType === tool);
+    removeGenerationPreviewOverlays(replacedActions);
+
+    const segments = getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting: true });
+
+    if (!segments.length) {
+      window.alert?.(emptyMessage || "No new overlays were generated.");
+      return;
+    }
+
+    const previewOverlays = segments.map((segment, index) => ({
+      __uuid: `preview-${tool}-${Date.now()}-${index}`,
+      __preview: true,
+      Overlay_Type: segment.tool,
+      From_Hex_ID_Ref: segment.fromHexId,
+      To_Hex_ID_Ref: segment.toHexId || "",
+      Hex_ID_Ref: "",
+      Edge: segment.edge || "",
+      Style: segment.style,
+      Is_Major_Route: Boolean(segment.routeMetadata?.isMajorRoute),
+      Route_Name: segment.routeMetadata?.routeName || ""
+    }));
+
+    renderer.drawing.generationPreviewActions = [
+      ...(renderer.drawing.generationPreviewActions || [])
+        .filter(action => !(action.previewSection === "overlays" && action.previewOverlayType === tool)),
+      {
+        type: "overlay",
+        previewSection: "overlays",
+        previewOverlayType: tool,
+        overlays: previewOverlays
+      }
+    ];
+    previewOverlays.forEach(upsertLocalOverlay);
+    renderer.cacheDirty = true;
+    render();
+    updateGenerationControls();
+  }
+
+  async function persistGeneratedOverlayRoutes({ campaignId, routes, tool, style, routeMetadata, emptyMessage }) {
+    const existingOverlayIds = new Set((renderer.mapOverlays || []).map(overlay => overlay.__uuid).filter(Boolean));
+    const segments = getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting: true });
+
+    if (!segments.length) {
+      window.alert?.(emptyMessage || "No new overlays were generated.");
+      return;
+    }
+
+    await persistGeneratedOverlaySegments(campaignId, segments, existingOverlayIds);
+  }
+
+  function getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting = true }) {
+    const existingKeys = new Set((renderer.mapOverlays || [])
+      .filter(overlay => !overlay.__preview && overlay.Overlay_Type === tool && overlay.From_Hex_ID_Ref && overlay.To_Hex_ID_Ref)
+      .map(overlay => overlaySegmentKey(tool, overlay.From_Hex_ID_Ref, overlay.To_Hex_ID_Ref)));
+    const queuedKeys = new Set();
+    const segments = [];
+
+    routes.forEach(route => {
+      const sequence = Array.isArray(route) ? route : route?.sequence || [];
+      if (route?.startEdge && sequence.length) {
+        const fromHexId = sequence[0];
+        const key = `${tool}:${fromHexId}:edge:${route.startEdge}`;
+        if (!queuedKeys.has(key)) {
+          queuedKeys.add(key);
+          segments.push({
+            tool,
+            fromHexId,
+            toHexId: null,
+            edge: route.startEdge,
+            style,
+            routeMetadata
+          });
+        }
+      }
+      sequence.slice(0, -1).forEach((fromHexId, index) => {
+        const toHexId = sequence[index + 1];
+        const segmentTool = getPersistedSegmentTool(tool, fromHexId, toHexId);
+        const key = overlaySegmentKey(segmentTool, fromHexId, toHexId);
+        if ((skipExisting && existingKeys.has(key)) || queuedKeys.has(key)) return;
+        queuedKeys.add(key);
+        segments.push({
+          tool: segmentTool,
+          fromHexId,
+          toHexId,
+          style: segmentTool === "sea_route" ? "sea_route" : style,
+          routeMetadata: getSegmentRouteMetadata(segmentTool, routeMetadata)
+        });
+      });
+      if (route?.exitEdge && sequence.length) {
+        const fromHexId = sequence[sequence.length - 1];
+        const key = `${tool}:${fromHexId}:edge:${route.exitEdge}`;
+        if (!queuedKeys.has(key)) {
+          queuedKeys.add(key);
+          segments.push({
+            tool,
+            fromHexId,
+            toHexId: null,
+            edge: route.exitEdge,
+            style,
+            routeMetadata
+          });
+        }
+      }
+    });
+
+    return segments;
+  }
+
+  async function persistGeneratedOverlaySegments(campaignId, segments, existingOverlayIds = new Set()) {
+    const showBulkLoading = segments.length >= BULK_OVERLAY_LOADING_THRESHOLD;
     renderer.drawing.saving = true;
     if (showBulkLoading) setLoading(true);
     updateDrawUndoButton();
@@ -6095,13 +6378,27 @@
     updateGenerationControls();
 
     try {
-      await applyMapEditAction(campaign.id, historyAction, "redo");
-      pushMapEditAction(historyAction, { force: true });
+      const saved = [];
+      for (const segment of segments) {
+        const overlay = await savePathOverlaySegment(
+          campaignId,
+          segment.tool,
+          segment.fromHexId,
+          segment.toHexId,
+          segment.style,
+          segment.edge || null,
+          segment.routeMetadata
+        );
+        if (overlay) saved.push(overlay);
+      }
+
+      saved.forEach(upsertLocalOverlay);
+      pushOverlayUndoAction(saved.filter(overlay => !existingOverlayIds.has(overlay.__uuid)));
       renderer.cacheDirty = true;
       render();
     } catch (error) {
-      console.error("Unable to run generated feature pass:", error);
-      window.alert?.(error.message || "Unable to run the feature pass.");
+      console.error("Unable to generate map overlays:", error);
+      window.alert?.(error.message || "Unable to generate map overlays.");
     } finally {
       renderer.drawing.saving = false;
       if (showBulkLoading) setLoading(false);
@@ -6110,6 +6407,247 @@
       updateDrawClearButton();
       updateGenerationControls();
     }
+  }
+
+  function overlaySegmentKey(type, fromHexId, toHexId) {
+    const ends = [fromHexId, toHexId].sort();
+    return `${type}:${ends[0]}:${ends[1]}`;
+  }
+
+  function buildGeneratedRoadRoutes(campaignId) {
+    const anchors = getGeneratedRoadAnchors(campaignId);
+    if (anchors.length < 2) return [];
+
+    const seedBase = getGenerationSeedBase(campaignId);
+    const connected = [anchors[0]];
+    const remaining = anchors.slice(1);
+    const routes = [];
+    const amountScale = Math.max(0.25, Math.min(2, Number(renderer.drawing.generationRoadAmount || 100) / 100));
+    const maxRoutes = Math.min(Math.max(1, Math.round(28 * amountScale)), anchors.length - 1);
+    let step = 0;
+
+    while (remaining.length && routes.length < maxRoutes) {
+      const candidates = [];
+      connected.forEach(fromHex => {
+        remaining.forEach(toHex => {
+          const score = roadPathHeuristic(fromHex, toHex)
+            + seededUnit(`${seedBase}:road-route:${step}:${fromHex.id}:${toHex.id}`) * 5.5;
+          candidates.push({ fromHex, toHex, score });
+        });
+      });
+      const candidatePool = candidates.sort((a, b) => a.score - b.score).slice(0, Math.min(6, candidates.length));
+      const best = candidatePool[Math.floor(seededUnit(`${seedBase}:road-pick:${step}`) * candidatePool.length)];
+      if (!best) break;
+      const sequence = getPathOverlaySequence("road", best.fromHex.id, best.toHex.id);
+      if (sequence && sequence.length >= 2) routes.push(sequence);
+      connected.push(best.toHex);
+      remaining.splice(remaining.findIndex(hex => hex.id === best.toHex.id), 1);
+      step += 1;
+    }
+
+    return routes;
+  }
+
+  function getGeneratedRoadAnchors(campaignId) {
+    const seedBase = getGenerationSeedBase(campaignId);
+    const pois = db?.raw?.pois || [];
+    const hexById = new Map();
+    renderer.hexes.forEach(hex => {
+      hexById.set(hex.id, hex);
+      if (hex.label) hexById.set(hex.label, hex);
+    });
+    const bestPoiByHex = new Map();
+
+    pois.forEach(poi => {
+      const hex = hexById.get(poi.Hex_ID_Ref);
+      if (!hex || isWaterHex(hex)) return;
+      const score = getPoiRoadAnchorScore(poi) + seededUnit(`${seedBase}:road-anchor:${poi.POI_ID || poi.Name || hex.id}`) * 8;
+      const existing = bestPoiByHex.get(hex.id);
+      if (!existing || score < existing.score) bestPoiByHex.set(hex.id, { hex, score });
+    });
+
+    const poiAnchors = [...bestPoiByHex.values()]
+      .sort((a, b) => a.score - b.score || a.hex.id.localeCompare(b.hex.id))
+      .slice(0, 24)
+      .map(entry => entry.hex);
+    return [...poiAnchors, ...getFallbackRoadAnchors(campaignId, bestPoiByHex)]
+      .filter((hex, index, list) => hex && list.findIndex(candidate => candidate.id === hex.id) === index);
+  }
+
+  function getFallbackRoadAnchors(campaignId, existingAnchors = new Map()) {
+    if (existingAnchors.size >= 2) return [];
+    const seedBase = getGenerationSeedBase(campaignId);
+    const byRegion = new Map();
+    renderer.hexes.forEach(hex => {
+      if (!hex.regionId || hex.regionId === UNCLAIMED_REGION_REF || isWaterHex(hex)) return;
+      if (!byRegion.has(hex.regionId)) byRegion.set(hex.regionId, []);
+      byRegion.get(hex.regionId).push(hex);
+    });
+
+    const regionCenters = [...byRegion.entries()].map(([regionId, hexes]) => {
+      const center = hexes.reduce((total, hex) => ({
+        x: total.x + hex.center.x,
+        y: total.y + hex.center.y
+      }), { x: 0, y: 0 });
+      center.x /= Math.max(1, hexes.length);
+      center.y /= Math.max(1, hexes.length);
+      return hexes
+        .slice()
+        .sort((a, b) => (
+          Math.hypot(a.center.x - center.x, a.center.y - center.y) - Math.hypot(b.center.x - center.x, b.center.y - center.y) ||
+          seededUnit(`${seedBase}:road-region:${regionId}:${a.id}`) - seededUnit(`${seedBase}:road-region:${regionId}:${b.id}`)
+        ))[0];
+    }).filter(Boolean);
+
+    const broadLand = renderer.hexes
+      .filter(hex => !isWaterHex(hex) && !existingAnchors.has(hex.id))
+      .sort((a, b) => (
+        getRoadLandAnchorScore(a) - getRoadLandAnchorScore(b) ||
+        seededUnit(`${seedBase}:road-land:${a.id}`) - seededUnit(`${seedBase}:road-land:${b.id}`)
+      ))
+      .slice(0, 8);
+
+    return [...regionCenters, ...broadLand]
+      .filter((hex, index, list) => hex && !existingAnchors.has(hex.id) && list.findIndex(candidate => candidate.id === hex.id) === index)
+      .slice(0, 12);
+  }
+
+  function getRoadLandAnchorScore(hex) {
+    let score = 5;
+    if (["plains", "grassland", "lush_grassland", "beach"].includes(hex.baseTerrain)) score -= 2;
+    if ((hex.features || []).includes("farmland")) score -= 2;
+    if ((hex.features || []).some(feature => ["mountains", "snowcapped_mountains", "volcano", "cliffs", "jungle", "marsh"].includes(feature))) score += 3;
+    score += Math.abs(Number(hex.elevation || 0) - 1) * 0.8;
+    return score;
+  }
+
+  function getPoiRoadAnchorScore(poi) {
+    const text = `${poi?.POI_Type || ""} ${poi?.Name || ""}`.toLowerCase();
+    if (/(city|town|village|settlement|district|docks|farm|inn|abbey|castle|hold)/.test(text)) return 0;
+    if (/(tower|temple|lodge|oasis|center|entrance|summit)/.test(text)) return 2;
+    if (/(ruin|dungeon|cave|tomb|pit|shelter|obelisk)/.test(text)) return 4;
+    return 3;
+  }
+
+  function buildGeneratedRiverRoutes(campaignId) {
+    const seedBase = getGenerationSeedBase(campaignId);
+    const amountScale = Math.max(0.25, Math.min(2, Number(renderer.drawing.generationRiverAmount || 100) / 100));
+    const maxRivers = Math.max(1, Math.round(7 * amountScale));
+    const sources = renderer.hexes
+      .filter(hex => !isWaterHex(hex) && getRiverSourceScore(hex) > 0)
+      .sort((a, b) => (
+        getSeededRiverSourceScore(b, seedBase) - getSeededRiverSourceScore(a, seedBase) ||
+        a.id.localeCompare(b.id)
+      ));
+    const routes = [];
+    const usedHexes = new Set();
+
+    for (const source of sources) {
+      if (routes.length >= maxRivers) break;
+      if (nearbyHexesWithin(source, 4).some(hex => usedHexes.has(hex.id))) continue;
+      const route = getGeneratedRiverRoute(source, campaignId);
+      const sequence = Array.isArray(route) ? route : route?.sequence || [];
+      if (!sequence || sequence.length < 4) continue;
+      routes.push(route);
+      sequence.forEach(hexId => usedHexes.add(hexId));
+    }
+
+    return routes;
+  }
+
+  function getRiverSourceScore(hex) {
+    if (!hex || isWaterHex(hex)) return 0;
+    const elevation = Number(hex.elevation || 0);
+    const highlandFeature = (hex.features || []).some(feature => ["mountains", "snowcapped_mountains", "lone_mountain", "volcano", "ridges", "cliffs"].includes(feature));
+    return (elevation >= 3 ? elevation : 0) + (highlandFeature ? 2 : 0);
+  }
+
+  function getSeededRiverSourceScore(hex, seedBase) {
+    return getRiverSourceScore(hex) + seededUnit(`${seedBase}:river-source:${hex.id}`) * 5;
+  }
+
+  function getGeneratedRiverRoute(source, campaignId) {
+    const route = [source.id];
+    const visited = new Set(route);
+    let current = source;
+    const lengthScale = Math.max(0.5, Math.min(1.75, Number(renderer.drawing.generationRiverLength || 100) / 100));
+    const maxSteps = Math.round(54 * lengthScale);
+    const entryEdge = getOuterMapEdge(current);
+    const seedBase = getGenerationSeedBase(campaignId);
+    const startsOffMap = Boolean(entryEdge && seededUnit(`${seedBase}:river-entry:${source.id}`) < 0.45);
+
+    for (let step = 0; step < maxSteps; step += 1) {
+      const neighbors = EDGE_NAMES.map(edgeName => getNeighborHex(current, edgeName)).filter(Boolean);
+      const waterNeighbor = neighbors
+        .filter(neighbor => isWaterHex(neighbor))
+        .sort((a, b) => seededUnit(`${seedBase}:river-water:${current.id}:${a.id}`) - seededUnit(`${seedBase}:river-water:${current.id}:${b.id}`))[0];
+      if (waterNeighbor) {
+        route.push(waterNeighbor.id);
+        return startsOffMap ? { sequence: route, startEdge: entryEdge } : route;
+      }
+
+      const next = neighbors
+        .filter(neighbor => !visited.has(neighbor.id))
+        .map(neighbor => ({
+          hex: neighbor,
+          score: getRiverStepScore(current, neighbor, seedBase, step)
+        }))
+        .filter(candidate => Number.isFinite(candidate.score))
+        .sort((a, b) => a.score - b.score)[0]?.hex;
+
+      if (!next) break;
+      route.push(next.id);
+      visited.add(next.id);
+      current = next;
+    }
+
+    return null;
+  }
+
+  function getOuterMapEdge(hex) {
+    if (!hex) return "";
+    return EDGE_NAMES.find(edgeName => !getNeighborHex(hex, edgeName)) || "";
+  }
+
+  function getRiverStepScore(fromHex, toHex, seedBase, step) {
+    if (isWaterHex(toHex)) return 0;
+    const fromElevation = Number(fromHex.elevation || 0);
+    const toElevation = Number(toHex.elevation || 0);
+    const climb = Math.max(0, toElevation - fromElevation);
+    if (climb > 1) return Infinity;
+
+    const nearbyWaterDistance = getNearestWaterDistance(toHex, 7);
+    const descent = Math.max(0, fromElevation - toElevation);
+    const terrainPenalty = ["rock", "snow", "barrens", "bleak_barrens", "wastes"].includes(toHex.baseTerrain) ? 0.2 : 0.8;
+    return nearbyWaterDistance * 2.6
+      + climb * 7
+      - descent * 1.4
+      + terrainPenalty
+      + step * 0.05
+      + seededUnit(`${seedBase}:river-step:${fromHex.id}:${toHex.id}`) * 4.8;
+  }
+
+  function getNearestWaterDistance(hex, radius = 6) {
+    if (!hex) return radius + 1;
+    if (isWaterHex(hex)) return 0;
+    const queue = [{ hex, distance: 0 }];
+    const seen = new Set([hex.id]);
+    while (queue.length) {
+      const current = queue.shift();
+      if (current.distance >= radius) continue;
+      for (const edgeName of EDGE_NAMES) {
+        const neighbor = getNeighborHex(current.hex, edgeName);
+        if (!neighbor || seen.has(neighbor.id)) continue;
+        if (isWaterHex(neighbor)) return current.distance + 1;
+        seen.add(neighbor.id);
+        queue.push({ hex: neighbor, distance: current.distance + 1 });
+      }
+    }
+    return radius + 1;
+  }
+
+  function seededUnit(seed) {
+    return stableHash(seed) / 0xffffffff;
   }
 
   function getGeneratorControlScale(key, fallback = 100) {
@@ -6176,7 +6714,7 @@
     }
 
     renderer.drawing.generationPreviewOriginals = originals;
-    renderer.drawing.generationPreviewActions = actions;
+    renderer.drawing.generationPreviewActions = actions.map(action => ({ ...action, previewSection: "terrain" }));
     actions.forEach(action => applyLocalTerrainSnapshot(action.hexId, action.after));
     renderer.cacheDirty = true;
     render();
@@ -6191,7 +6729,7 @@
       window.alert?.("Confirmation is unavailable, so the terrain preview was not applied.");
       return;
     }
-    const confirmed = window.confirm("Apply this terrain preview to the saved map? This will permanently overwrite the current generated terrain, features, and elevations. You can still use map undo during this session.");
+    const confirmed = window.confirm("Apply this generation preview to the saved map? You can still use map undo during this session.");
     if (!confirmed) return;
 
     const historyAction = actions.length === 1 ? actions[0] : { type: "batch", actions };
@@ -6205,6 +6743,7 @@
     updateGenerationControls();
 
     try {
+      removeGenerationPreviewOverlays(actions);
       await applyMapEditAction(campaign.id, historyAction, "redo");
       pushMapEditAction(historyAction, { force: true });
       renderer.drawing.generationPreviewOriginals.clear();
@@ -6225,6 +6764,7 @@
   }
 
   function discardGeneratedTerrainPreview(options = {}) {
+    removeGenerationPreviewOverlays(renderer.drawing.generationPreviewActions || []);
     const originals = renderer.drawing.generationPreviewOriginals;
     if (!originals?.size) {
       renderer.drawing.generationPreviewActions = [];
@@ -6241,6 +6781,55 @@
     render();
     updateGenerationControls();
     if (!options.silent) updateDrawHint();
+  }
+
+  function discardGenerationPreviewSection(section) {
+    const normalized = ["terrain", "features", "overlays"].includes(section) ? section : "";
+    if (!normalized) return;
+    const actions = renderer.drawing.generationPreviewActions || [];
+    const removedActions = actions.filter(action => action.previewSection === normalized);
+    if (!removedActions.length) return;
+
+    if (normalized === "overlays") {
+      removeGenerationPreviewOverlays(removedActions);
+      renderer.drawing.generationPreviewActions = actions.filter(action => action.previewSection !== normalized);
+    } else {
+      const originals = renderer.drawing.generationPreviewOriginals;
+      removedActions.forEach(action => {
+        const snapshot = originals?.get(action.hexId) || action.before;
+        if (snapshot) applyLocalTerrainSnapshot(action.hexId, snapshot);
+      });
+      renderer.drawing.generationPreviewActions = actions.filter(action => action.previewSection !== normalized);
+      if (!renderer.drawing.generationPreviewActions.some(action => action.type === "terrain")) {
+        renderer.drawing.generationPreviewOriginals.clear();
+      }
+    }
+
+    renderer.cacheDirty = true;
+    render();
+    updateGenerationControls();
+    updateDrawHint();
+  }
+
+  function removeGenerationPreviewOverlays(actions = []) {
+    const previewIds = [];
+    const collect = action => {
+      if (action?.type === "batch") {
+        (action.actions || []).forEach(collect);
+        return;
+      }
+      if (action?.type === "overlay") {
+        (action.overlays || []).forEach(overlay => {
+          if (overlay?.__preview && overlay.__uuid) previewIds.push(overlay.__uuid);
+        });
+      }
+    };
+    actions.forEach(collect);
+    if (!previewIds.length) return;
+
+    renderer.mapOverlays = renderer.mapOverlays.filter(overlay => !previewIds.includes(overlay.__uuid));
+    if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    renderer.cacheDirty = true;
   }
 
   function getTerrainSnapshot(hexId) {

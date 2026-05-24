@@ -381,6 +381,11 @@
       <span class="map-edit-mode-label">Utilities</span>
     </button>
   </nav>
+  <div class="map-generation-popout" role="tablist" aria-label="Generation subsections" hidden>
+    <button class="active" type="button" data-generation-section-button="terrain">Terrain</button>
+    <button type="button" data-generation-section-button="features">Features</button>
+    <button type="button" data-generation-section-button="overlays">Overlays</button>
+  </div>
 
   <div class="map-edit-pane">
     <div class="map-edit-pane-header">
@@ -583,105 +588,146 @@
 
       <section class="map-draw-panel-section" data-map-edit-section="generation">
         <div class="map-generation-scroll">
-          <div class="map-draw-section-title map-draw-section-title-with-help">
-            <span>Feature Pass</span>
-            <span class="map-editor-help-wrap">
-              <button class="map-editor-help-button" type="button" aria-describedby="map-generation-feature-help">?</button>
-              <span id="map-generation-feature-help" class="map-editor-help-tooltip" role="tooltip">Populate compatible terrain features from the shared rules brain. Base terrain and elevation stay as-is.</span>
-            </span>
+          <div class="map-generation-subsection active" data-generation-section="terrain">
+            <div class="map-draw-section-title map-draw-section-title-with-help">
+              <span>Terrain Preview</span>
+              <span class="map-editor-help-wrap">
+                <button class="map-editor-help-button" type="button" aria-describedby="map-generation-terrain-help">?</button>
+                <span id="map-generation-terrain-help" class="map-editor-help-tooltip" role="tooltip">
+                  <span>Preview a full terrain draft locally before saving.</span>
+                  <span>Region Style gives the generator a broad map archetype. Sliders still let you push the result away from that archetype.</span>
+                  <span>Water Coverage controls how much water appears overall. Coastal Edge controls whether one side or corner of the map opens onto a larger sea.</span>
+                  <span>Island Amount makes the generator start with more ocean, then carve land back into it as islands and broken coastlines.</span>
+                  <span>Biome Continuity controls how strongly nearby hexes smooth into larger regions.</span>
+                  <span>World Scale Compression controls how tightly mountains, deserts, wetlands, forests, and coasts can fit together in a playable fantasy map.</span>
+                </span>
+              </span>
+            </div>
+            <label class="map-draw-style-row">
+              <span>Region Style</span>
+              <select id="map-generation-region-style">
+                <option value="balanced">Balanced Wilds</option>
+                <option value="coastal_realm">Coastal Realm</option>
+                <option value="island_chain">Island Chain</option>
+                <option value="mountain_frontier">Mountain Frontier</option>
+                <option value="wetlands_lakes">Wetlands &amp; Lakes</option>
+                <option value="dry_expanse">Dry Expanse</option>
+                <option value="frozen_north">Frozen North</option>
+                <option value="tropical_basin">Tropical Basin</option>
+                <option value="volcanic_arc">Volcanic Arc</option>
+              </select>
+            </label>
+            <label class="map-draw-range-row">
+              <span>Water Coverage <strong id="map-generation-water-value">100%</strong></span>
+              <input id="map-generation-water" type="range" min="0" max="200" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>Coastal Edge <strong id="map-generation-coastal-edge-value">0%</strong></span>
+              <input id="map-generation-coastal-edge" type="range" min="0" max="200" step="5" value="0">
+            </label>
+            <label class="map-draw-range-row">
+              <span>Island Amount <strong id="map-generation-islands-value">0%</strong></span>
+              <input id="map-generation-islands" type="range" min="0" max="200" step="5" value="0">
+            </label>
+            <label class="map-draw-range-row">
+              <span>Wetness <strong id="map-generation-wetness-value">100%</strong></span>
+              <input id="map-generation-wetness" type="range" min="0" max="200" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>Heat <strong id="map-generation-heat-value">100%</strong></span>
+              <input id="map-generation-heat" type="range" min="0" max="200" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>Forest Density <strong id="map-generation-forest-value">100%</strong></span>
+              <input id="map-generation-forest" type="range" min="0" max="200" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>Desert Amount <strong id="map-generation-desert-value">100%</strong></span>
+              <input id="map-generation-desert" type="range" min="0" max="200" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>Mountain Ranges <strong id="map-generation-mountains-value">100%</strong></span>
+              <input id="map-generation-mountains" type="range" min="0" max="200" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>World Scale Compression <strong id="map-generation-compression-value">100%</strong></span>
+              <input id="map-generation-compression" type="range" min="0" max="200" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>Biome Continuity <strong id="map-generation-continuity-value">100%</strong></span>
+              <input id="map-generation-continuity" type="range" min="0" max="200" step="5" value="100">
+            </label>
           </div>
+          <div class="map-generation-subsection" data-generation-section="features">
+            <div class="map-draw-section-title map-draw-section-title-with-help">
+              <span>Feature Pass</span>
+              <span class="map-editor-help-wrap">
+                <button class="map-editor-help-button" type="button" aria-describedby="map-generation-feature-help">?</button>
+                <span id="map-generation-feature-help" class="map-editor-help-tooltip" role="tooltip">Populate compatible terrain features from the shared rules brain. Base terrain and elevation stay as-is.</span>
+              </span>
+            </div>
+            <label class="map-draw-range-row">
+              <span>Feature Density <strong id="map-generation-density-value">100%</strong></span>
+              <input id="map-generation-density" type="range" min="50" max="165" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>Max Features <strong id="map-generation-max-features-value">2</strong></span>
+              <input id="map-generation-max-features" type="range" min="0" max="2" step="1" value="2">
+            </label>
+            <label class="map-draw-option-row">
+              <input id="map-generation-refresh-existing" type="checkbox">
+              <span>Refresh Existing Features</span>
+            </label>
+          </div>
+          <div class="map-generation-subsection" data-generation-section="overlays">
+            <div class="map-draw-section-title map-draw-section-title-with-help">
+              <span>Overlay Pass</span>
+              <span class="map-editor-help-wrap">
+                <button class="map-editor-help-button" type="button" aria-describedby="map-generation-overlay-help">?</button>
+                <span id="map-generation-overlay-help" class="map-editor-help-tooltip" role="tooltip">Generate starter roads and rivers using the same saved overlay segments as the manual drawing tools.</span>
+              </span>
+            </div>
+            <p class="map-edit-empty-note">These passes add overlays without clearing your hand-drawn work. Use Undo if the result is not what you want.</p>
+            <label class="map-draw-range-row">
+              <span>Road Amount <strong id="map-generation-road-value">100%</strong></span>
+              <input id="map-generation-road" type="range" min="25" max="200" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>River Amount <strong id="map-generation-river-value">100%</strong></span>
+              <input id="map-generation-river" type="range" min="25" max="200" step="5" value="100">
+            </label>
+            <label class="map-draw-range-row">
+              <span>River Length <strong id="map-generation-river-length-value">100%</strong></span>
+              <input id="map-generation-river-length" type="range" min="50" max="175" step="5" value="100">
+            </label>
+          </div>
+        </div>
+        <div class="map-generation-section-actions">
+            <div class="map-draw-tool-row map-generation-actions active" data-generation-action-panel="terrain" role="group" aria-label="Terrain generation actions">
+              <button id="map-generation-preview-terrain" type="button">Preview Terrain</button>
+              <button id="map-generation-reset-sliders" type="button">Reset Sliders</button>
+              <button data-generation-discard-section="terrain" type="button">Discard</button>
+            </div>
+            <div class="map-draw-tool-row map-generation-actions" data-generation-action-panel="features" role="group" aria-label="Feature generation actions">
+              <button id="map-generation-run-features" class="map-draw-secondary-button" type="button">Preview Features</button>
+              <button data-generation-discard-section="features" type="button">Discard</button>
+            </div>
+            <div class="map-draw-tool-row map-generation-actions" data-generation-action-panel="overlays" role="group" aria-label="Overlay generation actions">
+              <button id="map-generation-run-roads" class="map-draw-secondary-button" type="button">Preview Roads</button>
+              <button id="map-generation-run-rivers" class="map-draw-secondary-button" type="button">Preview Rivers</button>
+              <button data-generation-discard-section="overlays" type="button">Discard</button>
+            </div>
+          </div>
+        <div class="map-generation-shared-controls">
           <label class="map-draw-route-name-row">
             <span>Seed</span>
             <input id="map-generation-seed" type="text" maxlength="80" placeholder="Campaign seed">
           </label>
-          <label class="map-draw-range-row">
-            <span>Feature Density <strong id="map-generation-density-value">100%</strong></span>
-            <input id="map-generation-density" type="range" min="50" max="165" step="5" value="100">
-          </label>
-          <label class="map-draw-range-row">
-            <span>Max Features <strong id="map-generation-max-features-value">2</strong></span>
-            <input id="map-generation-max-features" type="range" min="0" max="2" step="1" value="2">
-          </label>
-          <label class="map-draw-option-row">
-            <input id="map-generation-refresh-existing" type="checkbox">
-            <span>Refresh Existing Features</span>
-          </label>
-          <div class="map-draw-section-title map-draw-section-title-with-help">
-            <span>Terrain Preview</span>
-            <span class="map-editor-help-wrap">
-              <button class="map-editor-help-button" type="button" aria-describedby="map-generation-terrain-help">?</button>
-              <span id="map-generation-terrain-help" class="map-editor-help-tooltip" role="tooltip">
-                <span>Preview a full terrain draft locally before saving.</span>
-                <span>Region Style gives the generator a broad map archetype. Sliders still let you push the result away from that archetype.</span>
-                <span>Water Coverage controls how much water appears overall. Coastal Edge controls whether one side or corner of the map opens onto a larger sea.</span>
-                <span>Island Amount makes the generator start with more ocean, then carve land back into it as islands and broken coastlines.</span>
-                <span>Biome Continuity controls how strongly nearby hexes smooth into larger regions.</span>
-                <span>World Scale Compression controls how tightly mountains, deserts, wetlands, forests, and coasts can fit together in a playable fantasy map.</span>
-              </span>
-            </span>
+          <div class="map-draw-tool-row map-generation-footer-actions" role="group" aria-label="Generation preview actions">
+            <button id="map-generation-random-seed" data-generation-random-seed type="button">Random Seed</button>
+            <button id="map-generation-discard-preview" type="button" disabled>Discard All</button>
+            <button id="map-generation-apply-preview" type="button" disabled>Apply Preview</button>
           </div>
-          <label class="map-draw-style-row">
-            <span>Region Style</span>
-            <select id="map-generation-region-style">
-              <option value="balanced">Balanced Wilds</option>
-              <option value="coastal_realm">Coastal Realm</option>
-              <option value="island_chain">Island Chain</option>
-              <option value="mountain_frontier">Mountain Frontier</option>
-              <option value="wetlands_lakes">Wetlands &amp; Lakes</option>
-              <option value="dry_expanse">Dry Expanse</option>
-              <option value="frozen_north">Frozen North</option>
-              <option value="tropical_basin">Tropical Basin</option>
-              <option value="volcanic_arc">Volcanic Arc</option>
-            </select>
-          </label>
-          <label class="map-draw-range-row">
-            <span>Water Coverage <strong id="map-generation-water-value">100%</strong></span>
-            <input id="map-generation-water" type="range" min="0" max="200" step="5" value="100">
-          </label>
-          <label class="map-draw-range-row">
-            <span>Coastal Edge <strong id="map-generation-coastal-edge-value">0%</strong></span>
-            <input id="map-generation-coastal-edge" type="range" min="0" max="200" step="5" value="0">
-          </label>
-          <label class="map-draw-range-row">
-            <span>Island Amount <strong id="map-generation-islands-value">0%</strong></span>
-            <input id="map-generation-islands" type="range" min="0" max="200" step="5" value="0">
-          </label>
-          <label class="map-draw-range-row">
-            <span>Wetness <strong id="map-generation-wetness-value">100%</strong></span>
-            <input id="map-generation-wetness" type="range" min="0" max="200" step="5" value="100">
-          </label>
-          <label class="map-draw-range-row">
-            <span>Heat <strong id="map-generation-heat-value">100%</strong></span>
-            <input id="map-generation-heat" type="range" min="0" max="200" step="5" value="100">
-          </label>
-          <label class="map-draw-range-row">
-            <span>Forest Density <strong id="map-generation-forest-value">100%</strong></span>
-            <input id="map-generation-forest" type="range" min="0" max="200" step="5" value="100">
-          </label>
-          <label class="map-draw-range-row">
-            <span>Desert Amount <strong id="map-generation-desert-value">100%</strong></span>
-            <input id="map-generation-desert" type="range" min="0" max="200" step="5" value="100">
-          </label>
-          <label class="map-draw-range-row">
-            <span>Mountain Ranges <strong id="map-generation-mountains-value">100%</strong></span>
-            <input id="map-generation-mountains" type="range" min="0" max="200" step="5" value="100">
-          </label>
-          <label class="map-draw-range-row">
-            <span>World Scale Compression <strong id="map-generation-compression-value">100%</strong></span>
-            <input id="map-generation-compression" type="range" min="0" max="200" step="5" value="100">
-          </label>
-          <label class="map-draw-range-row">
-            <span>Biome Continuity <strong id="map-generation-continuity-value">100%</strong></span>
-            <input id="map-generation-continuity" type="range" min="0" max="200" step="5" value="100">
-          </label>
-        </div>
-        <div class="map-draw-tool-row map-generation-actions" role="group" aria-label="Generation actions">
-          <button id="map-generation-preview-terrain" type="button">Preview Terrain</button>
-          <button id="map-generation-discard-preview" type="button" disabled>Discard</button>
-          <button id="map-generation-apply-preview" type="button" disabled>Apply Preview</button>
-          <button id="map-generation-random-seed" type="button">Random Seed</button>
-          <button id="map-generation-reset-sliders" type="button">Reset Sliders</button>
-          <button id="map-generation-run-features" class="map-draw-secondary-button" type="button">Run Feature Pass</button>
         </div>
       </section>
     </div>
