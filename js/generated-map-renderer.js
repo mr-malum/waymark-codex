@@ -126,8 +126,10 @@
   const FEATURE_IMAGE_SUPERSAMPLE = 3;
   const FEATURE_IMAGE_BATCH_SIZE = 4;
   const BULK_OVERLAY_LOADING_THRESHOLD = 10;
+  const INITIAL_MAP_LOADING_VEIL_MS = 650;
   const PATH_REVEAL_MIN_DURATION = 320;
   const PATH_REVEAL_MAX_DURATION = 820;
+  const ZOOM_STEP_LOCK_MS = 260;
   const PATH_WOBBLE_BASE = 0.08;
   const PATH_WOBBLE_MAX = 0.22;
   const ROAD_WATER_CROSSING_MAX_ELEVATION_DELTA = 1;
@@ -155,6 +157,14 @@
   const DRAWABLE_OVERLAY_TYPES = new Set(["road", "river", "sea_route", "path", "wall", "mist", "region", "unregion", "political-region", "clear-political-region", "erase", "terrain", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper"]);
   const REGION_PAINT_TYPES = new Set(["region", "unregion", "political-region", "clear-political-region"]);
   const PATH_OVERLAY_TYPES = new Set(["road", "river", "sea_route", "path"]);
+  const OVERLAY_TYPE_LABELS = {
+    road: "roads",
+    river: "rivers",
+    path: "paths",
+    sea_route: "sea routes",
+    wall: "walls",
+    mist: "mist"
+  };
   const ALL_TERRAIN_FEATURES = Object.keys(TERRAIN_FEATURE_LABELS);
   const CHAOS_BASE_TERRAIN_OPTIONS = BASE_TERRAIN_OPTIONS
     .map(([base]) => base)
@@ -187,6 +197,18 @@
     riverNoAutoFalls: "no_auto_falls"
   };
   const MAP_EDIT_SECTION_COPY = {
+    chooser: {
+      title: "Map Tools",
+      copy: "Choose Surveyor for live map management or Cartographer for staged preview editing."
+    },
+    surveyor: {
+      title: "Surveyor",
+      copy: "Manage saved map data directly. Changes here write to the live map immediately."
+    },
+    cartographer: {
+      title: "Cartographer",
+      copy: "Stage terrain and feature changes locally before you apply them."
+    },
     view: {
       title: "View",
       copy: "Toggle the map layers you want visible while you inspect the world."
@@ -201,19 +223,19 @@
     },
     overlay: {
       title: "Overlay",
-      copy: "Draw roads, rivers, paths, walls, and mist on the generated map."
+      copy: "Draw roads, rivers, paths, walls, and mist directly onto the saved map."
     },
     regions: {
       title: "Regions",
       copy: "Assign geographic and political regions without leaving the map."
     },
     nuke: {
-      title: "Utilities",
-      copy: "Manage map-wide actions like clearing generated map edits and future import/export tools."
+      title: "Archive",
+      copy: "Placeholder for future map import and export tools."
     },
     generation: {
       title: "Generation",
-      copy: "Run shared-rule passes now, with full natural terrain generation coming next."
+      copy: "Run map generation passes for the active tool section."
     }
   };
   const RIVER_WATER_TERRAINS = new Set(["deep_sea", "sea", "coastal_water", "inland_water"]);
@@ -377,6 +399,13 @@
     cacheCanvas: document.createElement("canvas"),
     cacheCtx: null,
     cacheDirty: true,
+    routeCacheCanvas: document.createElement("canvas"),
+    routeCacheCtx: null,
+    routeCacheDirty: true,
+    featureCacheCanvas: document.createElement("canvas"),
+    featureCacheCtx: null,
+    featureCacheDirty: true,
+    initialMapLoadingTimer: null,
     overlayCacheCanvas: document.createElement("canvas"),
     overlayCacheCtx: null,
     overlayCacheDirty: true,
@@ -427,6 +456,14 @@
     },
     drawing: {
       enabled: false,
+      toolsMode: "chooser",
+      surveyorSection: "regions",
+      surveyorOverlaySubview: "paint",
+      cartographerSection: "terrain",
+      cartographerSubviews: {
+        terrain: "paint",
+        features: "paint"
+      },
       tool: "road",
       roadStyle: "dark_brown",
       roadWaterOverride: false,
@@ -439,6 +476,7 @@
       seaRouteName: "",
       mistBrushSize: 1,
       mistNoise: 0,
+      regionBrushSize: 1,
       regionId: UNCLAIMED_REGION_REF,
       politicalRegionId: "",
       terrainBase: "plains",
@@ -546,6 +584,8 @@
     renderer.canvas = renderer.root.querySelector("canvas");
     renderer.ctx = renderer.canvas.getContext("2d");
     renderer.cacheCtx = renderer.cacheCanvas.getContext("2d");
+    renderer.routeCacheCtx = renderer.routeCacheCanvas.getContext("2d");
+    renderer.featureCacheCtx = renderer.featureCacheCanvas.getContext("2d");
     renderer.overlayCacheCtx = renderer.overlayCacheCanvas.getContext("2d");
     renderer.svg = renderer.root.querySelector("svg");
     renderer.popup = renderer.root.querySelector(".generated-map-popup");
@@ -684,6 +724,11 @@
     markAllMapCachesDirty();
     updateDrawClearButton();
     setLoading(true);
+    if (renderer.initialMapLoadingTimer) window.clearTimeout(renderer.initialMapLoadingTimer);
+    renderer.initialMapLoadingTimer = window.setTimeout(() => {
+      renderer.initialMapLoadingTimer = null;
+      if (!renderer.drawing.saving) setLoading(false);
+    }, INITIAL_MAP_LOADING_VEIL_MS);
     populateDrawRegionSelect();
     updateDrawControlsVisibility();
     loadFeatureArtAssets();
@@ -723,6 +768,7 @@
   function refreshOverlayLayerFromDatabase() {
     if (!isActive()) return;
     renderer.mapOverlays = db?.raw?.generatedMapOverlays || [];
+    markRouteCacheDirty();
     markOverlayCacheDirty();
     updateDrawClearButton();
     render();
@@ -745,6 +791,7 @@
     const namedRouteCancel = document.getElementById("map-named-route-cancel");
     const mistBrushSize = document.getElementById("map-mist-brush-size");
     const mistNoise = document.getElementById("map-mist-noise");
+    const regionBrushSize = document.getElementById("map-region-brush-size");
     const regionSelect = document.getElementById("map-draw-region-select");
     const politicalRegionSelect = document.getElementById("map-draw-political-region-select");
     const geoRegionColor = document.getElementById("map-geo-region-color");
@@ -752,13 +799,24 @@
     const undoButton = document.getElementById("map-draw-undo");
     const redoButton = document.getElementById("map-draw-redo");
     const noToolButton = document.getElementById("map-draw-no-tool");
-    const clearButton = document.getElementById("map-draw-clear");
+    const clearOverlayTypeButtons = panel.querySelectorAll("[data-clear-overlay-type]");
     const clearGeoButton = document.getElementById("map-clear-geo-regions");
     const clearPolButton = document.getElementById("map-clear-pol-regions");
     const clearFeaturesButton = document.getElementById("map-clear-features");
     const addGeoRegionButton = document.getElementById("map-add-geo-region-button");
     const addPolRegionButton = document.getElementById("map-add-pol-region-button");
     const closeEditButton = document.getElementById("map-edit-close-button");
+    const modeViewButton = document.getElementById("map-edit-view-button");
+    const surveyorModeButton = document.getElementById("map-tools-surveyor-button");
+    const cartographerModeButton = document.getElementById("map-tools-cartographer-button");
+    const surveyorRegionsButton = document.getElementById("map-surveyor-regions-button");
+    const surveyorOverlayButton = document.getElementById("map-surveyor-overlay-button");
+    const surveyorUtilitiesButton = document.getElementById("map-surveyor-utilities-button");
+    const cartographerTerrainButton = document.getElementById("map-cartographer-terrain-button");
+    const cartographerFeaturesButton = document.getElementById("map-cartographer-features-button");
+    const cartographerPaintButton = document.getElementById("map-cartographer-subsection-paint");
+    const cartographerGenerateButton = document.getElementById("map-cartographer-subsection-generate");
+    const cartographerPurgeButton = document.getElementById("map-cartographer-subsection-purge");
     const closeViewButton = document.getElementById("map-view-close-button");
     const collapseEditButton = document.getElementById("map-edit-collapse-button");
     const terrainElevationInput = document.getElementById("map-terrain-elevation");
@@ -814,6 +872,16 @@
       event.stopPropagation();
       if (viewPanel) viewPanel.hidden = true;
       viewButton?.classList.remove("active");
+      modeViewButton?.classList.remove("active");
+    });
+
+    modeViewButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const willOpen = Boolean(viewPanel?.hidden);
+      if (viewPanel) viewPanel.hidden = !willOpen;
+      viewButton?.classList.toggle("active", willOpen);
+      modeViewButton?.classList.toggle("active", willOpen);
     });
 
     collapseEditButton?.addEventListener("click", event => {
@@ -825,7 +893,8 @@
     closeEditButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      requestCloseMapEditMode();
+      if ((renderer.drawing.toolsMode || "chooser") === "chooser") requestCloseMapEditMode();
+      else requestReturnToToolsChooser();
       render();
     });
 
@@ -840,7 +909,8 @@
       if (isOpening) {
         if (viewPanel) viewPanel.hidden = true;
         viewButton?.classList.remove("active");
-        setMapEditSection("terrain");
+        modeViewButton?.classList.remove("active");
+        setMapToolsMode("chooser");
         enterMapEditMode();
       }
       if (!isOpening) {
@@ -858,19 +928,70 @@
     });
 
     panel.addEventListener("click", event => event.stopPropagation());
-    panel.querySelectorAll("[data-map-edit-section-button]").forEach(sectionButton => {
-      sectionButton.addEventListener("click", event => {
-        event.preventDefault();
-        event.stopPropagation();
-        const selectedSection = sectionButton.dataset.mapEditSectionButton || "overlay";
-        const isActiveSection = sectionButton.classList.contains("active");
-        if (isActiveSection && isMobileEditorLayout()) {
-          toggleMapEditPaneCollapsed();
-          return;
-        }
-        expandMapEditPane();
-        setMapEditSection(selectedSection);
-      });
+    surveyorModeButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMapToolsMode("surveyor");
+    });
+    cartographerModeButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMapToolsMode("cartographer");
+    });
+    surveyorRegionsButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMapEditSection("regions");
+    });
+    surveyorOverlayButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMapEditSection("overlay");
+    });
+    surveyorUtilitiesButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMapEditSection("nuke");
+    });
+    cartographerTerrainButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMapEditSection("terrain");
+    });
+    cartographerFeaturesButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMapEditSection("features");
+    });
+    cartographerPaintButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
+        setSurveyorOverlaySubview("paint");
+      } else {
+        setCartographerSubview(renderer.drawing.cartographerSection, "paint");
+      }
+      updateMapEditSurface();
+    });
+    cartographerGenerateButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
+        setSurveyorOverlaySubview("generate");
+        setGenerationSection("overlays");
+      } else {
+        const section = renderer.drawing.cartographerSection || "terrain";
+        setCartographerSubview(section, "generate");
+        setGenerationSection(section);
+      }
+      updateMapEditSurface();
+    });
+    cartographerPurgeButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if ((renderer.drawing.toolsMode || "chooser") !== "surveyor") return;
+      setSurveyorOverlaySubview("purge");
+      updateMapEditSurface();
     });
 
     panel.querySelectorAll("[data-terrain-mobile-tab]").forEach(tabButton => {
@@ -962,6 +1083,13 @@
       renderer.drawing.mistNoise = clampNumber(Number(mistNoise.value), 0, 90, 0);
       updateDrawStyleControls();
       refreshMistBrushPreview();
+      renderSvgOnly();
+    });
+
+    regionBrushSize?.addEventListener("input", () => {
+      renderer.drawing.regionBrushSize = clampNumber(Number(regionBrushSize.value), 1, 5, 1);
+      updateDrawRegionControls();
+      refreshEditorBrushPreview();
       renderSvgOnly();
     });
 
@@ -1219,10 +1347,12 @@
       }
     });
 
-    clearButton?.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      clearAllDrawnOverlays();
+    clearOverlayTypeButtons.forEach(clearTypeButton => {
+      clearTypeButton.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        clearDrawnOverlaysByType(clearTypeButton.dataset.clearOverlayType || "");
+      });
     });
 
     clearGeoButton?.addEventListener("click", event => {
@@ -1240,7 +1370,7 @@
     clearFeaturesButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      clearAllGeneratedFeatures();
+      stageAllGeneratedFeaturePurge();
     });
 
     addGeoRegionButton?.addEventListener("click", event => {
@@ -1263,14 +1393,15 @@
     syncMapOverlayToggleInputs();
     populateTerrainControls();
     updateGenerationControls();
-    updateMapEditSectionHeader("overlay");
+    updateMapEditSurface();
     updateDrawHint();
     updateDrawControlsVisibility();
   }
 
   function closeMapEditMode() {
     discardGeneratedTerrainPreview({ silent: true });
-    closeMapEditorIntro();
+    document.getElementById("map-editor-intro")?.classList.add("hidden");
+    document.getElementById("map-editor-intro")?.setAttribute("aria-hidden", "true");
     const button = document.getElementById("map-draw-button");
     const panel = document.getElementById("map-draw-panel");
     const viewPanel = document.getElementById("map-view-panel");
@@ -1283,15 +1414,33 @@
       collapseEditButton.setAttribute("aria-expanded", "true");
     }
     button?.classList.remove("active");
+    document.getElementById("map-edit-view-button")?.classList.remove("active");
     renderer.drawing.enabled = false;
+    renderer.drawing.toolsMode = "chooser";
     restoreMapEditViewState();
     updateMapChromeForEdit(false);
     resetDrawingState();
+    updateMapEditSurface();
+  }
+
+  function requestReturnToToolsChooser() {
+    if ((renderer.drawing.toolsMode || "chooser") !== "cartographer") {
+      setMapToolsMode("chooser");
+      return true;
+    }
+    const confirmed = confirmDiscardUnappliedEdits("Leave Cartographer and discard unapplied preview changes? Regions save immediately and will stay saved.");
+    if (!confirmed) return false;
+    discardGeneratedTerrainPreview({ silent: true });
+    setMapToolsMode("chooser");
+    render();
+    return true;
   }
 
   function requestCloseMapEditMode() {
-    const confirmed = confirmDiscardUnappliedEdits("Leave map editor and discard unapplied preview changes? Regions save immediately and will stay saved.");
-    if (!confirmed) return false;
+    if ((renderer.drawing.toolsMode || "chooser") === "cartographer") {
+      const confirmed = confirmDiscardUnappliedEdits("Leave Map Tools and discard unapplied preview changes? Regions save immediately and will stay saved.");
+      if (!confirmed) return false;
+    }
     closeMapEditMode();
     return true;
   }
@@ -1319,24 +1468,203 @@
     }
   }
 
-  function setMapEditSection(section) {
-    const normalized = ["view", "terrain", "features", "overlay", "regions", "nuke", "generation"].includes(section) ? section : "overlay";
-    renderer.drawing.tool = "";
-    resetDrawingState();
+  function getCartographerSubview(section = renderer.drawing.cartographerSection) {
+    const normalized = ["terrain", "features"].includes(section) ? section : "terrain";
+    const saved = renderer.drawing.cartographerSubviews?.[normalized];
+    return saved === "generate" ? "generate" : "paint";
+  }
+
+  function setCartographerSubview(section, subview) {
+    const normalizedSection = ["terrain", "features"].includes(section) ? section : "terrain";
+    const normalizedSubview = subview === "generate" ? "generate" : "paint";
+    renderer.drawing.cartographerSubviews = {
+      ...(renderer.drawing.cartographerSubviews || {}),
+      [normalizedSection]: normalizedSubview
+    };
+  }
+
+  function getSurveyorOverlaySubview() {
+    return ["generate", "purge"].includes(renderer.drawing.surveyorOverlaySubview)
+      ? renderer.drawing.surveyorOverlaySubview
+      : "paint";
+  }
+
+  function setSurveyorOverlaySubview(subview) {
+    renderer.drawing.surveyorOverlaySubview = ["generate", "purge"].includes(subview) ? subview : "paint";
+  }
+
+  function getVisibleMapEditSection() {
+    const mode = renderer.drawing.toolsMode || "chooser";
+    if (mode === "surveyor") {
+      if (renderer.drawing.surveyorSection === "overlay") {
+        return getSurveyorOverlaySubview() === "generate" ? "generation" : "overlay";
+      }
+      return renderer.drawing.surveyorSection === "nuke" ? "nuke" : "regions";
+    }
+    if (mode === "cartographer") {
+      const section = ["terrain", "features"].includes(renderer.drawing.cartographerSection)
+        ? renderer.drawing.cartographerSection
+        : "terrain";
+      if (getCartographerSubview(section) === "generate") return "generation";
+      return section;
+    }
+    return "";
+  }
+
+  function updateMapToolsRail() {
+    const mode = renderer.drawing.toolsMode || "chooser";
+    const closeLabel = document.querySelector("#map-edit-close-button .map-edit-mode-label");
+    const closeIcon = document.querySelector("#map-edit-close-button .map-edit-mode-icon");
+    if (closeLabel) closeLabel.textContent = mode === "chooser" ? "Close" : "Back";
+    if (closeIcon) closeIcon.textContent = mode === "chooser" ? "✕" : "↩";
+    document.querySelectorAll("[data-map-tool-mode-panel]").forEach(panel => {
+      panel.hidden = panel.dataset.mapToolModePanel !== mode;
+    });
+    document.getElementById("map-tools-surveyor-button")?.classList.toggle("active", mode === "surveyor");
+    document.getElementById("map-tools-cartographer-button")?.classList.toggle("active", mode === "cartographer");
+    document.getElementById("map-surveyor-regions-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "regions");
+    document.getElementById("map-surveyor-overlay-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "overlay");
+    document.getElementById("map-surveyor-utilities-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "nuke");
+    document.getElementById("map-cartographer-terrain-button")?.classList.toggle("active", mode === "cartographer" && renderer.drawing.cartographerSection === "terrain");
+    document.getElementById("map-cartographer-features-button")?.classList.toggle("active", mode === "cartographer" && renderer.drawing.cartographerSection === "features");
+  }
+
+  function updateGenerationPopout() {
+    const popout = document.getElementById("map-cartographer-subsection-popout");
+    const mode = renderer.drawing.toolsMode || "chooser";
+    const section = mode === "surveyor" ? "overlay" : (renderer.drawing.cartographerSection || "terrain");
+    const isVisible = (
+      mode === "surveyor" && renderer.drawing.surveyorSection === "overlay" ||
+      mode === "cartographer" && ["terrain", "features"].includes(section)
+    );
+    if (!popout) return;
+    popout.hidden = !isVisible;
+    if (!isVisible) return;
+    const title = document.getElementById("map-cartographer-subsection-title");
+    const paintButton = document.getElementById("map-cartographer-subsection-paint");
+    const generateButton = document.getElementById("map-cartographer-subsection-generate");
+    const purgeButton = document.getElementById("map-cartographer-subsection-purge");
+    const isOverlay = section === "overlay";
+    const surveyorOverlaySubview = getSurveyorOverlaySubview();
+    popout.classList.toggle("map-generation-popout-three", isOverlay);
+    if (title) title.textContent = section === "terrain" ? "Terrain" : section === "features" ? "Features" : "Overlay";
+    if (paintButton) {
+      paintButton.textContent = isOverlay ? "Drawing" : "Painting";
+      paintButton.classList.toggle("active", isOverlay ? surveyorOverlaySubview === "paint" : getCartographerSubview(section) !== "generate");
+    }
+    if (generateButton) {
+      generateButton.textContent = "Generation";
+      generateButton.classList.toggle("active", isOverlay ? surveyorOverlaySubview === "generate" : getCartographerSubview(section) === "generate");
+    }
+    if (purgeButton) {
+      purgeButton.hidden = !isOverlay;
+      purgeButton.classList.toggle("active", isOverlay && surveyorOverlaySubview === "purge");
+    }
+  }
+
+  function updateMapEditSectionHeader(section) {
+    const mode = renderer.drawing.toolsMode || "chooser";
+    const meta = mode === "chooser"
+      ? MAP_EDIT_SECTION_COPY.chooser
+      : mode === "surveyor"
+      ? MAP_EDIT_SECTION_COPY.surveyor
+      : MAP_EDIT_SECTION_COPY.cartographer;
+    const detailMeta = MAP_EDIT_SECTION_COPY[section] || null;
+    const heading = document.getElementById("map-edit-section-heading");
+    const copy = document.getElementById("map-edit-section-copy");
+    const kicker = document.querySelector(".map-edit-pane-kicker");
+    if (kicker) kicker.textContent = mode === "surveyor" ? "Surveyor" : mode === "cartographer" ? "Cartographer" : "Hex Mapper";
+    if (heading) heading.textContent = detailMeta?.title || meta.title;
+    if (copy) copy.textContent = detailMeta?.copy || meta.copy;
+  }
+
+  function updateMapEditSurface() {
+    const visibleSection = getVisibleMapEditSection();
+    const mode = renderer.drawing.toolsMode || "chooser";
+    const isChooser = mode === "chooser";
+    const pane = document.querySelector(".map-edit-pane");
+    const applyRow = document.querySelector(".map-edit-apply-row");
+    if (pane) pane.hidden = isChooser;
+    if (applyRow) applyRow.hidden = mode !== "cartographer";
+    if (visibleSection === "generation") {
+      const generationSection = mode === "surveyor"
+        ? "overlays"
+        : (renderer.drawing.cartographerSection || "terrain");
+      renderer.drawing.generationSection = generationSection;
+      document.querySelectorAll("[data-generation-section]").forEach(sectionPane => {
+        sectionPane.classList.toggle("active", sectionPane.dataset.generationSection === generationSection);
+      });
+      document.querySelectorAll("[data-generation-action-panel]").forEach(actionPanel => {
+        actionPanel.classList.toggle("active", actionPanel.dataset.generationActionPanel === generationSection);
+      });
+    }
     document.querySelectorAll("[data-map-edit-section]").forEach(sectionPane => {
-      sectionPane.classList.toggle("active", sectionPane.dataset.mapEditSection === normalized);
+      sectionPane.classList.toggle("active", Boolean(visibleSection) && sectionPane.dataset.mapEditSection === visibleSection);
     });
-    document.querySelectorAll("[data-map-edit-section-button]").forEach(sectionButton => {
-      sectionButton.classList.toggle("active", sectionButton.dataset.mapEditSectionButton === normalized);
-    });
-    updateMapEditSectionHeader(normalized);
+    if (visibleSection === "terrain") setMobileTerrainTab("tools");
+    updateMapToolsRail();
+    updateMapEditSectionHeader(visibleSection || renderer.drawing.toolsMode || "chooser");
+    updateGenerationPopout();
     updateDrawToolButtons();
     updateDrawRegionControls();
     updateDrawStyleControls();
     updateDrawHint();
-    updateGenerationPopout();
-    if (normalized === "terrain") setMobileTerrainTab("tools");
-    if (normalized === "generation") setGenerationSection(renderer.drawing.generationSection || "terrain");
+    updateOverlaySubviewGroups();
+  }
+
+  function updateOverlaySubviewGroups() {
+    const isOverlayVisible = (renderer.drawing.toolsMode || "chooser") === "surveyor" && renderer.drawing.surveyorSection === "overlay";
+    const subview = isOverlayVisible ? getSurveyorOverlaySubview() : "paint";
+    document.querySelectorAll("[data-overlay-subview-group]").forEach(element => {
+      const group = element.dataset.overlaySubviewGroup || "drawing";
+      element.hidden = isOverlayVisible && group !== (subview === "purge" ? "purge" : "drawing");
+    });
+    if (isOverlayVisible && subview === "purge" && renderer.drawing.tool) {
+      clearDrawTool();
+    }
+  }
+
+  function setMapToolsMode(mode) {
+    const normalized = ["chooser", "surveyor", "cartographer"].includes(mode) ? mode : "chooser";
+    const previousMode = renderer.drawing.toolsMode || "chooser";
+    renderer.drawing.toolsMode = normalized;
+    if (normalized === "surveyor" && previousMode !== "surveyor" && renderer.drawing.surveyorSection === "overlay") {
+      renderer.drawing.tool = "";
+      resetDrawingState();
+    }
+    if (normalized === "cartographer") showMapEditorIntroIfNeeded();
+    else {
+      document.getElementById("map-editor-intro")?.classList.add("hidden");
+      document.getElementById("map-editor-intro")?.setAttribute("aria-hidden", "true");
+    }
+    updateMapEditSurface();
+  }
+
+  function setMapEditSection(section) {
+    const normalized = ["terrain", "features", "overlay", "regions", "nuke", "generation"].includes(section) ? section : "terrain";
+    renderer.drawing.tool = "";
+    resetDrawingState();
+    if (normalized === "regions" || normalized === "nuke" || normalized === "overlay") {
+      renderer.drawing.surveyorSection = normalized;
+      setMapToolsMode("surveyor");
+      return;
+    }
+    if (normalized === "generation") {
+      const generationSection = renderer.drawing.generationSection || "terrain";
+      if (generationSection === "overlays") {
+        renderer.drawing.surveyorSection = "overlay";
+        setSurveyorOverlaySubview("generate");
+        setMapToolsMode("surveyor");
+      } else {
+        renderer.drawing.cartographerSection = generationSection;
+        setCartographerSubview(renderer.drawing.cartographerSection, "generate");
+        setMapToolsMode("cartographer");
+      }
+      return;
+    }
+    renderer.drawing.cartographerSection = normalized;
+    setCartographerSubview(normalized, getCartographerSubview(normalized));
+    setMapToolsMode("cartographer");
   }
 
   function setGenerationSection(section) {
@@ -1345,20 +1673,14 @@
     document.querySelectorAll("[data-generation-section]").forEach(sectionPane => {
       sectionPane.classList.toggle("active", sectionPane.dataset.generationSection === normalized);
     });
-    document.querySelectorAll("[data-generation-section-button]").forEach(sectionButton => {
-      sectionButton.classList.toggle("active", sectionButton.dataset.generationSectionButton === normalized);
-    });
     document.querySelectorAll("[data-generation-action-panel]").forEach(actionPanel => {
       actionPanel.classList.toggle("active", actionPanel.dataset.generationActionPanel === normalized);
     });
-    updateGenerationPopout();
-    updateDrawHint();
-  }
-
-  function updateGenerationPopout() {
-    const popout = document.querySelector(".map-generation-popout");
-    const isGenerationActive = document.querySelector('[data-map-edit-section="generation"]')?.classList.contains("active");
-    if (popout) popout.hidden = !isGenerationActive;
+    if ((renderer.drawing.toolsMode || "chooser") === "cartographer" && getCartographerSubview(renderer.drawing.cartographerSection) === "generate") {
+      updateMapEditSurface();
+    } else {
+      updateDrawHint();
+    }
   }
 
   function setMobileTerrainTab(tab) {
@@ -1375,14 +1697,6 @@
 
   function isMobileEditorLayout() {
     return window.matchMedia?.("(max-width: 520px), (max-height: 560px)")?.matches || false;
-  }
-
-  function updateMapEditSectionHeader(section) {
-    const meta = MAP_EDIT_SECTION_COPY[section] || MAP_EDIT_SECTION_COPY.overlay;
-    const heading = document.getElementById("map-edit-section-heading");
-    const copy = document.getElementById("map-edit-section-copy");
-    if (heading) heading.textContent = meta.title;
-    if (copy) copy.textContent = meta.copy;
   }
 
   function updateMapChromeForEdit(isEditing) {
@@ -1416,7 +1730,6 @@
     });
     syncMapOverlayToggleInputs();
     markAllMapCachesDirty();
-    showMapEditorIntroIfNeeded();
   }
 
   function showMapEditorIntroIfNeeded() {
@@ -1434,8 +1747,8 @@
     const body = document.getElementById("map-editor-intro-body");
     if (body) {
       body.innerHTML = `
-        <p>Terrain, feature, overlay, and generation edits now preview locally first. Nothing in those sections is saved until you apply.</p>
-        <p>Discard All throws away unapplied preview edits. Regions still save immediately for safety, so region paint and region color changes are not part of Discard All.</p>
+        <p>Cartographer terrain and feature edits preview locally first. Nothing in those sections is saved until you apply.</p>
+        <p>Discard All throws away unapplied Cartographer preview edits. Surveyor overlays and regions save immediately, so they are not part of Discard All.</p>
         <p>If you try to close the editor or refresh with unapplied preview edits, you will get a warning first.</p>
       `;
     }
@@ -1478,6 +1791,7 @@
     if (!canView) {
       if (viewPanel) viewPanel.hidden = true;
       viewButton?.classList.remove("active");
+      document.getElementById("map-edit-view-button")?.classList.remove("active");
     }
 
     if (button) button.hidden = !canDraw;
@@ -1581,6 +1895,7 @@
     renderer.drawing.seaRouteName = "";
     renderer.drawing.mistBrushSize = 1;
     renderer.drawing.mistNoise = 0;
+    renderer.drawing.regionBrushSize = 1;
     renderer.drawing.regionId = UNCLAIMED_REGION_REF;
     renderer.drawing.politicalRegionId = "";
     renderer.drawing.terrainBase = "plains";
@@ -1597,6 +1912,14 @@
     renderer.drawing.featureDensity = 50;
     renderer.drawing.featureMaxFeatures = 1;
     renderer.drawing.featureChaosEnabled = false;
+    renderer.drawing.toolsMode = "chooser";
+    renderer.drawing.surveyorSection = "regions";
+    renderer.drawing.surveyorOverlaySubview = "paint";
+    renderer.drawing.cartographerSection = "terrain";
+    renderer.drawing.cartographerSubviews = {
+      terrain: "paint",
+      features: "paint"
+    };
     renderer.drawing.generationSeed = "";
     renderer.drawing.generationRegionStyle = "balanced";
     renderer.drawing.generationFeatureDensity = 100;
@@ -1630,6 +1953,9 @@
     renderer.drawing.queuedFullRender = false;
     renderer.drawing.featureViewportKey = "";
     renderer.drawing.terrainDirtyHexIds.clear();
+    renderer.cacheDirty = true;
+    renderer.routeCacheDirty = true;
+    renderer.featureCacheDirty = true;
     renderer.overlayCacheDirty = true;
     renderer.featureImageUsage.clear();
     renderer.featureImageQueue = [];
@@ -1723,7 +2049,16 @@
 
   function markTerrainCacheDirty() {
     renderer.cacheDirty = true;
+    renderer.featureCacheDirty = true;
     renderer.drawing.terrainDirtyHexIds.clear();
+  }
+
+  function markRouteCacheDirty() {
+    renderer.routeCacheDirty = true;
+  }
+
+  function markFeatureCacheDirty() {
+    renderer.featureCacheDirty = true;
   }
 
   function markOverlayCacheDirty() {
@@ -1732,6 +2067,8 @@
 
   function markAllMapCachesDirty() {
     markTerrainCacheDirty();
+    markRouteCacheDirty();
+    markFeatureCacheDirty();
     markOverlayCacheDirty();
   }
 
@@ -1803,7 +2140,7 @@
       renderer.drawing.dragActionCommitTimer = null;
     }
     if (!renderer.drawing.dragActionBatch) {
-      renderer.drawing.dragActionBatch = { type: "batch", actions: [], localStage: false };
+      renderer.drawing.dragActionBatch = { type: "batch", actions: [], pending: [], committing: false, localStage: false };
     }
   }
 
@@ -1820,6 +2157,18 @@
       renderer.drawing.dragActionCommitTimer = null;
     }
     const batch = renderer.drawing.dragActionBatch;
+    if (batch?.pending?.length) {
+      if (batch.committing) return;
+      const pending = batch.pending.splice(0);
+      batch.committing = true;
+      Promise.allSettled(pending).then(() => {
+        batch.committing = false;
+        if (renderer.drawing.dragActionBatch === batch) {
+          commitDragActionBatch();
+        }
+      });
+      return;
+    }
     renderer.drawing.dragActionBatch = null;
     if (!batch?.actions?.length) return;
     const action = batch.actions.length === 1 ? batch.actions[0] : {
@@ -1844,8 +2193,12 @@
   function updateDrawRegionControls() {
     const row = document.querySelector(".map-draw-region-row");
     const politicalRow = document.querySelector(".map-draw-political-region-row");
+    const regionBrushInput = document.getElementById("map-region-brush-size");
+    const regionBrushValue = document.getElementById("map-region-brush-size-value");
     if (row) row.hidden = renderer.drawing.tool !== "region";
     if (politicalRow) politicalRow.hidden = renderer.drawing.tool !== "political-region";
+    if (regionBrushInput) regionBrushInput.value = String(renderer.drawing.regionBrushSize || 1);
+    if (regionBrushValue) regionBrushValue.textContent = String(renderer.drawing.regionBrushSize || 1);
     syncRegionColorInputs();
   }
 
@@ -2055,7 +2408,7 @@
   }
 
   function refreshEditorBrushPreview() {
-    if (!["terrain", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper"].includes(renderer.drawing.tool) || !renderer.drawing.hoverBrushHexIds?.length) return;
+    if (!["terrain", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper", "region", "unregion", "political-region", "clear-political-region"].includes(renderer.drawing.tool) || !renderer.drawing.hoverBrushHexIds?.length) return;
     const centerHex = renderer.hexes.find(hex => hex.id === renderer.drawing.hoverBrushHexIds[0]);
     renderer.drawing.hoverBrushHexIds = centerHex ? getEditorBrushHexIds(centerHex) : [];
   }
@@ -2367,7 +2720,7 @@
   }
 
   function editorUsesStagedHistoryOnly() {
-    return Boolean(renderer.drawing.enabled);
+    return Boolean(renderer.drawing.enabled && (renderer.drawing.toolsMode || "chooser") === "cartographer");
   }
 
   function getStagedUndoStack() {
@@ -2656,6 +3009,7 @@
     if (affectedOverlays) {
       [...removedUndo].reverse().forEach(action => applyLocalOverlayActions(action, "undo"));
       getStagedUndoStack().forEach(action => applyLocalOverlayActions(action, "redo"));
+      markRouteCacheDirty();
       markOverlayCacheDirty();
     }
 
@@ -2797,7 +3151,7 @@
       return;
     }
     if (tool === "region" || tool === "unregion" || tool === "political-region" || tool === "clear-political-region") {
-      hint.textContent = "Paint region ownership directly onto hexes. Ctrl+Z undoes, Ctrl+Y redoes.";
+      hint.textContent = "Paint region ownership directly onto hexes with the region brush. Ctrl+Z undoes, Ctrl+Y redoes.";
       return;
     }
     if (activeSection === "generation") {
@@ -2820,8 +3174,6 @@
     if (!undoButton) return;
     const count = editorUsesStagedHistoryOnly()
       ? getStagedUndoStack().length
-      : hasStagedMapEdits()
-      ? getStagedUndoStack().length
       : getPersistedUndoStack().length;
     undoButton.disabled = count === 0 || renderer.drawing.saving;
     undoButton.textContent = count
@@ -2833,8 +3185,6 @@
     const redoButton = document.getElementById("map-draw-redo");
     if (!redoButton) return;
     const count = editorUsesStagedHistoryOnly()
-      ? getStagedRedoStack().length
-      : hasStagedMapEdits() || getStagedRedoStack().length
       ? getStagedRedoStack().length
       : getPersistedRedoStack().length;
     redoButton.disabled = count === 0 || renderer.drawing.saving;
@@ -2862,19 +3212,21 @@
       "map-generation-run-rivers",
       "map-generation-reset-sliders",
       "map-generation-random-seed",
-      "map-generation-preview-terrain"
+      "map-generation-preview-terrain",
+      "map-clear-features"
     ].forEach(buttonId => {
       const button = document.getElementById(buttonId);
       if (button) button.disabled = renderer.drawing.saving;
     });
     [
-      "map-draw-clear",
       "map-clear-geo-regions",
-      "map-clear-pol-regions",
-      "map-clear-features"
+      "map-clear-pol-regions"
     ].forEach(buttonId => {
       const button = document.getElementById(buttonId);
       if (button) button.disabled = renderer.drawing.saving || hasStagedEdits;
+    });
+    document.querySelectorAll("[data-clear-overlay-type]").forEach(button => {
+      button.disabled = renderer.drawing.saving || hasStagedEdits;
     });
     updateGenerationControls();
   }
@@ -2953,9 +3305,18 @@
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.clearRect(0, 0, width, height);
     updateTerrainCache(visibleHexes);
+    // Keep routes in their own under-feature layer so route edits do not rebuild feature art.
+    updateRouteCache();
+    updateFeatureCache();
     updateOverlayCache();
     drawCacheSlice(ctx, renderer.cacheCanvas, width, height);
+    drawCacheSlice(ctx, renderer.routeCacheCanvas, width, height);
+    drawCacheSlice(ctx, renderer.featureCacheCanvas, width, height);
     drawCacheSlice(ctx, renderer.overlayCacheCanvas, width, height);
+    renderer.drawing.terrainDirtyHexIds.clear();
+    if (!renderer.drawing.saving && !renderer.initialMapLoadingTimer) {
+      setLoading(false);
+    }
   }
 
   function drawCacheSlice(ctx, sourceCanvas, width, height) {
@@ -3006,7 +3367,58 @@
       renderer.hexes.forEach(hex => {
         drawCanvasPolygon(ctx, hex.points, hex.fill);
       });
+    } else {
+      const dirtyBounds = getTerrainDirtyBounds();
+      if (!dirtyBounds) return;
+      const patchHexes = renderer.hexes.filter(hex => hexIntersectsBounds(hex, dirtyBounds));
+      ctx.clearRect(
+        dirtyBounds.left,
+        dirtyBounds.top,
+        dirtyBounds.right - dirtyBounds.left,
+        dirtyBounds.bottom - dirtyBounds.top
+      );
+      patchHexes.forEach(hex => {
+        drawCanvasPolygon(ctx, hex.points, hex.fill);
+      });
+    }
+    renderer.cacheDirty = false;
+  }
 
+  function updateRouteCache() {
+    const cacheWidth = Math.max(1, Math.ceil(renderer.view.width * TERRAIN_CACHE_SCALE));
+    const cacheHeight = Math.max(1, Math.ceil(renderer.view.height * TERRAIN_CACHE_SCALE));
+
+    if (renderer.routeCacheCanvas.width !== cacheWidth || renderer.routeCacheCanvas.height !== cacheHeight) {
+      renderer.routeCacheCanvas.width = cacheWidth;
+      renderer.routeCacheCanvas.height = cacheHeight;
+      renderer.routeCacheDirty = true;
+    }
+
+    if (!renderer.routeCacheDirty) return;
+
+    const ctx = renderer.routeCacheCtx;
+    ctx.setTransform(TERRAIN_CACHE_SCALE, 0, 0, TERRAIN_CACHE_SCALE, 0, 0);
+    ctx.clearRect(0, 0, renderer.view.width, renderer.view.height);
+    renderCanvasDrawablePaths(ctx);
+    renderer.routeCacheDirty = false;
+  }
+
+  function updateFeatureCache() {
+    const cacheWidth = Math.max(1, Math.ceil(renderer.view.width * TERRAIN_CACHE_SCALE));
+    const cacheHeight = Math.max(1, Math.ceil(renderer.view.height * TERRAIN_CACHE_SCALE));
+
+    if (renderer.featureCacheCanvas.width !== cacheWidth || renderer.featureCacheCanvas.height !== cacheHeight) {
+      renderer.featureCacheCanvas.width = cacheWidth;
+      renderer.featureCacheCanvas.height = cacheHeight;
+      renderer.featureCacheDirty = true;
+    }
+
+    if (!renderer.featureCacheDirty && !renderer.drawing.terrainDirtyHexIds.size) return;
+
+    const ctx = renderer.featureCacheCtx;
+    ctx.setTransform(TERRAIN_CACHE_SCALE, 0, 0, TERRAIN_CACHE_SCALE, 0, 0);
+    if (renderer.featureCacheDirty) {
+      ctx.clearRect(0, 0, renderer.view.width, renderer.view.height);
       renderer.hexes.forEach(hex => renderEdgeBleedForHex(ctx, hex));
       if (renderer.drawing.visibleOverlays.features && shouldRenderFeatureArt()) {
         renderer.hexes.forEach(hex => renderFeatureArtForHex(ctx, hex));
@@ -3021,19 +3433,12 @@
         dirtyBounds.right - dirtyBounds.left,
         dirtyBounds.bottom - dirtyBounds.top
       );
-      patchHexes.forEach(hex => {
-        drawCanvasPolygon(ctx, hex.points, hex.fill);
-      });
       patchHexes.forEach(hex => renderEdgeBleedForHex(ctx, hex));
       if (renderer.drawing.visibleOverlays.features && shouldRenderFeatureArt()) {
         patchHexes.forEach(hex => renderFeatureArtForHex(ctx, hex));
       }
     }
-    renderer.cacheDirty = false;
-    renderer.drawing.terrainDirtyHexIds.clear();
-    if (!renderer.drawing.saving) {
-      setLoading(false);
-    }
+    renderer.featureCacheDirty = false;
   }
 
   function getTerrainDirtyBounds() {
@@ -3082,7 +3487,6 @@
     ctx.setTransform(TERRAIN_CACHE_SCALE, 0, 0, TERRAIN_CACHE_SCALE, 0, 0);
     ctx.clearRect(0, 0, renderer.view.width, renderer.view.height);
 
-    renderCanvasDrawablePaths(ctx);
     if (renderer.drawing.visibleOverlays.mist && shouldRenderFeatureArt()) {
       renderCanvasMistOverlays(ctx);
     }
@@ -3327,7 +3731,7 @@
       } catch {}
     })).then(() => {
       renderer.featureImages.clear();
-      markAllMapCachesDirty();
+      markFeatureCacheDirty();
       queueMapRender(true);
     });
 
@@ -3932,7 +4336,7 @@
       renderMistBrushPreview(fragment, visibleHexes);
     }
 
-    if ((renderer.drawing.tool === "terrain" || renderer.drawing.tool === "terrain-eyedropper" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase" || renderer.drawing.tool === "feature-eyedropper") && renderer.drawing.hoverBrushHexIds?.length) {
+    if ((renderer.drawing.tool === "terrain" || renderer.drawing.tool === "terrain-eyedropper" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase" || renderer.drawing.tool === "feature-eyedropper" || REGION_PAINT_TYPES.has(renderer.drawing.tool)) && renderer.drawing.hoverBrushHexIds?.length) {
       renderEditorBrushPreview(fragment, visibleHexes);
     }
 
@@ -4072,7 +4476,9 @@
 
   function renderEditorBrushPreview(fragment, visibleHexes) {
     const visibleIds = new Set(visibleHexes.map(hex => hex.id));
-    const previewClass = renderer.drawing.tool === "feature"
+    const previewClass = REGION_PAINT_TYPES.has(renderer.drawing.tool)
+      ? "generated-map-editor-brush-preview generated-map-region-brush-preview"
+      : renderer.drawing.tool === "feature"
       ? "generated-map-editor-brush-preview generated-map-feature-brush-preview"
       : "generated-map-editor-brush-preview generated-map-terrain-brush-preview";
     renderer.drawing.hoverBrushHexIds
@@ -5848,10 +6254,11 @@
     event.stopPropagation();
 
     const now = performance.now();
-    if (now < renderer.view.wheelLockedUntil) return;
+    if (renderer.view.animatingZoom || now < renderer.view.wheelLockedUntil) return;
 
     const nextZoom = getNextZoomStep(event.deltaY < 0 ? 1 : -1);
-    renderer.view.wheelLockedUntil = now + 165;
+    renderer.view.wheelLockedUntil = now + ZOOM_STEP_LOCK_MS;
+    if (Math.abs(nextZoom - renderer.view.zoom) < 0.0001) return;
     animateZoomTo(nextZoom, event.clientX, event.clientY);
   }
 
@@ -5917,9 +6324,14 @@
         return;
       }
 
+      renderer.view.zoom = targetZoom;
+      renderer.view.panX = anchorWorldX - relativeX / targetZoom;
+      renderer.view.panY = anchorWorldY - relativeY / targetZoom;
+      clampView();
       renderer.view.zoomAnimationFrame = null;
       renderer.view.animatingZoom = false;
-      setZoom(targetZoom, anchorClientX, anchorClientY);
+      renderer.view.wheelLockedUntil = Math.max(renderer.view.wheelLockedUntil, performance.now() + 80);
+      render();
     }
 
     renderer.view.zoomAnimationFrame = requestAnimationFrame(step);
@@ -6140,6 +6552,16 @@
     }
 
     if (renderer.drawing.enabled) {
+      if (!renderer.drawing.tool) {
+        const hovered = getHexAtWorldPoint(clientToWorld(event));
+        const nextHoverId = hovered?.id || null;
+        if (renderer.hoveredHexId !== nextHoverId) {
+          renderer.hoveredHexId = nextHoverId;
+          renderSvgOnly();
+        }
+        return;
+      }
+
       event.preventDefault();
       const hex = getHexAtWorldPoint(clientToWorld(event));
       const hoverPoint = clientToWorld(event);
@@ -6314,22 +6736,22 @@
     }
 
     if (tool === "region") {
-      assignHexRegion(hex.id, renderer.drawing.regionId, "geographic");
+      assignHexRegionBrush(hex, renderer.drawing.regionId, "geographic");
       return;
     }
 
     if (tool === "unregion") {
-      assignHexRegion(hex.id, UNCLAIMED_REGION_REF, "geographic");
+      assignHexRegionBrush(hex, UNCLAIMED_REGION_REF, "geographic");
       return;
     }
 
     if (tool === "political-region") {
-      assignHexRegion(hex.id, renderer.drawing.politicalRegionId, "political");
+      assignHexRegionBrush(hex, renderer.drawing.politicalRegionId, "political");
       return;
     }
 
     if (tool === "clear-political-region") {
-      assignHexRegion(hex.id, "", "political");
+      assignHexRegionBrush(hex, "", "political");
       return;
     }
 
@@ -6602,6 +7024,11 @@
     if (!hex) return [];
     if (renderer.drawing.tool === "terrain-eyedropper" || renderer.drawing.tool === "feature-eyedropper") {
       return [hex.id];
+    }
+    if (REGION_PAINT_TYPES.has(renderer.drawing.tool)) {
+      const size = clampNumber(Number(renderer.drawing.regionBrushSize), 1, 5, 1);
+      return getBrushHexes(hex, size, 0, "region-preview")
+        .map(candidate => candidate.id);
     }
     if (renderer.drawing.tool === "terrain") {
       const size = resolveChaosNumber(renderer.drawing.terrainBrushSize, 1, 5, `terrain-preview-size:${hex.id}`);
@@ -6927,7 +7354,7 @@
       return;
     }
 
-    previewGeneratedOverlayRoutes({
+    await persistGeneratedOverlayRoutes({
       campaignId: campaign.id,
       routes,
       tool: "road",
@@ -6947,7 +7374,7 @@
       return;
     }
 
-    previewGeneratedOverlayRoutes({
+    await persistGeneratedOverlayRoutes({
       campaignId: campaign.id,
       routes,
       tool: "river",
@@ -6958,15 +7385,11 @@
   }
 
   function confirmOverlayGeneration(type, label) {
-    const replacingPreview = getStagedUndoStack()
-      .some(action => action.previewSection === "overlays" && action.previewOverlayType === type);
-    if (replacingPreview) return true;
-
     const existing = (renderer.mapOverlays || [])
       .filter(overlay => !overlay.__preview && overlay.Overlay_Type === type && overlay.To_Hex_ID_Ref)
       .length;
     if (!existing || typeof window.confirm !== "function") return true;
-    return window.confirm(`Preview ${label} on top of ${existing} existing ${label} segment${existing === 1 ? "" : "s"}? This only stages overlays locally until you apply the preview.`);
+    return window.confirm(`Generate ${label} on top of ${existing} existing saved ${label} segment${existing === 1 ? "" : "s"}? This saves new overlays to the live map immediately.`);
   }
 
   function previewGeneratedOverlayRoutes({ campaignId, routes, tool, style, routeMetadata, emptyMessage }) {
@@ -6988,7 +7411,8 @@
       previewOverlayType: tool,
       overlays: previewOverlays
     });
-    markAllMapCachesDirty();
+    markRouteCacheDirty();
+    markOverlayCacheDirty();
     render();
     updateGenerationControls();
   }
@@ -7064,15 +7488,22 @@
   }
 
   async function persistGeneratedOverlaySegments(campaignId, segments, existingOverlayIds = new Set()) {
-    const showBulkLoading = segments.length >= BULK_OVERLAY_LOADING_THRESHOLD;
     renderer.drawing.saving = true;
-    if (showBulkLoading) setLoading(true);
     refreshEditorPreviewControls();
 
+    const pendingOverlays = segments.map(segment => createLocalOverlayRecord(segment, "saving"));
+    pendingOverlays.forEach(overlay => {
+      overlay.__saving = true;
+    });
+    if (pendingOverlays.length) {
+      upsertLocalOverlays(pendingOverlays);
+      render();
+    }
+
+    let saved = [];
     try {
-      const saved = [];
-      for (const segment of segments) {
-        const overlay = await savePathOverlaySegment(
+      const results = await Promise.allSettled(segments.map(segment => (
+        savePathOverlaySegment(
           campaignId,
           segment.tool,
           segment.fromHexId,
@@ -7080,20 +7511,33 @@
           segment.style,
           segment.edge || null,
           segment.routeMetadata
-        );
-        if (overlay) saved.push(overlay);
+        )
+      )));
+      const failed = results.find(result => result.status === "rejected");
+      saved = results
+        .filter(result => result.status === "fulfilled" && result.value)
+        .map(result => result.value);
+
+      removeLocalOverlaysById(pendingOverlays.map(overlay => overlay.__uuid));
+      upsertLocalOverlays(saved);
+
+      if (failed) {
+        throw failed.reason;
       }
 
-      saved.forEach(upsertLocalOverlay);
       pushOverlayUndoAction(saved.filter(overlay => !existingOverlayIds.has(overlay.__uuid)));
-      markAllMapCachesDirty();
       render();
     } catch (error) {
+      removeLocalOverlaysById(pendingOverlays.map(overlay => overlay.__uuid));
+      pushOverlayUndoAction(saved.filter(overlay => !existingOverlayIds.has(overlay.__uuid)));
+      if (saved.length) {
+        upsertLocalOverlays(saved);
+      }
+      render();
       console.error("Unable to generate map overlays:", error);
       window.alert?.(error.message || "Unable to generate map overlays.");
     } finally {
       renderer.drawing.saving = false;
-      if (showBulkLoading) setLoading(false);
       refreshEditorPreviewControls();
     }
   }
@@ -7420,7 +7864,7 @@
       window.alert?.("Confirmation is unavailable, so the terrain preview was not applied.");
       return;
     }
-    const confirmed = window.confirm("Apply these staged map edits to the saved map? Terrain, feature, overlay, and generation preview changes will all be saved together.");
+    const confirmed = window.confirm("Apply these staged map edits to the saved map? Terrain and feature preview changes will be saved together.");
     if (!confirmed) return;
 
     const historyAction = actions.length === 1 ? cloneMapEditAction(actions[0]) : { type: "batch", actions: actions.map(cloneMapEditAction).filter(Boolean) };
@@ -7472,7 +7916,8 @@
 
     renderer.mapOverlays = renderer.mapOverlays.filter(overlay => !previewIds.includes(overlay.__uuid));
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
-    markAllMapCachesDirty();
+    markRouteCacheDirty();
+    markOverlayCacheDirty();
   }
 
   function discardOverlayPreviewType(type, options = {}) {
@@ -7621,11 +8066,27 @@
     return featureLabels.length ? `${baseLabel} + ${featureLabels.join(" + ")}` : baseLabel;
   }
 
-  async function assignHexRegion(hexId, regionId = "", regionType = "geographic") {
+  function regionSnapshotsEqual(a, b) {
+    return JSON.stringify(a || {}) === JSON.stringify(b || {});
+  }
+
+  async function assignHexRegion(hexId, regionId = "", regionType = "geographic", options = {}) {
     const campaign = getActiveCampaign?.();
     if (!campaign || !hexId) return;
     if (regionType !== "political" && !regionId) return;
     const before = getRegionSnapshot(hexId);
+    if (
+      before &&
+      (regionType === "political"
+        ? (before.politicalRegionId || "") === (regionId || "")
+        : (before.geographicRegionId || UNCLAIMED_REGION_REF) === (regionId || UNCLAIMED_REGION_REF))
+    ) {
+      return;
+    }
+
+    updateLocalHexRegion(hexId, regionId, regionType);
+    const after = getRegionSnapshot(hexId);
+    if (!options.silentRender) renderSvgOnly();
 
     try {
       const { error } = await campaignSupabase.rpc("assign_generated_hex_region_layer", {
@@ -7637,9 +8098,7 @@
 
       if (error) throw error;
 
-      updateLocalHexRegion(hexId, regionId, regionType);
-      const after = getRegionSnapshot(hexId);
-      if (before && after && JSON.stringify(before) !== JSON.stringify(after)) {
+      if (before && after && !regionSnapshotsEqual(before, after)) {
         pushMapEditAction({
           type: "region",
           hexId,
@@ -7648,11 +8107,28 @@
           after
         });
       }
-      renderSvgOnly();
     } catch (error) {
+      if (regionSnapshotsEqual(getRegionSnapshot(hexId), after)) {
+        applyLocalRegionSnapshot(hexId, before);
+        renderSvgOnly();
+      }
       console.error("Unable to assign generated hex region:", error);
       window.alert?.(error.message || "Unable to assign hex region.");
     }
+  }
+
+  function assignHexRegionBrush(centerHex, regionId = "", regionType = "geographic") {
+    if (!centerHex) return;
+    const startedBatch = !renderer.drawing.dragActionBatch;
+    if (startedBatch) beginDragActionBatch();
+    const brushSize = clampNumber(Number(renderer.drawing.regionBrushSize), 1, 5, 1);
+    const assignments = getBrushHexes(centerHex, brushSize, 0, "region")
+      .map(hex => assignHexRegion(hex.id, regionId, regionType, { silentRender: true }));
+    if (renderer.drawing.dragActionBatch && assignments.length) {
+      renderer.drawing.dragActionBatch.pending.push(...assignments);
+    }
+    renderSvgOnly();
+    if (startedBatch) scheduleDragActionBatchCommit();
   }
 
   function getRegionSnapshot(hexId) {
@@ -7693,6 +8169,8 @@
   }
 
   async function persistPathOverlaySequence(tool, fromHexId, toHexId, exitEdge = "") {
+    const campaign = getActiveCampaign?.();
+    if (!campaign) return;
     let sequence = getPathOverlaySequence(tool, fromHexId, toHexId, exitEdge);
     let targetExitEdge = exitEdge;
     if (tool === "sea_route") {
@@ -7721,21 +8199,15 @@
         renderSvgOnly();
         return;
       }
-      ensureStagedOverlayBaseline();
-      const overlays = segments.map(segment => createLocalOverlayRecord(segment));
-      overlays.forEach(upsertLocalOverlay);
-      pushStagedMapEditAction({
-        type: "overlay",
-        previewSection: "overlay-manual",
-        overlays
-      });
+      const existingOverlayIds = new Set((renderer.mapOverlays || []).map(overlay => overlay.__uuid).filter(Boolean));
+      await persistGeneratedOverlaySegments(campaign.id, segments, existingOverlayIds);
       renderer.drawing.lastHexId = null;
       renderer.drawing.dragLastHexId = null;
-      markAllMapCachesDirty();
+      markRouteCacheDirty();
       render();
     } catch (error) {
-      console.error("Unable to preview generated map overlay path:", error);
-      window.alert?.(error.message || "Unable to preview map overlay.");
+      console.error("Unable to save generated map overlay path:", error);
+      window.alert?.(error.message || "Unable to save map overlay.");
       await reveal.finished.catch(() => {});
       renderSvgOnly();
     } finally {
@@ -7813,7 +8285,9 @@
   }
 
   async function persistWallOverlay(hexId, edge) {
+    const campaign = getActiveCampaign?.();
     if (!edge) return;
+    if (!campaign) return;
     if (renderer.mapOverlays.some(overlay => (
       overlay.Overlay_Type === "wall" &&
       overlay.Hex_ID_Ref === hexId &&
@@ -7821,33 +8295,17 @@
     ))) {
       return;
     }
-    ensureStagedOverlayBaseline();
-    const overlay = createLocalOverlayRecord({
-      tool: "wall",
-      fromHexId: hexId,
-      toHexId: null,
-      edge,
-      style: "wall",
-      routeMetadata: {}
-    });
+    const overlay = await savePathOverlaySegment(campaign.id, "wall", hexId, null, "wall", edge, {});
     upsertLocalOverlay(overlay);
-    pushStagedMapEditAction({
-      type: "overlay",
-      previewSection: "overlay-manual",
-      overlays: [overlay]
-    });
+    pushOverlayUndoAction([overlay]);
     renderSvgOnly();
   }
 
   async function persistMistOverlay(hexId) {
     const overlays = await persistMistOverlays([hexId]);
     if (!overlays.length) return;
-    pushStagedMapEditAction({
-      type: "overlay",
-      previewSection: "overlay-manual",
-      overlays
-    });
-    markAllMapCachesDirty();
+    pushOverlayUndoAction(overlays);
+    markOverlayCacheDirty();
     queueMapRender(true);
   }
 
@@ -7856,16 +8314,14 @@
     if (!hexIds.length) return;
     const overlays = await persistMistOverlays(hexIds);
     if (!overlays.length) return;
-    pushStagedMapEditAction({
-      type: "overlay",
-      previewSection: "overlay-manual",
-      overlays
-    });
-    markAllMapCachesDirty();
+    pushOverlayUndoAction(overlays);
+    markOverlayCacheDirty();
     queueMapRender(true);
   }
 
   async function persistMistOverlays(hexIds) {
+    const campaign = getActiveCampaign?.();
+    if (!campaign) return [];
     const existingMistHexIds = new Set((renderer.mapOverlays || [])
       .filter(overlay => overlay.Overlay_Type === "mist")
       .map(overlay => overlay.Hex_ID_Ref));
@@ -7873,21 +8329,20 @@
       .filter(hexId => hexId && !existingMistHexIds.has(hexId));
     if (!targetHexIds.length) return [];
 
-    ensureStagedOverlayBaseline();
-    const overlays = targetHexIds.map(hexId => createLocalOverlayRecord({
-      tool: "mist",
-      fromHexId: hexId,
-      toHexId: null,
-      edge: null,
-      style: "mist",
-      routeMetadata: {}
-    }));
-    overlays.forEach(upsertLocalOverlay);
+    const overlays = [];
+    for (const hexId of targetHexIds) {
+      const overlay = await savePathOverlaySegment(campaign.id, "mist", hexId, null, "mist", null, {});
+      if (overlay) {
+        upsertLocalOverlay(overlay);
+        overlays.push(overlay);
+      }
+    }
     return overlays;
   }
 
   async function eraseOverlaysAtHex(hexId) {
-    ensureStagedOverlayBaseline();
+    const campaign = getActiveCampaign?.();
+    if (!campaign) return;
     const removed = renderer.mapOverlays.filter(overlay => (
       overlay.From_Hex_ID_Ref === hexId ||
       overlay.To_Hex_ID_Ref === hexId ||
@@ -7898,20 +8353,20 @@
     if (temporaryIds.size) {
       dropTemporaryOverlaysFromStagedActions(temporaryIds);
     }
-    removed.forEach(overlay => removeLocalOverlayById(overlay.__uuid));
     const persistedRemoved = removed
       .filter(overlay => !temporaryIds.has(overlay.__uuid))
       .map(overlay => ({ ...cloneOverlayRecord(overlay), __undoDeleted: true }));
+    for (const overlay of persistedRemoved) {
+      await deleteOverlayById(campaign.id, overlay.__uuid);
+    }
+    removed.forEach(overlay => removeLocalOverlayById(overlay.__uuid));
     if (persistedRemoved.length) {
-      pushStagedMapEditAction({
-        type: "overlay",
-        previewSection: "overlay-manual",
-        overlays: persistedRemoved
-      });
+      pushOverlayUndoAction(persistedRemoved);
     } else {
       refreshEditorPreviewControls();
     }
-    markAllMapCachesDirty();
+    markRouteCacheDirty();
+    markOverlayCacheDirty();
     queueMapRender(true);
   }
 
@@ -7933,11 +8388,12 @@
   }
 
   async function undoLastDrawAction() {
-    if (editorUsesStagedHistoryOnly() && !getStagedUndoStack().length) {
+    const useStagedHistory = editorUsesStagedHistoryOnly();
+    if (useStagedHistory && !getStagedUndoStack().length) {
       updateDrawUndoButton();
       return;
     }
-    if (getStagedUndoStack().length) {
+    if (useStagedHistory && getStagedUndoStack().length) {
       const action = renderer.drawing.stagedUndoStack.pop();
       if (!action?.type) {
         updateDrawUndoButton();
@@ -7983,11 +8439,12 @@
   }
 
   async function redoLastDrawAction() {
-    if (editorUsesStagedHistoryOnly() && !getStagedRedoStack().length) {
+    const useStagedHistory = editorUsesStagedHistoryOnly();
+    if (useStagedHistory && !getStagedRedoStack().length) {
       updateDrawRedoButton();
       return;
     }
-    if (getStagedRedoStack().length) {
+    if (useStagedHistory && getStagedRedoStack().length) {
       const action = renderer.drawing.stagedRedoStack.pop();
       if (!action?.type) {
         updateDrawRedoButton();
@@ -8086,15 +8543,25 @@
   }
 
   async function applyOverlayHistoryAction(campaignId, overlays, direction) {
-    for (const overlay of overlays) {
+    const deleteOverlays = [];
+    const restoreOverlays = [];
+    (overlays || []).forEach(overlay => {
       const shouldDelete = direction === "redo" ? overlay.__undoDeleted : !overlay.__undoDeleted;
-      if (shouldDelete) {
-        await deleteOverlayById(campaignId, overlay.__uuid);
-        removeLocalOverlayById(overlay.__uuid);
-      } else {
-        const restored = await restoreDeletedOverlay(campaignId, overlay);
-        if (restored?.__uuid) overlay.__uuid = restored.__uuid;
-      }
+      if (shouldDelete) deleteOverlays.push(overlay);
+      else restoreOverlays.push(overlay);
+    });
+
+    if (deleteOverlays.length) {
+      await Promise.all(deleteOverlays.map(overlay => deleteOverlayById(campaignId, overlay.__uuid)));
+      removeLocalOverlaysById(deleteOverlays.map(overlay => overlay.__uuid));
+    }
+
+    if (restoreOverlays.length) {
+      const restoredOverlays = await Promise.all(restoreOverlays.map(overlay => restoreDeletedOverlay(campaignId, overlay)));
+      restoredOverlays.forEach((restored, index) => {
+        if (restored?.__uuid) restoreOverlays[index].__uuid = restored.__uuid;
+      });
+      upsertLocalOverlays(restoredOverlays.filter(Boolean));
     }
   }
 
@@ -8257,11 +8724,13 @@
     });
   }
 
-  async function clearAllDrawnOverlays() {
+  async function clearDrawnOverlaysByType(type) {
     const campaign = getActiveCampaign?.();
-    if (!campaign) return;
+    const normalizedType = OVERLAY_TYPE_LABELS[type] ? type : "";
+    if (!campaign || !normalizedType) return;
 
-    if (!confirmNukeAction("Clear all saved live-map roads, rivers, paths, walls, and mist from this generated map immediately? This does not clear staged preview edits.")) return;
+    const label = OVERLAY_TYPE_LABELS[normalizedType];
+    if (!confirmNukeAction(`Purge all saved live-map ${label} immediately? This does not affect staged preview edits.`)) return;
 
     renderer.drawing.saving = true;
     let showBulkLoading = false;
@@ -8269,26 +8738,24 @@
 
     try {
       const persistedOverlays = await fetchCurrentPersistedOverlays(campaign.id);
-      const removed = persistedOverlays.length ? persistedOverlays : [...getCurrentMapOverlays()];
+      const removed = persistedOverlays
+        .filter(overlay => overlay.Overlay_Type === normalizedType)
+        .map(overlay => ({ ...cloneOverlayRecord(overlay), __undoDeleted: true }));
       if (!removed.length) return;
 
       showBulkLoading = removed.length >= BULK_OVERLAY_LOADING_THRESHOLD;
       if (showBulkLoading) setLoading(true);
 
-      const { error } = await campaignSupabase.rpc("clear_generated_map_overlays", {
-        target_campaign_id: campaign.id
-      });
-
-      if (error) throw error;
-
-      renderer.mapOverlays = [];
-      if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
-      pushMapEditAction({ type: "nuke-overlays", overlays: removed }, { force: true });
-      markTerrainCacheDirty();
+      await Promise.all(removed.map(overlay => deleteOverlayById(campaign.id, overlay.__uuid)));
+      removeLocalOverlaysById(removed.map(overlay => overlay.__uuid));
+      pushOverlayUndoAction(removed);
+      renderer.routeLabelCache = { key: "", labels: [] };
+      markRouteCacheDirty();
+      markOverlayCacheDirty();
       render();
     } catch (error) {
-      console.error("Unable to clear generated map overlays:", error);
-      window.alert?.(error.message || "Unable to clear map overlays.");
+      console.error(`Unable to purge generated map ${label}:`, error);
+      window.alert?.(error.message || `Unable to purge ${label}.`);
     } finally {
       renderer.drawing.saving = false;
       if (showBulkLoading) setLoading(false);
@@ -8434,9 +8901,9 @@
         next_route_name: nextName
       });
       if (error) throw error;
-      (data || []).map(adaptOverlayRpcRow).filter(Boolean).forEach(upsertLocalOverlay);
+    (data || []).map(adaptOverlayRpcRow).filter(Boolean).forEach(upsertLocalOverlay);
       renderer.routeLabelCache = { key: "", labels: [] };
-      markAllMapCachesDirty();
+      markRouteCacheDirty();
       clearNamedRouteEditForm();
       renderNamedRoutesList();
       render();
@@ -8463,7 +8930,7 @@
       }
       pushOverlayUndoAction(removed);
       renderer.routeLabelCache = { key: "", labels: [] };
-        markAllMapCachesDirty();
+      markRouteCacheDirty();
       renderNamedRoutesList();
       render();
     } catch (error) {
@@ -8480,7 +8947,7 @@
     const normalizedType = regionType === "political" ? "political" : "geographic";
     const label = normalizedType === "political" ? "political" : "geographic";
     if (!campaign) return;
-    if (!confirmNukeAction(`Clear all ${label} region paint from this generated map? Region Codex entries will not be deleted.`)) return;
+    if (!confirmNukeAction(`Purge all ${label} region paint from the live generated map immediately? Region Codex entries will not be deleted.`)) return;
 
     const actions = renderer.hexes
       .map(hex => {
@@ -8517,14 +8984,13 @@
         renderSvgOnly();
       },
       historyAction: { type: "nuke-regions", regionType: normalizedType, actions },
-      errorPrefix: `Unable to clear ${label} regions`
+      errorPrefix: `Unable to purge ${label} regions`
     });
   }
 
-  async function clearAllGeneratedFeatures() {
-    const campaign = getActiveCampaign?.();
-    if (!campaign) return;
-    if (!confirmNukeAction("Clear all saved live-map terrain features from this generated map immediately? Base terrain and elevation will be preserved. This does not clear staged preview edits.")) return;
+  function stageAllGeneratedFeaturePurge() {
+    if (!isActive()) return;
+    if (!confirmNukeAction("Purge all terrain features in the Cartographer preview? Base terrain and elevation will be preserved. This stays local until Apply Preview.")) return;
 
     const actions = renderer.hexes
       .map(hex => {
@@ -8543,22 +9009,18 @@
       .filter(Boolean);
 
     if (!actions.length) return;
-    await runBulkNukeAction({
-      actions,
-      rpcName: "clear_generated_hex_features",
-      rpcArgs: {
-        target_campaign_id: campaign.id
-      },
-      applyLocal: () => {
-        actions.forEach(action => {
-          applyLocalTerrainSnapshot(action.hexId, action.after);
-        });
-        markAllMapCachesDirty();
-        render();
-      },
-      historyAction: { type: "nuke-features", actions },
-      errorPrefix: "Unable to clear terrain features"
+    actions.forEach(action => {
+      applyLocalTerrainSnapshot(action.hexId, action.after);
     });
+    pushStagedMapEditAction({
+      type: "batch",
+      previewSection: "features",
+      actions
+    }, { force: true });
+    markAllMapCachesDirty();
+    render();
+    updateGenerationControls();
+    refreshEditorActionControls();
   }
 
   async function runBulkNukeAction({ actions, rpcName, rpcArgs, applyLocal, historyAction, errorPrefix }) {
@@ -8623,7 +9085,6 @@
 
     if (error) throw error;
     const restored = adaptOverlayRpcRow(data);
-    upsertLocalOverlay(restored);
     return restored;
   }
 
@@ -8660,7 +9121,27 @@
     }
 
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
-    markAllMapCachesDirty();
+    markRouteCacheDirty();
+    markOverlayCacheDirty();
+    updateDrawClearButton();
+  }
+
+  function upsertLocalOverlays(overlays) {
+    const validOverlays = (overlays || []).filter(overlay => overlay?.__uuid);
+    if (!validOverlays.length) return;
+
+    validOverlays.forEach(overlay => {
+      const existingIndex = renderer.mapOverlays.findIndex(candidate => candidate.__uuid === overlay.__uuid);
+      if (existingIndex >= 0) {
+        renderer.mapOverlays.splice(existingIndex, 1, overlay);
+      } else {
+        renderer.mapOverlays.push(overlay);
+      }
+    });
+
+    if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    markRouteCacheDirty();
+    markOverlayCacheDirty();
     updateDrawClearButton();
   }
 
@@ -8682,7 +9163,21 @@
   function removeLocalOverlayById(overlayId) {
     renderer.mapOverlays = renderer.mapOverlays.filter(overlay => overlay.__uuid !== overlayId);
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
-    markAllMapCachesDirty();
+    markRouteCacheDirty();
+    markOverlayCacheDirty();
+    updateDrawClearButton();
+  }
+
+  function removeLocalOverlaysById(overlayIds) {
+    const targetIds = new Set((overlayIds || []).filter(Boolean));
+    if (!targetIds.size) return;
+    const originalLength = renderer.mapOverlays.length;
+    renderer.mapOverlays = renderer.mapOverlays.filter(overlay => !targetIds.has(overlay.__uuid));
+    if (renderer.mapOverlays.length === originalLength) return;
+
+    if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    markRouteCacheDirty();
+    markOverlayCacheDirty();
     updateDrawClearButton();
   }
 

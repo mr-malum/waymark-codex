@@ -348,46 +348,61 @@
     <label><input type="checkbox" data-map-overlay-toggle="pois" checked> POIs</label>
   </div>
 </div>
-<button id="map-draw-button" type="button" aria-label="Edit map overlays" hidden>Edit</button>
+<button id="map-draw-button" type="button" aria-label="Open map tools" hidden>Map Tools</button>
 <div id="map-draw-panel" class="map-control-panel map-draw-panel" hidden>
-  <nav class="map-edit-section-menu" aria-label="Map edit sections">
-    <button id="map-edit-close-button" type="button" class="map-edit-mode-button map-edit-mode-button-close">
-      <span class="map-edit-mode-icon" aria-hidden="true">✕</span>
-      <span class="map-edit-mode-label">Close</span>
-    </button>
-    <button type="button" data-map-edit-section-button="view" class="map-edit-mode-button">
-      <span class="map-edit-mode-icon" aria-hidden="true">◌</span>
-      <span class="map-edit-mode-label">View</span>
-    </button>
-    <button type="button" data-map-edit-section-button="terrain" class="map-edit-mode-button">
-      <span class="map-edit-mode-icon" aria-hidden="true">△</span>
-      <span class="map-edit-mode-label">Terrain</span>
-    </button>
-    <button type="button" data-map-edit-section-button="features" class="map-edit-mode-button">
-      <span class="map-edit-mode-icon" aria-hidden="true">✥</span>
-      <span class="map-edit-mode-label">Features</span>
-    </button>
-    <button type="button" data-map-edit-section-button="overlay" class="map-edit-mode-button active">
-      <span class="map-edit-mode-icon" aria-hidden="true">≈</span>
-      <span class="map-edit-mode-label">Overlay</span>
-    </button>
-    <button type="button" data-map-edit-section-button="regions" class="map-edit-mode-button">
-      <span class="map-edit-mode-icon map-edit-region-icon" aria-hidden="true">⬡</span>
-      <span class="map-edit-mode-label">Regions</span>
-    </button>
-    <button type="button" data-map-edit-section-button="generation" class="map-edit-mode-button">
-      <span class="map-edit-mode-icon" aria-hidden="true">✦</span>
-      <span class="map-edit-mode-label">Generation</span>
-    </button>
-    <button type="button" data-map-edit-section-button="nuke" class="map-edit-mode-button">
-      <span class="map-edit-mode-icon" aria-hidden="true">⚙</span>
-      <span class="map-edit-mode-label">Utilities</span>
-    </button>
+  <nav class="map-edit-section-menu" aria-label="Map tools">
+    <div class="map-edit-rail-utility">
+      <button id="map-edit-close-button" type="button" class="map-edit-mode-button map-edit-mode-button-close">
+        <span class="map-edit-mode-icon" aria-hidden="true">✕</span>
+        <span class="map-edit-mode-label">Close</span>
+      </button>
+      <button id="map-edit-view-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">◌</span>
+        <span class="map-edit-mode-label">View</span>
+      </button>
+    </div>
+    <div class="map-edit-rail-main" data-map-tool-mode-panel="chooser">
+      <button id="map-tools-surveyor-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">⬡</span>
+        <span class="map-edit-mode-label">Surveyor</span>
+        <span class="map-tools-mode-tooltip" role="tooltip">Live map management: regions, saved overlays (rivers, roads, etc.), named routes, and utilities. Changes here save immediately.</span>
+      </button>
+      <button id="map-tools-cartographer-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">✦</span>
+        <span class="map-edit-mode-label">Cartographer</span>
+        <span class="map-tools-mode-tooltip" role="tooltip">Staged editing: terrain and feature painting/generation preview locally first. Use Apply Preview to save or Discard All to revert.</span>
+      </button>
+    </div>
+    <div class="map-edit-rail-main" data-map-tool-mode-panel="surveyor" hidden>
+      <button id="map-surveyor-regions-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon map-edit-region-icon" aria-hidden="true">⬡</span>
+        <span class="map-edit-mode-label">Regions</span>
+      </button>
+      <button id="map-surveyor-overlay-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">≈</span>
+        <span class="map-edit-mode-label">Overlay</span>
+      </button>
+      <button id="map-surveyor-utilities-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">▣</span>
+        <span class="map-edit-mode-label">Archive</span>
+      </button>
+    </div>
+    <div class="map-edit-rail-main" data-map-tool-mode-panel="cartographer" hidden>
+      <button id="map-cartographer-terrain-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">△</span>
+        <span class="map-edit-mode-label">Terrain</span>
+      </button>
+      <button id="map-cartographer-features-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">✥</span>
+        <span class="map-edit-mode-label">Features</span>
+      </button>
+    </div>
   </nav>
-  <div class="map-generation-popout" role="tablist" aria-label="Generation subsections" hidden>
-    <button class="active" type="button" data-generation-section-button="terrain">Terrain</button>
-    <button type="button" data-generation-section-button="features">Features</button>
-    <button type="button" data-generation-section-button="overlays">Overlays</button>
+  <div id="map-cartographer-subsection-popout" class="map-generation-popout map-cartographer-subsection-popout" role="tablist" aria-label="Cartographer subsections" hidden>
+    <div id="map-cartographer-subsection-title" class="map-cartographer-subsection-title">Terrain</div>
+    <button id="map-cartographer-subsection-paint" class="active" type="button">Painting</button>
+    <button id="map-cartographer-subsection-generate" type="button">Generation</button>
+    <button id="map-cartographer-subsection-purge" type="button" hidden>Purge</button>
   </div>
 
   <div class="map-edit-pane">
@@ -488,54 +503,65 @@
       </section>
 
       <section class="map-draw-panel-section active" data-map-edit-section="overlay">
-        <div class="map-draw-section-title">Travel</div>
-        <div class="map-draw-tool-row map-draw-tool-row-compact" role="group" aria-label="Travel overlay tools">
+        <div class="map-draw-section-title" data-overlay-subview-group="drawing">Travel</div>
+        <div class="map-draw-tool-row map-draw-tool-row-compact" data-overlay-subview-group="drawing" role="group" aria-label="Travel overlay tools">
           <button type="button" data-map-draw-tool="road">Road</button>
           <button type="button" data-map-draw-tool="path">Path</button>
           <button type="button" data-map-draw-tool="river">River</button>
           <button type="button" data-map-draw-tool="sea_route">Sea Route</button>
         </div>
-        <label class="map-draw-style-row">
+        <label class="map-draw-style-row" data-overlay-subview-group="drawing">
           <span id="map-draw-style-label">Road Style</span>
           <select id="map-draw-road-style">
             <option value="dark_brown">Dark Brown</option>
             <option value="tan">Tan</option>
           </select>
         </label>
-        <label class="map-draw-option-row" id="map-road-water-override-row" hidden>
+        <label class="map-draw-option-row" id="map-road-water-override-row" data-overlay-subview-group="drawing" hidden>
           <input id="map-road-water-override" type="checkbox">
           <span>Water Crossing Override</span>
         </label>
-        <label class="map-draw-option-row" id="map-road-auto-pass-row" hidden>
+        <label class="map-draw-option-row" id="map-road-auto-pass-row" data-overlay-subview-group="drawing" hidden>
           <input id="map-road-auto-pass" type="checkbox" checked>
           <span>Auto Pass Style</span>
         </label>
-        <label class="map-draw-option-row" id="map-river-auto-falls-row" hidden>
+        <label class="map-draw-option-row" id="map-river-auto-falls-row" data-overlay-subview-group="drawing" hidden>
           <input id="map-river-auto-falls" type="checkbox" checked>
           <span>Auto Falls</span>
         </label>
-        <label class="map-draw-option-row" id="map-route-major-row" hidden>
+        <label class="map-draw-option-row" id="map-route-major-row" data-overlay-subview-group="drawing" hidden>
           <input id="map-route-major" type="checkbox">
           <span>Major Trade Route</span>
         </label>
-        <label class="map-draw-route-name-row" id="map-route-name-row" hidden>
+        <label class="map-draw-route-name-row" id="map-route-name-row" data-overlay-subview-group="drawing" hidden>
           <span>Route Name</span>
           <input id="map-route-name" type="text" maxlength="80" placeholder="Old Imperial Road">
         </label>
-        <div class="map-draw-section-title map-draw-subsection-title">Other</div>
-        <div class="map-draw-tool-row map-draw-tool-row-compact" role="group" aria-label="Other overlay tools">
+        <button id="map-named-routes-button" class="map-draw-secondary-button" data-overlay-subview-group="drawing" type="button">Named Routes</button>
+        <div class="map-draw-section-title map-draw-subsection-title" data-overlay-subview-group="drawing">Other</div>
+        <div class="map-draw-tool-row map-draw-tool-row-compact" data-overlay-subview-group="drawing" role="group" aria-label="Other overlay tools">
           <button type="button" data-map-draw-tool="wall">Wall</button>
           <button type="button" data-map-draw-tool="mist">Mist</button>
           <button type="button" data-map-draw-tool="erase">Erase Overlay</button>
         </div>
-        <label class="map-draw-range-row" id="map-mist-brush-size-row" hidden>
+        <label class="map-draw-range-row" id="map-mist-brush-size-row" data-overlay-subview-group="drawing" hidden>
           <span>Brush Size <strong id="map-mist-brush-size-value">1</strong></span>
           <input id="map-mist-brush-size" type="range" min="1" max="5" step="1" value="1">
         </label>
-        <label class="map-draw-range-row" id="map-mist-noise-row" hidden>
+        <label class="map-draw-range-row" id="map-mist-noise-row" data-overlay-subview-group="drawing" hidden>
           <span>Noise <strong id="map-mist-noise-value">0%</strong></span>
           <input id="map-mist-noise" type="range" min="0" max="90" step="5" value="0">
         </label>
+        <div class="map-draw-section-title map-draw-subsection-title" data-overlay-subview-group="purge">Purge Saved Overlays</div>
+        <p class="map-edit-empty-note map-edit-warning-note" data-overlay-subview-group="purge">These purge saved live-map overlays immediately and can be undone from this session.</p>
+        <div class="map-draw-tool-row map-draw-tool-row-compact" data-overlay-subview-group="purge" role="group" aria-label="Purge saved overlay types">
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="road">Purge Roads</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="river">Purge Rivers</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="path">Purge Paths</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="sea_route">Purge Sea Routes</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="wall">Purge Walls</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="mist">Purge Mist</button>
+        </div>
       </section>
 
       <section class="map-draw-panel-section" data-map-edit-section="regions">
@@ -574,20 +600,23 @@
             <button id="map-add-pol-region-button" class="map-add-region-button" type="button" aria-label="Add political region">＋</button>
           </span>
         </label>
+        <label class="map-draw-range-row">
+          <span>Brush Size <strong id="map-region-brush-size-value">1</strong></span>
+          <input id="map-region-brush-size" type="range" min="1" max="5" step="1" value="1">
+        </label>
+        <div class="map-region-purge-block">
+          <div class="map-draw-section-title map-draw-subsection-title">Purge Region Paint</div>
+          <p class="map-edit-empty-note map-nuke-region-note">These purge saved live-map region paint immediately. Region Codex entries are not deleted.</p>
+          <div class="map-draw-tool-row map-draw-tool-row-paired" role="group" aria-label="Purge region paint">
+            <button id="map-clear-geo-regions" class="map-draw-clear" type="button">Purge All Geo Regions</button>
+            <button id="map-clear-pol-regions" class="map-draw-clear" type="button">Purge All Pol Regions</button>
+          </div>
+        </div>
       </section>
 
       <section class="map-draw-panel-section" data-map-edit-section="nuke">
-        <div class="map-draw-section-title">Utilities</div>
-        <p class="map-edit-empty-note">These actions affect the whole generated map. Each requires confirmation and can be undone from this session.</p>
-        <p class="map-edit-empty-note map-edit-warning-note">Clear All Drawn Overlays and Clear All Features save to the live map immediately. They are not part of staged preview edits, Discard All, or Apply Preview.</p>
-        <div class="map-nuke-action-list" aria-label="Map utility actions">
-          <button id="map-named-routes-button" class="map-draw-secondary-button" type="button">Named Routes</button>
-          <button id="map-draw-clear" class="map-draw-clear" type="button">Clear All Drawn Overlays</button>
-          <button id="map-clear-features" class="map-draw-clear" type="button">Clear All Features</button>
-          <p class="map-edit-empty-note map-nuke-region-note">Cleared regions must be manually deleted from the Codex.</p>
-          <button id="map-clear-geo-regions" class="map-draw-clear" type="button">Clear All Geo Regions</button>
-          <button id="map-clear-pol-regions" class="map-draw-clear" type="button">Clear All Pol Regions</button>
-        </div>
+        <div class="map-draw-section-title">Archive</div>
+        <p class="map-edit-empty-note">No archive tools are active right now. Overlay, region, and feature purge actions live with their matching tools.</p>
       </section>
 
       <section class="map-draw-panel-section" data-map-edit-section="generation">
@@ -714,12 +743,12 @@
             </div>
             <div class="map-draw-tool-row map-generation-actions" data-generation-action-panel="features" role="group" aria-label="Feature generation actions">
               <button id="map-generation-run-features" class="map-draw-secondary-button" type="button">Preview Features</button>
+              <button id="map-clear-features" class="map-draw-clear" type="button">Purge All Features</button>
               <button data-generation-discard-section="features" type="button">Discard</button>
             </div>
             <div class="map-draw-tool-row map-generation-actions" data-generation-action-panel="overlays" role="group" aria-label="Overlay generation actions">
-              <button id="map-generation-run-roads" class="map-draw-secondary-button" type="button">Preview Roads</button>
-              <button id="map-generation-run-rivers" class="map-draw-secondary-button" type="button">Preview Rivers</button>
-              <button data-generation-discard-section="overlays" type="button">Discard</button>
+              <button id="map-generation-run-roads" class="map-draw-secondary-button" type="button">Generate Roads</button>
+              <button id="map-generation-run-rivers" class="map-draw-secondary-button" type="button">Generate Rivers</button>
             </div>
           </div>
         <div class="map-generation-shared-controls">
