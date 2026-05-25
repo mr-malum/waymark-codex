@@ -2568,6 +2568,23 @@
   stroke-linecap: butt;
 }
 
+.generated-map-drawn-wall-palisade-shadow {
+  stroke: #24150e;
+  stroke-width: 8;
+}
+
+.generated-map-drawn-wall-palisade-rail {
+  stroke: #6b3f22;
+  stroke-width: 4;
+}
+
+.generated-map-drawn-wall-palisade-stakes {
+  stroke: #c18a4a;
+  stroke-width: 5;
+  stroke-dasharray: 1 6;
+  stroke-linecap: square;
+}
+
 .generated-map-drawing-pending {
   stroke: #55e6ff;
   stroke-width: 3;

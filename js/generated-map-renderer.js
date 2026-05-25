@@ -124,7 +124,7 @@
   const PAN_PADDING_RATIO = 0.45;
   const TERRAIN_CACHE_SCALE = 1.5;
   const FEATURE_IMAGE_SUPERSAMPLE = 3;
-  const FEATURE_IMAGE_BATCH_SIZE = 4;
+  const FEATURE_IMAGE_BATCH_SIZE = 8;
   const BULK_OVERLAY_LOADING_THRESHOLD = 10;
   const INITIAL_MAP_LOADING_VEIL_MS = 650;
   const PATH_REVEAL_MIN_DURATION = 320;
@@ -410,15 +410,21 @@
     overlayCacheCtx: null,
     overlayCacheDirty: true,
     featureAssets: new Map(),
+    featureSourceImages: new Map(),
     featureImages: new Map(),
     featureImageUsage: new Map(),
     featureImageQueue: [],
     featureImageQueued: new Set(),
     featureImageFrame: null,
     featureImageActiveLoads: 0,
+    featureImageStartupBatchDirty: false,
     featureAssetsLoading: null,
+    featureAssetsLoaded: false,
     routeIconAssets: new Map(),
     routeIconAssetsLoading: null,
+    routeIconAssetsLoaded: false,
+    initialMapLoadingActive: false,
+    initialMapLoadingStartedAt: 0,
     poiHexIds: new Set(),
     poisByHexId: new Map(),
     mapOverlays: [],
@@ -427,7 +433,13 @@
     popup: null,
     loadingVeil: null,
     hexes: [],
+    hexesById: new Map(),
+    hexIdsByUuid: new Map(),
     hexesByCoord: new Map(),
+    overlayRevision: 0,
+    overlaysByTypeCache: { revision: -1, groups: null },
+    snapHexIdsCache: { revision: -1, type: "", hexIds: new Set() },
+    riverFallsHexIdsCache: { revision: -1, hexIds: new Set() },
     campaignId: null,
     hoveredHexId: null,
     selectedHexId: null,
@@ -466,6 +478,7 @@
       },
       tool: "road",
       roadStyle: "dark_brown",
+      wallStyle: "wall",
       roadWaterOverride: false,
       autoPass: true,
       autoFalls: true,
@@ -723,24 +736,58 @@
     renderer.view.width = dimensions.width;
     renderer.view.height = dimensions.height;
     renderer.hexes = (db?.raw?.hexes || []).map(buildHexModel).filter(Boolean);
+    rebuildHexIndexes();
     renderer.hexesByCoord = new Map(renderer.hexes.map(hex => [`${hex.x}:${hex.y}`, hex]));
     renderer.poisByHexId = groupPoisByHexId(db?.raw?.pois || []);
     renderer.poiHexIds = new Set(renderer.poisByHexId.keys());
     renderer.mapOverlays = db?.raw?.generatedMapOverlays || [];
+    bumpOverlayRevision();
     markAllMapCachesDirty();
     updateDrawClearButton();
-    setLoading(true);
-    if (renderer.initialMapLoadingTimer) window.clearTimeout(renderer.initialMapLoadingTimer);
-    renderer.initialMapLoadingTimer = window.setTimeout(() => {
-      renderer.initialMapLoadingTimer = null;
-      if (!renderer.drawing.saving) setLoading(false);
-    }, INITIAL_MAP_LOADING_VEIL_MS);
+    beginInitialMapLoadingVeil();
     populateDrawRegionSelect();
     updateDrawControlsVisibility();
     loadFeatureArtAssets();
     loadRouteIconAssets();
     fitViewToMap();
     render();
+  }
+
+  function beginInitialMapLoadingVeil() {
+    setLoading(true);
+    renderer.initialMapLoadingActive = true;
+    renderer.initialMapLoadingStartedAt = performance.now();
+    scheduleInitialMapLoadingVeilCheck();
+  }
+
+  function scheduleInitialMapLoadingVeilCheck() {
+    if (renderer.initialMapLoadingTimer) window.clearTimeout(renderer.initialMapLoadingTimer);
+    renderer.initialMapLoadingTimer = window.setTimeout(checkInitialMapLoadingVeil, 80);
+  }
+
+  function checkInitialMapLoadingVeil() {
+    renderer.initialMapLoadingTimer = null;
+    if (!renderer.initialMapLoadingActive) return;
+    const minimumElapsed = performance.now() - renderer.initialMapLoadingStartedAt >= INITIAL_MAP_LOADING_VEIL_MS;
+    if (!minimumElapsed || hasInitialMapLoadingWork()) {
+      scheduleInitialMapLoadingVeilCheck();
+      return;
+    }
+    renderer.initialMapLoadingActive = false;
+    if (!renderer.drawing.saving) setLoading(false);
+  }
+
+  function hasInitialMapLoadingWork() {
+    return renderer.cacheDirty
+      || renderer.routeCacheDirty
+      || renderer.featureCacheDirty
+      || renderer.overlayCacheDirty
+      || renderer.drawing.terrainDirtyHexIds.size > 0
+      || Boolean(renderer.drawing.queuedRenderFrame)
+      || !renderer.featureAssetsLoaded
+      || !renderer.routeIconAssetsLoaded
+      || renderer.featureImageQueue.length > 0
+      || renderer.featureImageActiveLoads > 0;
   }
 
   function refreshPoiLayerFromDatabase() {
@@ -774,6 +821,7 @@
   function refreshOverlayLayerFromDatabase() {
     if (!isActive()) return;
     renderer.mapOverlays = db?.raw?.generatedMapOverlays || [];
+    bumpOverlayRevision();
     markRouteCacheDirty();
     markOverlayCacheDirty();
     updateDrawClearButton();
@@ -786,6 +834,7 @@
     const viewButton = document.getElementById("map-view-button");
     const viewPanel = document.getElementById("map-view-panel");
     const roadStyle = document.getElementById("map-draw-road-style");
+    const wallStyle = document.getElementById("map-wall-style");
     const roadWaterOverride = document.getElementById("map-road-water-override");
     const roadAutoPass = document.getElementById("map-road-auto-pass");
     const riverAutoFalls = document.getElementById("map-river-auto-falls");
@@ -1036,6 +1085,11 @@
 
     roadStyle?.addEventListener("change", () => {
       renderer.drawing.roadStyle = roadStyle.value || "dark_brown";
+    });
+
+    wallStyle?.addEventListener("change", () => {
+      renderer.drawing.wallStyle = getValidWallStyle(wallStyle.value);
+      updateDrawStyleControls();
     });
 
     roadWaterOverride?.addEventListener("change", () => {
@@ -1939,6 +1993,7 @@
     renderer.drawing.enabled = false;
     renderer.drawing.tool = "";
     renderer.drawing.roadStyle = "dark_brown";
+    renderer.drawing.wallStyle = "wall";
     renderer.drawing.roadWaterOverride = false;
     renderer.drawing.autoPass = true;
     renderer.drawing.autoFalls = true;
@@ -2011,6 +2066,12 @@
     }
     renderer.drawing.queuedRenderFrame = null;
     renderer.drawing.queuedFullRender = false;
+    renderer.initialMapLoadingActive = false;
+    renderer.initialMapLoadingStartedAt = 0;
+    if (renderer.initialMapLoadingTimer) {
+      window.clearTimeout(renderer.initialMapLoadingTimer);
+    }
+    renderer.initialMapLoadingTimer = null;
     renderer.drawing.featureViewportKey = "";
     renderer.drawing.terrainDirtyHexIds.clear();
     renderer.cacheDirty = true;
@@ -2025,6 +2086,7 @@
     }
     renderer.featureImageFrame = null;
     renderer.featureImageActiveLoads = 0;
+    renderer.featureImageStartupBatchDirty = false;
     renderer.drawing.pendingTerrainSaves.clear();
     renderer.drawing.terrainSaveRunning = false;
     renderer.drawing.terrainSaveErrorShown = false;
@@ -2041,6 +2103,10 @@
     renderer.hoveredHexId = null;
     renderer.selectedHexId = null;
     selectedHexId = null;
+    renderer.hexesById = new Map();
+    renderer.hexIdsByUuid = new Map();
+    renderer.hexesByCoord = new Map();
+    bumpOverlayRevision();
     if (renderer.popup) {
       renderer.popup.hidden = true;
       renderer.popup.innerHTML = "";
@@ -2125,6 +2191,20 @@
     renderer.overlayCacheDirty = true;
   }
 
+  function rebuildHexIndexes() {
+    renderer.hexesById = new Map(renderer.hexes.map(hex => [hex.id, hex]));
+    renderer.hexIdsByUuid = new Map(renderer.hexes
+      .map(hex => [hex.record?.__uuid, hex.id])
+      .filter(([uuid]) => Boolean(uuid)));
+  }
+
+  function bumpOverlayRevision() {
+    renderer.overlayRevision += 1;
+    renderer.overlaysByTypeCache = { revision: -1, groups: null };
+    renderer.snapHexIdsCache = { revision: -1, type: "", hexIds: new Set() };
+    renderer.riverFallsHexIdsCache = { revision: -1, hexIds: new Set() };
+  }
+
   function markAllMapCachesDirty() {
     markTerrainCacheDirty();
     markRouteCacheDirty();
@@ -2148,7 +2228,7 @@
   }
 
   function markTerrainHexDirty(hexId, radius = 3) {
-    const hex = renderer.hexes.find(candidate => candidate.id === hexId);
+    const hex = renderer.hexesById.get(hexId);
     if (!hex) {
       markTerrainCacheDirty();
       return;
@@ -2372,6 +2452,8 @@
   function updateDrawStyleControls() {
     const styleRow = document.querySelector(".map-draw-style-row");
     const styleLabel = document.getElementById("map-draw-style-label");
+    const wallStyleRow = document.getElementById("map-wall-style-row");
+    const wallStyleInput = document.getElementById("map-wall-style");
     const roadOverrideRow = document.getElementById("map-road-water-override-row");
     const roadOverrideInput = document.getElementById("map-road-water-override");
     const autoPassRow = document.getElementById("map-road-auto-pass-row");
@@ -2407,6 +2489,8 @@
     const currentRouteMajor = getCurrentRouteMajor();
     if (styleRow) styleRow.hidden = !["road", "path"].includes(renderer.drawing.tool);
     if (styleLabel) styleLabel.textContent = renderer.drawing.tool === "path" ? "Path Style" : "Road Style";
+    if (wallStyleRow) wallStyleRow.hidden = renderer.drawing.tool !== "wall";
+    if (wallStyleInput) wallStyleInput.value = getValidWallStyle(renderer.drawing.wallStyle);
     if (roadOverrideRow) roadOverrideRow.hidden = renderer.drawing.tool !== "road";
     if (roadOverrideInput) roadOverrideInput.checked = Boolean(renderer.drawing.roadWaterOverride);
     if (autoPassRow) autoPassRow.hidden = renderer.drawing.tool !== "road";
@@ -2504,13 +2588,13 @@
 
   function refreshMistBrushPreview() {
     if (renderer.drawing.tool !== "mist" || !renderer.drawing.hoverMistHexIds?.length) return;
-    const centerHex = renderer.hexes.find(hex => hex.id === renderer.drawing.hoverMistHexIds[0]);
+    const centerHex = hexForPathPoint(renderer.drawing.hoverMistHexIds[0]);
     renderer.drawing.hoverMistHexIds = centerHex ? getMistBrushHexIds(centerHex) : [];
   }
 
   function refreshEditorBrushPreview() {
     if (!["terrain", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper", "region", "unregion", "political-region", "clear-political-region"].includes(renderer.drawing.tool) || !renderer.drawing.hoverBrushHexIds?.length) return;
-    const centerHex = renderer.hexes.find(hex => hex.id === renderer.drawing.hoverBrushHexIds[0]);
+    const centerHex = hexForPathPoint(renderer.drawing.hoverBrushHexIds[0]);
     renderer.drawing.hoverBrushHexIds = centerHex ? getEditorBrushHexIds(centerHex) : [];
   }
 
@@ -3016,6 +3100,7 @@
     if (!renderer.drawing.stagedOverlayBaseline) return;
     renderer.mapOverlays = renderer.drawing.stagedOverlayBaseline.map(cloneOverlayRecord);
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    bumpOverlayRevision();
   }
 
   function restoreStagedTerrainOriginals() {
@@ -3412,19 +3497,31 @@
     const ctx = renderer.ctx;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.clearRect(0, 0, width, height);
+    const deferOverlayCaches = shouldDeferOverlayCacheRefresh();
     updateTerrainCache(visibleHexes);
-    // Keep routes in their own under-feature layer so route edits do not rebuild feature art.
-    updateRouteCache();
     updateFeatureCache();
-    updateOverlayCache();
+    // Heavy live overlays should not block the first terrain/feature paint on dense maps.
+    if (deferOverlayCaches) queueMapRender(true);
+    else {
+      // Keep routes in their own under-feature layer so route edits do not rebuild feature art.
+      updateRouteCache();
+      updateOverlayCache();
+    }
     drawCacheSlice(ctx, renderer.cacheCanvas, width, height);
     drawCacheSlice(ctx, renderer.routeCacheCanvas, width, height);
     drawCacheSlice(ctx, renderer.featureCacheCanvas, width, height);
     drawCacheSlice(ctx, renderer.overlayCacheCanvas, width, height);
     renderer.drawing.terrainDirtyHexIds.clear();
-    if (!renderer.drawing.saving && !renderer.initialMapLoadingTimer) {
+    if (!renderer.drawing.saving && !renderer.initialMapLoadingActive) {
       setLoading(false);
     }
+  }
+
+  function shouldDeferOverlayCacheRefresh() {
+    if (!renderer.routeCacheDirty && !renderer.overlayCacheDirty) return false;
+    return renderer.cacheDirty
+      || renderer.featureCacheDirty
+      || renderer.drawing.terrainDirtyHexIds.size > 0;
   }
 
   function drawCacheSlice(ctx, sourceCanvas, width, height) {
@@ -3558,7 +3655,7 @@
     let bounds = null;
 
     renderer.drawing.terrainDirtyHexIds.forEach(hexId => {
-      const hex = renderer.hexes.find(candidate => candidate.id === hexId);
+      const hex = hexForPathPoint(hexId);
       if (!hex) return;
       const next = {
         left: Math.max(0, hex.center.x - padX),
@@ -3614,10 +3711,10 @@
   }
 
   function renderCanvasDrawablePaths(ctx) {
-    const overlays = renderer.mapOverlays || [];
+    const overlaysByType = getOverlaysByType();
 
     if (renderer.drawing.visibleOverlays.path) {
-      connectedPathStrings(overlays.filter(overlay => overlay.Overlay_Type === "path"), "path").forEach(pathData => {
+      connectedPathStrings(overlaysByType.path, "path").forEach(pathData => {
         drawCanvasOverlayPath(ctx, pathData.d, {
           stroke: ROAD_STYLE_COLORS[getOverlayBaseStyle(pathData.style)] || ROAD_STYLE_COLORS.dark_brown,
           width: 3.5,
@@ -3654,13 +3751,13 @@
         renderMajorRiverWaterContinuations(ctx, continuationSegments);
         renderMajorRiverMountainCulverts(ctx, regularSegments);
       };
-      const riverSegments = overlays.filter(overlay => overlay.Overlay_Type === "river");
+      const riverSegments = overlaysByType.river;
       drawRiverPaths(riverSegments.filter(segment => !segment.Is_Major_Route));
       drawRiverPaths(riverSegments.filter(segment => segment.Is_Major_Route));
     }
 
     if (renderer.drawing.visibleOverlays.sea_route) {
-      connectedPathStrings(overlays.filter(overlay => overlay.Overlay_Type === "sea_route"), "sea_route").forEach(pathData => {
+      connectedPathStrings(overlaysByType.sea_route, "sea_route").forEach(pathData => {
         drawCanvasOverlayPath(ctx, pathData.d, {
           stroke: "rgba(236, 227, 176, 0.72)",
           width: 4.5,
@@ -3671,7 +3768,7 @@
     }
 
     if (renderer.drawing.visibleOverlays.road) {
-      const roadSegments = overlays.filter(overlay => overlay.Overlay_Type === "road");
+      const roadSegments = overlaysByType.road;
       const drawRoadSegments = segments => {
         const passRoadSegments = segments.filter(isAutoPassRoadSegment);
         const baseRoadSegments = segments.filter(segment => !isAutoPassRoadSegment(segment));
@@ -3698,9 +3795,26 @@
       };
       drawRoadSegments(roadSegments.filter(segment => !segment.Is_Major_Route));
       drawRoadSegments(roadSegments.filter(segment => segment.Is_Major_Route));
-      renderMajorRoadRiverBridges(ctx, overlays);
+      renderMajorRoadRiverBridges(ctx, renderer.mapOverlays || []);
     }
 
+  }
+
+  function getOverlaysByType() {
+    if (renderer.overlaysByTypeCache.revision === renderer.overlayRevision && renderer.overlaysByTypeCache.groups) {
+      return renderer.overlaysByTypeCache.groups;
+    }
+    const groups = groupOverlaysByType(renderer.mapOverlays || []);
+    renderer.overlaysByTypeCache = { revision: renderer.overlayRevision, groups };
+    return groups;
+  }
+
+  function groupOverlaysByType(overlays) {
+    return (overlays || []).reduce((groups, overlay) => {
+      const type = overlay?.Overlay_Type;
+      if (type && groups[type]) groups[type].push(overlay);
+      return groups;
+    }, { road: [], river: [], path: [], sea_route: [], wall: [], mist: [] });
   }
 
   function drawCanvasOverlayPath(ctx, pathData, options) {
@@ -3831,6 +3945,7 @@
 
   async function loadFeatureArtAssets() {
     if (renderer.featureAssetsLoading) return renderer.featureAssetsLoading;
+    renderer.featureAssetsLoaded = false;
 
     renderer.featureAssetsLoading = Promise.all(FEATURE_ART_ASSET_FILES.map(async file => {
       try {
@@ -3839,6 +3954,8 @@
         renderer.featureAssets.set(file, parseFeatureSvg(await response.text()));
       } catch {}
     })).then(() => {
+      renderer.featureAssetsLoaded = true;
+      renderer.featureSourceImages.clear();
       renderer.featureImages.clear();
       markFeatureCacheDirty();
       queueMapRender(true);
@@ -3916,38 +4033,85 @@
 
     entry.loading = true;
     renderer.featureImageActiveLoads += 1;
-    const image = new Image();
-    image.onload = () => {
-      const current = renderer.featureImages.get(cacheKey);
-      if (!current) {
+    loadFeatureSourceImage(entry.file, asset)
+      .then(sourceImage => {
+        const current = renderer.featureImages.get(cacheKey);
+        if (!current) {
+          renderer.featureImageActiveLoads = Math.max(0, renderer.featureImageActiveLoads - 1);
+          processFeatureImageQueue();
+          flushInitialFeatureImageBatchIfReady();
+          return;
+        }
+
+        const canvas = sourceImage ? tintFeatureSourceImage(sourceImage, asset, current.tint) : null;
+        current.image = canvas;
+        current.loaded = Boolean(canvas);
+        current.loading = false;
+        renderer.featureImageActiveLoads = Math.max(0, renderer.featureImageActiveLoads - 1);
+        if (renderer.initialMapLoadingActive) {
+          renderer.featureImageStartupBatchDirty = true;
+        } else {
+          markFeatureImageUsageDirty(cacheKey);
+        }
+        processFeatureImageQueue();
+        flushInitialFeatureImageBatchIfReady();
+      })
+      .catch(() => {
+        const current = renderer.featureImages.get(cacheKey);
+        if (current) current.loading = false;
         renderer.featureImageActiveLoads = Math.max(0, renderer.featureImageActiveLoads - 1);
         processFeatureImageQueue();
-        return;
-      }
+        flushInitialFeatureImageBatchIfReady();
+      });
+  }
 
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.ceil(asset.width * FEATURE_IMAGE_SUPERSAMPLE));
-      canvas.height = Math.max(1, Math.ceil(asset.height * FEATURE_IMAGE_SUPERSAMPLE));
-      const ctx = canvas.getContext("2d");
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-      current.image = canvas;
-      current.loaded = true;
-      current.loading = false;
-      renderer.featureImageActiveLoads = Math.max(0, renderer.featureImageActiveLoads - 1);
-      markFeatureImageUsageDirty(cacheKey);
-      processFeatureImageQueue();
-    };
-    image.onerror = () => {
-      const current = renderer.featureImages.get(cacheKey);
-      if (current) current.loading = false;
-      renderer.featureImageActiveLoads = Math.max(0, renderer.featureImageActiveLoads - 1);
-      processFeatureImageQueue();
-    };
-    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${asset.viewBox}" color="${entry.tint}" fill="currentColor">${asset.body}</svg>`
+  function loadFeatureSourceImage(file, asset) {
+    const cached = renderer.featureSourceImages.get(file);
+    if (cached?.image) return Promise.resolve(cached.image);
+    if (cached?.promise) return cached.promise;
+
+    const image = new Image();
+    const sourceEntry = { image: null, promise: null };
+    sourceEntry.promise = new Promise(resolve => {
+      image.onload = () => {
+        sourceEntry.image = image;
+        resolve(image);
+      };
+      image.onerror = () => resolve(null);
+    });
+    renderer.featureSourceImages.set(file, sourceEntry);
+    image.src = featureSourceDataUrl(asset);
+    return sourceEntry.promise;
+  }
+
+  function featureSourceDataUrl(asset) {
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${asset.viewBox}" color="#ffffff" fill="currentColor">${asset.body}</svg>`
     )}`;
+  }
+
+  function tintFeatureSourceImage(sourceImage, asset, tint) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.ceil(asset.width * FEATURE_IMAGE_SUPERSAMPLE));
+    canvas.height = Math.max(1, Math.ceil(asset.height * FEATURE_IMAGE_SUPERSAMPLE));
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "source-in";
+    ctx.fillStyle = tint || "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "source-over";
+    return canvas;
+  }
+
+  function flushInitialFeatureImageBatchIfReady() {
+    if (!renderer.initialMapLoadingActive || !renderer.featureImageStartupBatchDirty) return;
+    if (renderer.featureImageQueue.length || renderer.featureImageActiveLoads > 0) return;
+    renderer.featureImageStartupBatchDirty = false;
+    markFeatureCacheDirty();
+    markOverlayCacheDirty();
+    queueMapRender(true);
   }
 
   function markFeatureImageUsageDirty(cacheKey) {
@@ -3958,7 +4122,7 @@
     }
     if (usage.terrainHexIds.size) {
       const affectedHexes = [...usage.terrainHexIds]
-        .map(hexId => renderer.hexes.find(hex => hex.id === hexId))
+        .map(hexId => hexForPathPoint(hexId))
         .filter(Boolean);
       markTerrainHexesDirty(affectedHexes, 0, false);
     }
@@ -3970,6 +4134,7 @@
 
   async function loadRouteIconAssets() {
     if (renderer.routeIconAssetsLoading) return renderer.routeIconAssetsLoading;
+    renderer.routeIconAssetsLoaded = false;
 
     renderer.routeIconAssetsLoading = Promise.all(Object.entries(ROUTE_ICON_FILES).map(async ([type, file]) => {
       try {
@@ -3978,6 +4143,7 @@
         renderer.routeIconAssets.set(type, parseFeatureSvg(await response.text()));
       } catch {}
     })).then(() => {
+      renderer.routeIconAssetsLoaded = true;
       renderer.routeLabelCache = { key: "", labels: [] };
       renderSvgOnly();
     });
@@ -4089,10 +4255,12 @@
   }
 
   function getRiverFallsHexIds() {
+    if (renderer.riverFallsHexIdsCache.revision === renderer.overlayRevision) {
+      return renderer.riverFallsHexIdsCache.hexIds;
+    }
     const fallsHexIds = new Set();
-    (renderer.mapOverlays || [])
+    getOverlaysByType().river
       .filter(overlay => (
-        overlay.Overlay_Type === "river" &&
         overlay.From_Hex_ID_Ref &&
         overlay.To_Hex_ID_Ref &&
         !overlayHasStyleFlag(overlay, OVERLAY_STYLE_FLAGS.riverNoAutoFalls)
@@ -4106,6 +4274,7 @@
         if (!shouldAutoRenderRiverFalls(overlay, higherHex)) return;
         fallsHexIds.add(higherHex.id);
       });
+    renderer.riverFallsHexIdsCache = { revision: renderer.overlayRevision, hexIds: fallsHexIds };
     return fallsHexIds;
   }
 
@@ -4388,7 +4557,7 @@
       });
     }
 
-    const activeHex = renderer.hexes.find(hex => hex.id === renderer.hoveredHexId || hex.id === renderer.selectedHexId);
+    const activeHex = hexForPathPoint(renderer.hoveredHexId) || hexForPathPoint(renderer.selectedHexId);
     if (activeHex) {
       const selected = activeHex.id === renderer.selectedHexId;
       const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
@@ -4404,23 +4573,28 @@
 
   function renderDrawableOverlays(fragment, visibleHexes) {
     const visibleIds = new Set(visibleHexes.map(hex => hex.id));
-    const overlays = renderer.mapOverlays || [];
 
-    overlays.filter(overlay => renderer.drawing.visibleOverlays.wall && overlay.Overlay_Type === "wall" && visibleIds.has(overlay.Hex_ID_Ref)).forEach(overlay => {
-      const hex = renderer.hexes.find(candidate => candidate.id === overlay.Hex_ID_Ref);
+    getOverlaysByType().wall.filter(overlay => renderer.drawing.visibleOverlays.wall && visibleIds.has(overlay.Hex_ID_Ref)).forEach(overlay => {
+      const hex = hexForPathPoint(overlay.Hex_ID_Ref);
       if (!hex) return;
 
       const edgeIndex = EDGE_NAMES.indexOf(overlay.Edge);
       if (edgeIndex < 0) return;
 
       const edge = { a: hex.points[edgeIndex], b: hex.points[(edgeIndex + 1) % hex.points.length] };
-      ["base", "body", "crenellations"].forEach(layer => {
+      getWallRenderLayers(overlay).forEach(layer => {
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         path.setAttribute("class", `generated-map-drawn-wall generated-map-drawn-wall-${layer}`);
         path.setAttribute("d", pathCommand(edge.a, edge.b));
         fragment.appendChild(path);
       });
     });
+  }
+
+  function getWallRenderLayers(overlay) {
+    return getValidWallStyle(overlay?.Style) === "palisade"
+      ? ["palisade-shadow", "palisade-rail", "palisade-stakes"]
+      : ["base", "body", "crenellations"];
   }
 
   function renderDrawingGuides(fragment, visibleHexes) {
@@ -4450,7 +4624,7 @@
     }
 
     if ((renderer.drawing.tool === "wall" || PATH_OVERLAY_TYPES.has(renderer.drawing.tool)) && renderer.drawing.hoverEdge) {
-      const hex = renderer.hexes.find(candidate => candidate.id === renderer.drawing.hoverEdge.hexId);
+      const hex = hexForPathPoint(renderer.drawing.hoverEdge.hexId);
       const edgeIndex = EDGE_NAMES.indexOf(renderer.drawing.hoverEdge.edge);
       if (hex && edgeIndex >= 0) {
         const edge = { a: hex.points[edgeIndex], b: hex.points[(edgeIndex + 1) % hex.points.length] };
@@ -4573,7 +4747,7 @@
   function renderMistBrushPreview(fragment, visibleHexes) {
     const visibleIds = new Set(visibleHexes.map(hex => hex.id));
     renderer.drawing.hoverMistHexIds
-      .map(hexId => renderer.hexes.find(hex => hex.id === hexId))
+      .map(hexId => hexForPathPoint(hexId))
       .filter(hex => hex && visibleIds.has(hex.id))
       .forEach(hex => {
         const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
@@ -4591,7 +4765,7 @@
       ? "generated-map-editor-brush-preview generated-map-feature-brush-preview"
       : "generated-map-editor-brush-preview generated-map-terrain-brush-preview";
     renderer.drawing.hoverBrushHexIds
-      .map(hexId => renderer.hexes.find(hex => hex.id === hexId))
+      .map(hexId => hexForPathPoint(hexId))
       .filter(hex => hex && visibleIds.has(hex.id))
       .forEach(hex => {
         const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
@@ -4652,50 +4826,32 @@
 
   function buildRouteLabelCacheKey() {
     const visible = renderer.drawing.visibleOverlays;
-    const routeRows = (renderer.mapOverlays || [])
-      .filter(overlay => (
-        (overlay.Overlay_Type === "road" && overlay.Is_Major_Route && overlay.Route_Name) ||
-        (overlay.Overlay_Type === "river" && overlay.Is_Major_Route && overlay.Route_Name) ||
-        (overlay.Overlay_Type === "sea_route" && overlay.Route_Name)
-      ))
-      .map(overlay => [
-        overlay.__uuid,
-        overlay.Overlay_Type,
-        overlay.From_Hex_ID_Ref,
-        overlay.To_Hex_ID_Ref,
-        overlay.Edge,
-        overlay.Style,
-        overlay.Is_Major_Route ? 1 : 0,
-        overlay.Route_Name || ""
-      ].join(":"))
-      .sort()
-      .join("|");
     return [
       visible.road ? 1 : 0,
       visible.river ? 1 : 0,
       visible.sea_route ? 1 : 0,
-      routeRows
+      renderer.overlayRevision
     ].join("::");
   }
 
   function buildRouteLabelEntries() {
-    const overlays = renderer.mapOverlays || [];
+    const overlaysByType = getOverlaysByType();
     const labelPaths = [];
 
     if (renderer.drawing.visibleOverlays.road) {
-      connectedPathStrings(overlays.filter(overlay => overlay.Overlay_Type === "road" && overlay.Is_Major_Route && overlay.Route_Name), "road").forEach(pathData => {
+      connectedPathStrings(overlaysByType.road.filter(overlay => overlay.Is_Major_Route && overlay.Route_Name), "road").forEach(pathData => {
         labelPaths.push({ ...pathData, type: "road" });
       });
     }
 
     if (renderer.drawing.visibleOverlays.river) {
-      getCanvasRiverPathStrings(overlays.filter(overlay => overlay.Overlay_Type === "river" && overlay.Is_Major_Route && overlay.Route_Name)).forEach(pathData => {
+      getCanvasRiverPathStrings(overlaysByType.river.filter(overlay => overlay.Is_Major_Route && overlay.Route_Name)).forEach(pathData => {
         labelPaths.push({ ...pathData, type: "river" });
       });
     }
 
     if (renderer.drawing.visibleOverlays.sea_route) {
-      connectedPathStrings(overlays.filter(overlay => overlay.Overlay_Type === "sea_route" && overlay.Route_Name), "sea_route").forEach(pathData => {
+      connectedPathStrings(overlaysByType.sea_route.filter(overlay => overlay.Route_Name), "sea_route").forEach(pathData => {
         labelPaths.push({ ...pathData, type: "sea_route" });
       });
     }
@@ -4804,8 +4960,8 @@
     const image = getFeatureArtImage(FEATURE_ART_FILES.mist, "#f0f0e8", { type: "overlay", overlayType: "mist" });
     if (!image) return;
 
-    (renderer.mapOverlays || [])
-      .filter(overlay => overlay.Overlay_Type === "mist" && overlay.Hex_ID_Ref)
+    getOverlaysByType().mist
+      .filter(overlay => overlay.Hex_ID_Ref)
       .forEach(overlay => {
         const hex = hexForPathPoint(overlay.Hex_ID_Ref);
         if (!hex) return;
@@ -4988,7 +5144,7 @@
 
   function getPoiCentersForRegion(regionId, regionHexes) {
     return [...renderer.poiHexIds]
-      .map(hexId => renderer.hexes.find(hex => hex.id === hexId || hex.label === hexId)?.center)
+      .map(hexId => (hexForPathPoint(hexId) || renderer.hexes.find(hex => hex.label === hexId))?.center)
       .filter(Boolean);
   }
 
@@ -5147,11 +5303,11 @@
   }
 
   function pathPointForHexId(hexId) {
-    return renderer.hexes.find(hex => hex.id === hexId)?.center || null;
+    return renderer.hexesById.get(hexId)?.center || null;
   }
 
   function hexForPathPoint(hexId) {
-    return renderer.hexes.find(hex => hex.id === hexId) || null;
+    return renderer.hexesById.get(hexId) || null;
   }
 
   function getHexEdgeSegment(hex, edgeName) {
@@ -5175,8 +5331,8 @@
   }
 
   function overlaySegmentPoints(segment, type) {
-    const from = renderer.hexes.find(hex => hex.id === segment.From_Hex_ID_Ref);
-    const to = renderer.hexes.find(hex => hex.id === segment.To_Hex_ID_Ref);
+    const from = hexForPathPoint(segment.From_Hex_ID_Ref);
+    const to = hexForPathPoint(segment.To_Hex_ID_Ref);
     if (!from || !to) return null;
 
     return { from: from.center, to: to.center };
@@ -5493,6 +5649,7 @@
 
   function getCurrentDrawOverlayStyle(tool) {
     if (tool === "sea_route") return "sea_route";
+    if (tool === "wall") return getValidWallStyle(renderer.drawing.wallStyle);
     if (tool === "river") {
       const autoFallsDisabled = getCurrentRouteMajor("river") || renderer.drawing.autoFalls === false;
       return composeOverlayStyle("river", autoFallsDisabled
@@ -5508,6 +5665,10 @@
       return composeOverlayStyle(baseStyle, flags);
     }
     return baseStyle;
+  }
+
+  function getValidWallStyle(style) {
+    return style === "palisade" ? "palisade" : "wall";
   }
 
   function getCurrentRouteMetadata(tool) {
@@ -6204,8 +6365,8 @@
   }
 
   function transportSegmentPoints(segment, type, allSegments) {
-    const from = renderer.hexes.find(hex => hex.id === segment.From_Hex_ID_Ref);
-    const to = renderer.hexes.find(hex => hex.id === segment.To_Hex_ID_Ref);
+    const from = hexForPathPoint(segment.From_Hex_ID_Ref);
+    const to = hexForPathPoint(segment.To_Hex_ID_Ref);
     if (!from || !to) return null;
 
     const fromContinues = transportContinuesThroughWater(from, type, allSegments);
@@ -6280,8 +6441,8 @@
     const points = new Map();
     const edges = [];
     segments.forEach(segment => {
-      const fromHex = renderer.hexes.find(hex => hex.id === segment.From_Hex_ID_Ref);
-      const toHex = renderer.hexes.find(hex => hex.id === segment.To_Hex_ID_Ref);
+      const fromHex = hexForPathPoint(segment.From_Hex_ID_Ref);
+      const toHex = hexForPathPoint(segment.To_Hex_ID_Ref);
       if (!fromHex) return;
       if (!toHex && !segment.Edge) return;
 
@@ -6487,15 +6648,15 @@
   }
 
   function getTransportChainPoint(hexId, index, chain, type) {
-    const hex = renderer.hexes.find(candidate => candidate.id === hexId);
+    const hex = hexForPathPoint(hexId);
     if (!hex) return null;
     if (!isWaterHex(hex)) return hex.center;
 
-    const sameTypeSegments = (renderer.mapOverlays || []).filter(overlay => overlay.Overlay_Type === type);
+    const sameTypeSegments = getOverlaysByType()[type] || [];
     if (transportContinuesThroughWater(hex, type, sameTypeSegments)) return hex.center;
 
     const neighborId = index === 0 ? chain[1] : chain[index - 1];
-    const neighborHex = renderer.hexes.find(candidate => candidate.id === neighborId);
+    const neighborHex = hexForPathPoint(neighborId);
     if (!neighborHex || isWaterHex(neighborHex)) return null;
 
     return pointWhereLineLeavesHex(neighborHex, hex.center);
@@ -6503,6 +6664,9 @@
 
   function getSnapHexIdsForPathType(type) {
     if (!["road", "path", "river"].includes(type)) return new Set();
+    if (renderer.snapHexIdsCache.revision === renderer.overlayRevision && renderer.snapHexIdsCache.type === type) {
+      return renderer.snapHexIdsCache.hexIds;
+    }
 
     const counts = {
       road: new Map(),
@@ -6510,12 +6674,14 @@
       river: new Map()
     };
 
-    (renderer.mapOverlays || []).forEach(overlay => {
+    ["road", "path", "river"].forEach(overlayType => {
+      (getOverlaysByType()[overlayType] || []).forEach(overlay => {
       if (!["road", "path", "river"].includes(overlay.Overlay_Type)) return;
       [overlay.From_Hex_ID_Ref, overlay.To_Hex_ID_Ref].forEach(hexId => {
         if (!hexId) return;
         const typeCounts = counts[overlay.Overlay_Type];
         typeCounts.set(hexId, (typeCounts.get(hexId) || 0) + 1);
+      });
       });
     });
 
@@ -6532,6 +6698,7 @@
       }
     });
 
+    renderer.snapHexIdsCache = { revision: renderer.overlayRevision, type, hexIds: snapHexIds };
     return snapHexIds;
   }
 
@@ -7462,7 +7629,7 @@
   }
 
   function applySpecificFeatureToFeatures(snapshot, feature, brush = null) {
-    if (feature === "falls" && !hasStrongWaterDropFromHex(renderer.hexes.find(hex => hex.id === snapshot.hexId))) return null;
+    if (feature === "falls" && !hasStrongWaterDropFromHex(hexForPathPoint(snapshot.hexId))) return null;
     if (brush?.ignoreCompatibility) {
       const maxFeatures = resolveChaosNumber(renderer.drawing.featureMaxFeatures, 0, 2, `feature-max-features:${snapshot.hexId}:${feature}`);
       return normalizeTerrainFeatureSelection([...(snapshot.features || []), feature], feature, maxFeatures);
@@ -7531,7 +7698,7 @@
 
   function findRendererHexForRules(hexOrSnapshot) {
     const hexId = hexOrSnapshot?.hexId || hexOrSnapshot?.id;
-    const hex = renderer.hexes.find(candidate => candidate.id === hexId);
+    const hex = hexForPathPoint(hexId);
     if (!hex) return null;
     return {
       ...hex,
@@ -7542,7 +7709,7 @@
   }
 
   function canApplyFeatureByGenerationContext(hexOrSnapshot, feature, seed = "") {
-    const hex = renderer.hexes.find(candidate => candidate.id === hexOrSnapshot?.hexId);
+    const hex = hexForPathPoint(hexOrSnapshot?.hexId);
     if (!hex) return true;
     const contextHex = {
       ...hex,
@@ -8270,6 +8437,7 @@
 
     renderer.mapOverlays = renderer.mapOverlays.filter(overlay => !previewIds.includes(overlay.__uuid));
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    bumpOverlayRevision();
     markRouteCacheDirty();
     markOverlayCacheDirty();
   }
@@ -8351,7 +8519,7 @@
   }
 
   function getTerrainSnapshot(hexId) {
-    const hex = renderer.hexes.find(candidate => candidate.id === hexId);
+    const hex = hexForPathPoint(hexId);
     if (!hex) return null;
     return {
       hexId,
@@ -8368,7 +8536,7 @@
     const elevation = Number.isFinite(Number(record?.elevation)) ? Number(record.elevation) : fallback.elevation;
     const terrainLabel = record?.terrain || getGeneratedTerrainLabel(baseTerrain, features);
 
-    const renderedHex = renderer.hexes.find(hex => hex.id === hexId);
+    const renderedHex = hexForPathPoint(hexId);
     if (renderedHex) {
       renderedHex.baseTerrain = baseTerrain;
       renderedHex.features = features;
@@ -8486,7 +8654,7 @@
   }
 
   function getRegionSnapshot(hexId) {
-    const hex = renderer.hexes.find(candidate => candidate.id === hexId);
+    const hex = hexForPathPoint(hexId);
     if (!hex) return null;
     return {
       geographicRegionId: hex.regionId || "",
@@ -8495,7 +8663,7 @@
   }
 
   function updateLocalHexRegion(hexId, regionId, regionType = "geographic") {
-    const renderedHex = renderer.hexes.find(hex => hex.id === hexId);
+    const renderedHex = hexForPathPoint(hexId);
     if (renderedHex) {
       if (regionType === "political") {
         renderedHex.politicalRegionId = regionId;
@@ -8658,7 +8826,7 @@
     ))) {
       return;
     }
-    const overlay = await savePathOverlaySegment(campaign.id, "wall", hexId, null, "wall", edge, {});
+    const overlay = await savePathOverlaySegment(campaign.id, "wall", hexId, null, getCurrentDrawOverlayStyle("wall"), edge, {});
     upsertLocalOverlay(overlay);
     pushOverlayUndoAction([overlay]);
     renderSvgOnly();
@@ -8961,6 +9129,7 @@
     }
 
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    bumpOverlayRevision();
     updateDrawClearButton();
   }
 
@@ -9480,7 +9649,7 @@
 
   function getHexRefForUuid(hexUuid) {
     if (!hexUuid) return "";
-    return renderer.hexes.find(hex => hex.record?.__uuid === hexUuid)?.id || "";
+    return renderer.hexIdsByUuid.get(hexUuid) || "";
   }
 
   function upsertLocalOverlay(overlay) {
@@ -9494,6 +9663,7 @@
     }
 
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    bumpOverlayRevision();
     markRouteCacheDirty();
     markOverlayCacheDirty();
     updateDrawClearButton();
@@ -9513,6 +9683,7 @@
     });
 
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    bumpOverlayRevision();
     markRouteCacheDirty();
     markOverlayCacheDirty();
     updateDrawClearButton();
@@ -9530,12 +9701,14 @@
       overlay.Edge === edge
     ));
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    bumpOverlayRevision();
     return removed;
   }
 
   function removeLocalOverlayById(overlayId) {
     renderer.mapOverlays = renderer.mapOverlays.filter(overlay => overlay.__uuid !== overlayId);
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    bumpOverlayRevision();
     markRouteCacheDirty();
     markOverlayCacheDirty();
     updateDrawClearButton();
@@ -9549,6 +9722,7 @@
     if (renderer.mapOverlays.length === originalLength) return;
 
     if (db?.raw?.generatedMapOverlays) db.raw.generatedMapOverlays = renderer.mapOverlays;
+    bumpOverlayRevision();
     markRouteCacheDirty();
     markOverlayCacheDirty();
     updateDrawClearButton();
@@ -9611,8 +9785,8 @@
   }
 
   function getHexLineSequence(fromHexId, toHexId) {
-    const fromHex = renderer.hexes.find(hex => hex.id === fromHexId);
-    const toHex = renderer.hexes.find(hex => hex.id === toHexId);
+    const fromHex = hexForPathPoint(fromHexId);
+    const toHex = hexForPathPoint(toHexId);
     if (!fromHex || !toHex) return [fromHexId, toHexId];
 
     const distance = Math.hypot(toHex.center.x - fromHex.center.x, toHex.center.y - fromHex.center.y);
@@ -9656,8 +9830,8 @@
   }
 
   function getRoadPathSequence(fromHexId, toHexId) {
-    const fromHex = renderer.hexes.find(hex => hex.id === fromHexId);
-    const toHex = renderer.hexes.find(hex => hex.id === toHexId);
+    const fromHex = hexForPathPoint(fromHexId);
+    const toHex = hexForPathPoint(toHexId);
     if (ROAD_IMPASSABLE_WATER_TERRAINS.has(fromHex?.baseTerrain) || ROAD_IMPASSABLE_WATER_TERRAINS.has(toHex?.baseTerrain)) return null;
     return getWeightedHexPathSequence(fromHexId, toHexId, getRoadPathStepCost, roadPathHeuristic);
   }
@@ -9769,8 +9943,8 @@
   }
 
   function getStatefulManualRiverPathSequence(fromHexId, toHexId) {
-    const start = renderer.hexes.find(hex => hex.id === fromHexId);
-    const goal = renderer.hexes.find(hex => hex.id === toHexId);
+    const start = hexForPathPoint(fromHexId);
+    const goal = hexForPathPoint(toHexId);
     if (!start || !goal) return null;
 
     const maxIterations = getManualRiverPathSearchLimit(start, goal);
@@ -9968,8 +10142,8 @@
   }
 
   function getWeightedHexPathSequence(fromHexId, toHexId, getStepCost, getHeuristic) {
-    const start = renderer.hexes.find(hex => hex.id === fromHexId);
-    const goal = renderer.hexes.find(hex => hex.id === toHexId);
+    const start = hexForPathPoint(fromHexId);
+    const goal = hexForPathPoint(toHexId);
     if (!start || !goal) return null;
 
     const open = new Set([start.id]);
@@ -9983,7 +10157,7 @@
           ? candidateId
           : bestId
       ));
-      const current = renderer.hexes.find(hex => hex.id === currentId);
+      const current = hexForPathPoint(currentId);
       if (!current) {
         open.delete(currentId);
         continue;
@@ -10281,7 +10455,7 @@
   function positionPopup() {
     if (!renderer.popup || renderer.popup.hidden || !renderer.selectedHexId) return;
 
-    const hex = renderer.hexes.find(candidate => candidate.id === renderer.selectedHexId);
+    const hex = hexForPathPoint(renderer.selectedHexId);
     if (!hex) return;
 
     const point = worldToClient(hex.center);
@@ -10299,7 +10473,7 @@
   }
 
   function centerHexInView(hexId, biasForInspector = false) {
-    const hex = renderer.hexes.find(candidate => candidate.id === hexId || candidate.label === hexId);
+    const hex = hexForPathPoint(hexId) || renderer.hexes.find(candidate => candidate.label === hexId);
     const rect = renderer.root?.getBoundingClientRect();
     if (!hex || !rect) return;
 

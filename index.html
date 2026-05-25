@@ -567,6 +567,13 @@
           <button type="button" data-map-draw-tool="mist">Mist</button>
           <button type="button" data-map-draw-tool="erase">Erase Overlay</button>
         </div>
+        <label class="map-draw-style-row map-draw-tool-setting" id="map-wall-style-row" data-overlay-subview-group="drawing" hidden>
+          <span>Wall Type</span>
+          <select id="map-wall-style">
+            <option value="wall">Stone</option>
+            <option value="palisade">Palisade</option>
+          </select>
+        </label>
         <label class="map-draw-range-row map-draw-tool-setting" id="map-mist-brush-size-row" data-overlay-subview-group="drawing" hidden>
           <span>Brush Size <strong id="map-mist-brush-size-value">1</strong></span>
           <input id="map-mist-brush-size" type="range" min="1" max="5" step="1" value="1">
