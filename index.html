@@ -567,12 +567,41 @@
           <button type="button" data-map-draw-tool="mist">Mist</button>
           <button type="button" data-map-draw-tool="erase">Erase Overlay</button>
         </div>
+        <label class="map-draw-style-row map-draw-tool-setting" id="map-wall-mode-row" data-overlay-subview-group="drawing" hidden>
+          <span>Wall Mode</span>
+          <select id="map-wall-mode">
+            <option value="regular">Regular</option>
+            <option value="plane">Plane Drag</option>
+            <option value="shape">Shape</option>
+          </select>
+        </label>
         <label class="map-draw-style-row map-draw-tool-setting" id="map-wall-style-row" data-overlay-subview-group="drawing" hidden>
           <span>Wall Type</span>
           <select id="map-wall-style">
             <option value="wall">Stone</option>
             <option value="palisade">Palisade</option>
           </select>
+        </label>
+        <label class="map-draw-style-row map-draw-tool-setting" id="map-wall-variant-row" data-overlay-subview-group="drawing" hidden>
+          <span>Wall Variant</span>
+          <select id="map-wall-variant">
+            <option value="auto">Auto</option>
+            <option value="broken">Broken / Open</option>
+            <option value="gate">Gatehouse / Gate</option>
+            <option value="sluice">Sluice / Water Gate</option>
+          </select>
+        </label>
+        <label class="map-draw-style-row map-draw-tool-setting" id="map-wall-shape-row" data-overlay-subview-group="drawing" hidden>
+          <span>Shape</span>
+          <select id="map-wall-shape">
+            <option value="round_keep">Round Keep</option>
+            <option value="long_keep">Long Keep</option>
+            <option value="square_keep">Square Keep</option>
+          </select>
+        </label>
+        <label class="map-draw-range-row map-draw-tool-setting" id="map-wall-size-row" data-overlay-subview-group="drawing" hidden>
+          <span>Size <strong id="map-wall-size-value">1</strong></span>
+          <input id="map-wall-size" type="range" min="1" max="8" step="1" value="1">
         </label>
         <label class="map-draw-range-row map-draw-tool-setting" id="map-mist-brush-size-row" data-overlay-subview-group="drawing" hidden>
           <span>Brush Size <strong id="map-mist-brush-size-value">1</strong></span>

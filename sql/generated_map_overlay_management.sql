@@ -105,6 +105,7 @@ as $$
 $$;
 
 drop function if exists public.add_generated_map_overlay(uuid, text, text, text, text, text);
+drop function if exists public.add_generated_map_overlay(uuid, text, text, text, text, text, boolean, text);
 
 create or replace function public.add_generated_map_overlay(
   target_campaign_id uuid,
@@ -152,7 +153,19 @@ begin
   elsif normalized_type = 'sea_route' then
     normalized_style := 'sea_route';
   elsif normalized_type = 'wall' then
-    normalized_style := 'wall';
+    normalized_style := coalesce(normalized_style, 'wall');
+    if normalized_style not in (
+      'wall',
+      'wall:gatehouse',
+      'wall:sluice',
+      'wall:broken',
+      'palisade',
+      'palisade:gate',
+      'palisade:water_gate',
+      'palisade:broken'
+    ) then
+      raise exception 'unsupported wall style';
+    end if;
   else
     normalized_style := 'mist';
   end if;
@@ -274,11 +287,11 @@ begin
   limit 1;
 
   if existing_id is not null then
-    select *
-    into created_record
-    from public.generated_map_overlays
+    update public.generated_map_overlays
+    set style = normalized_style,
+        updated_at = now()
     where id = existing_id
-    limit 1;
+    returning * into created_record;
 
     return created_record;
   end if;

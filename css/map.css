@@ -2440,6 +2440,11 @@
   cursor: grabbing;
 }
 
+#generated-map-renderer.generated-map-wall-brush-active,
+#generated-map-renderer.generated-map-wall-brush-active:active {
+  cursor: none;
+}
+
 .generated-map-terrain-canvas,
 .generated-map-grid-overlay {
   position: absolute;
@@ -2525,7 +2530,6 @@
 .generated-map-drawn-road,
 .generated-map-drawn-river,
 .generated-map-drawn-path,
-.generated-map-drawn-wall,
 .generated-map-drawing-pending,
 .generated-map-drawing-edge-preview,
 .generated-map-erase-preview {
@@ -2538,6 +2542,13 @@
 
 .generated-map-drawn-road {
   stroke-width: 6;
+}
+
+.generated-map-drawn-wall {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 
 .generated-map-drawn-path {
@@ -2569,20 +2580,59 @@
 }
 
 .generated-map-drawn-wall-palisade-shadow {
-  stroke: #24150e;
-  stroke-width: 8;
+  stroke: #1d120b;
+  stroke-width: 7;
+  stroke-linecap: round;
 }
 
 .generated-map-drawn-wall-palisade-rail {
-  stroke: #6b3f22;
-  stroke-width: 4;
+  stroke: #8a4f27;
+  stroke-width: 3;
+  stroke-linecap: round;
 }
 
 .generated-map-drawn-wall-palisade-stakes {
-  stroke: #c18a4a;
-  stroke-width: 5;
-  stroke-dasharray: 1 6;
+  stroke: #d29a57;
+  stroke-width: 3;
   stroke-linecap: square;
+}
+
+.generated-map-wall-variant {
+  fill: none;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.generated-map-wall-variant-stone {
+  stroke: #d9c087;
+  stroke-width: 4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px rgba(32, 24, 15, 0.55));
+}
+
+.generated-map-wall-variant-palisade {
+  stroke: #f0bc72;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 2px rgba(29, 18, 11, 0.55));
+}
+
+.generated-map-wall-variant-sluice {
+  stroke: #9fe7f7;
+}
+
+.generated-map-wall-variant-stone.generated-map-wall-variant-gate {
+  stroke: #9d9685;
+  stroke-width: 7;
+  stroke-linecap: butt;
+  filter:
+    drop-shadow(0 0 2px rgba(24, 22, 18, 0.70))
+    drop-shadow(0 0 5px rgba(238, 218, 166, 0.22));
+}
+
+.generated-map-wall-variant-broken {
+  stroke-dasharray: 4 4;
+  opacity: 0.9;
 }
 
 .generated-map-drawing-pending {
@@ -2595,6 +2645,15 @@
   stroke: #55e6ff;
   stroke-width: 7;
   opacity: 0.78;
+}
+
+.generated-map-wall-brush-cursor {
+  fill: #55e6ff;
+  stroke: rgba(13, 40, 48, 0.88);
+  stroke-width: 2;
+  opacity: 0.95;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
 }
 
 .generated-map-erase-preview {

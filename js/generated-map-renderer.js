@@ -196,6 +196,8 @@
     roadNoAutoPass: "no_auto_pass",
     riverNoAutoFalls: "no_auto_falls"
   };
+  const WALL_BASE_STYLES = new Set(["wall", "palisade"]);
+  const WALL_VARIANTS = new Set(["", "gatehouse", "sluice", "broken", "gate", "water_gate"]);
   const MAP_EDIT_SECTION_COPY = {
     chooser: {
       title: "Map Tools",
@@ -479,6 +481,11 @@
       tool: "road",
       roadStyle: "dark_brown",
       wallStyle: "wall",
+      wallVariant: "auto",
+      wallMode: "regular",
+      wallSize: 1,
+      wallShape: "round_keep",
+      wallPlaneDrag: null,
       roadWaterOverride: false,
       autoPass: true,
       autoFalls: true,
@@ -653,6 +660,7 @@
     renderer.root.hidden = !active;
     document.getElementById("map")?.classList.toggle("generated-renderer-active", active);
     updateDrawControlsVisibility();
+    syncMapInteractionCursor();
   }
 
   function isActive() {
@@ -835,6 +843,10 @@
     const viewPanel = document.getElementById("map-view-panel");
     const roadStyle = document.getElementById("map-draw-road-style");
     const wallStyle = document.getElementById("map-wall-style");
+    const wallVariant = document.getElementById("map-wall-variant");
+    const wallMode = document.getElementById("map-wall-mode");
+    const wallSize = document.getElementById("map-wall-size");
+    const wallShape = document.getElementById("map-wall-shape");
     const roadWaterOverride = document.getElementById("map-road-water-override");
     const roadAutoPass = document.getElementById("map-road-auto-pass");
     const riverAutoFalls = document.getElementById("map-river-auto-falls");
@@ -922,6 +934,7 @@
         renderer.drawing.enabled = false;
         restoreMapEditViewState();
         updateMapChromeForEdit(false);
+        renderer.drawing.tool = "";
         resetDrawingState();
         render();
       }
@@ -1090,6 +1103,36 @@
     wallStyle?.addEventListener("change", () => {
       renderer.drawing.wallStyle = getValidWallStyle(wallStyle.value);
       updateDrawStyleControls();
+      renderSvgOnly();
+    });
+
+    wallVariant?.addEventListener("change", () => {
+      renderer.drawing.wallVariant = getValidWallVariant(wallVariant.value);
+      updateDrawStyleControls();
+      renderSvgOnly();
+    });
+
+    wallMode?.addEventListener("change", () => {
+      renderer.drawing.wallMode = getValidWallMode(wallMode.value);
+      if (renderer.drawing.wallMode === "plane" && (renderer.drawing.wallSize || 1) < 2) {
+        renderer.drawing.wallSize = 2;
+      }
+      updateDrawStyleControls();
+      renderSvgOnly();
+    });
+
+    wallSize?.addEventListener("input", () => {
+      const minSize = getValidWallMode(renderer.drawing.wallMode) === "plane" ? 2 : 1;
+      const maxSize = getValidWallMode(renderer.drawing.wallMode) === "regular" ? 2 : 8;
+      renderer.drawing.wallSize = clampNumber(Number(wallSize.value), minSize, maxSize, minSize);
+      updateDrawStyleControls();
+      renderSvgOnly();
+    });
+
+    wallShape?.addEventListener("change", () => {
+      renderer.drawing.wallShape = getValidWallShape(wallShape.value);
+      updateDrawStyleControls();
+      renderSvgOnly();
     });
 
     roadWaterOverride?.addEventListener("change", () => {
@@ -1427,30 +1470,7 @@
       clearDrawTool();
     });
 
-    document.addEventListener("keydown", event => {
-      if (!renderer.drawing.enabled || renderer.drawing.saving) return;
-      if (event.key === "Escape") {
-        if (handleEditorEscapeKey()) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-        return;
-      }
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
-      if (isTextEditingTarget(event.target)) return;
-
-      const key = event.key.toLowerCase();
-      if (key === "z" && event.shiftKey) {
-        event.preventDefault();
-        redoLastDrawAction();
-      } else if (key === "z") {
-        event.preventDefault();
-        undoLastDrawAction();
-      } else if (key === "y") {
-        event.preventDefault();
-        redoLastDrawAction();
-      }
-    });
+    document.addEventListener("keydown", handleEditorKeydown, true);
 
     clearOverlayTypeButtons.forEach(clearTypeButton => {
       clearTypeButton.addEventListener("click", event => {
@@ -1501,6 +1521,7 @@
     updateMapEditSurface();
     updateDrawHint();
     updateDrawControlsVisibility();
+    syncMapInteractionCursor();
   }
 
   function closeMapEditMode() {
@@ -1522,6 +1543,7 @@
     document.getElementById("map-edit-view-button")?.classList.remove("active");
     renderer.drawing.enabled = false;
     renderer.drawing.toolsMode = "chooser";
+    renderer.drawing.tool = "";
     restoreMapEditViewState();
     updateMapChromeForEdit(false);
     resetDrawingState();
@@ -1713,6 +1735,7 @@
     updateDrawToolButtons();
     updateDrawRegionControls();
     updateDrawStyleControls();
+    syncMapInteractionCursor();
     updateDrawHint();
     updateOverlaySubviewGroups();
   }
@@ -1722,21 +1745,37 @@
     const subview = isOverlayVisible ? getSurveyorOverlaySubview() : "paint";
     document.querySelectorAll("[data-overlay-subview-group]").forEach(element => {
       const group = element.dataset.overlaySubviewGroup || "drawing";
-      element.hidden = isOverlayVisible && group !== (subview === "purge" ? "purge" : "drawing");
-      if (element.classList.contains("map-draw-tool-setting")) {
+      const activeGroup = subview === "purge" ? "purge" : "drawing";
+      if (isOverlayVisible && group !== activeGroup) {
         element.hidden = true;
+        return;
       }
+      if (isOverlayToolSpecificControl(element)) return;
+      element.hidden = false;
     });
     if (isOverlayVisible && subview === "purge" && renderer.drawing.tool) {
       clearDrawTool();
     }
   }
 
+  function isOverlayToolSpecificControl(element) {
+    if (element.classList.contains("map-draw-tool-setting")) return true;
+    return [
+      "map-draw-style-label",
+      "map-draw-road-style",
+      "map-road-water-override-row",
+      "map-road-auto-pass-row",
+      "map-river-auto-falls-row",
+      "map-route-major-row",
+      "map-route-name-row"
+    ].includes(element.id) || element.classList.contains("map-draw-style-row");
+  }
+
   function setMapToolsMode(mode) {
     const normalized = ["chooser", "surveyor", "cartographer"].includes(mode) ? mode : "chooser";
     const previousMode = renderer.drawing.toolsMode || "chooser";
     renderer.drawing.toolsMode = normalized;
-    if (normalized === "surveyor" && previousMode !== "surveyor" && renderer.drawing.surveyorSection === "overlay") {
+    if (previousMode !== normalized) {
       renderer.drawing.tool = "";
       resetDrawingState();
     }
@@ -1909,6 +1948,7 @@
       button?.classList.remove("active");
       restoreMapEditViewState();
       updateMapChromeForEdit(false);
+      renderer.drawing.tool = "";
       resetDrawingState();
     }
     updateDrawUndoButton();
@@ -1923,6 +1963,7 @@
     updateDrawToolButtons();
     updateDrawRegionControls();
     updateDrawStyleControls();
+    syncMapInteractionCursor();
     updateDrawHint();
     renderSvgOnly();
   }
@@ -1933,8 +1974,36 @@
     updateDrawToolButtons();
     updateDrawRegionControls();
     updateDrawStyleControls();
+    syncMapInteractionCursor();
     updateDrawHint();
     renderSvgOnly();
+  }
+
+  function handleEditorKeydown(event) {
+    if (!renderer.drawing.enabled || renderer.drawing.saving) return;
+    if (event.key === "Escape") {
+      if (handleEditorEscapeKey()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return;
+    }
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+
+    const key = event.key.toLowerCase();
+    if (key === "z" && event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      redoLastDrawAction();
+    } else if (key === "z") {
+      event.preventDefault();
+      event.stopPropagation();
+      undoLastDrawAction();
+    } else if (key === "y") {
+      event.preventDefault();
+      event.stopPropagation();
+      redoLastDrawAction();
+    }
   }
 
   function handleEditorEscapeKey() {
@@ -1977,6 +2046,7 @@
     }
     renderer.drawing.lastHexId = null;
     renderer.drawing.dragLastHexId = null;
+    renderer.drawing.wallPlaneDrag = null;
     renderer.drawing.paintedThisDrag = new Set();
     renderer.drawing.hoverEdge = null;
     renderer.drawing.hoverEraseHexId = null;
@@ -1994,6 +2064,7 @@
     renderer.drawing.tool = "";
     renderer.drawing.roadStyle = "dark_brown";
     renderer.drawing.wallStyle = "wall";
+    renderer.drawing.wallVariant = "auto";
     renderer.drawing.roadWaterOverride = false;
     renderer.drawing.autoPass = true;
     renderer.drawing.autoFalls = true;
@@ -2330,6 +2401,10 @@
     document.getElementById("map-draw-no-tool")?.classList.toggle("active", !renderer.drawing.tool);
   }
 
+  function syncMapInteractionCursor() {
+    renderer.root?.classList.toggle("generated-map-wall-brush-active", Boolean(renderer.drawing.enabled && renderer.drawing.tool === "wall"));
+  }
+
   function updateDrawRegionControls() {
     const row = document.querySelector(".map-draw-region-row");
     const politicalRow = document.querySelector(".map-draw-political-region-row");
@@ -2454,6 +2529,15 @@
     const styleLabel = document.getElementById("map-draw-style-label");
     const wallStyleRow = document.getElementById("map-wall-style-row");
     const wallStyleInput = document.getElementById("map-wall-style");
+    const wallVariantRow = document.getElementById("map-wall-variant-row");
+    const wallVariantInput = document.getElementById("map-wall-variant");
+    const wallModeRow = document.getElementById("map-wall-mode-row");
+    const wallModeInput = document.getElementById("map-wall-mode");
+    const wallSizeRow = document.getElementById("map-wall-size-row");
+    const wallSizeInput = document.getElementById("map-wall-size");
+    const wallSizeValue = document.getElementById("map-wall-size-value");
+    const wallShapeRow = document.getElementById("map-wall-shape-row");
+    const wallShapeInput = document.getElementById("map-wall-shape");
     const roadOverrideRow = document.getElementById("map-road-water-override-row");
     const roadOverrideInput = document.getElementById("map-road-water-override");
     const autoPassRow = document.getElementById("map-road-auto-pass-row");
@@ -2489,8 +2573,26 @@
     const currentRouteMajor = getCurrentRouteMajor();
     if (styleRow) styleRow.hidden = !["road", "path"].includes(renderer.drawing.tool);
     if (styleLabel) styleLabel.textContent = renderer.drawing.tool === "path" ? "Path Style" : "Road Style";
-    if (wallStyleRow) wallStyleRow.hidden = renderer.drawing.tool !== "wall";
+    const isWallTool = renderer.drawing.tool === "wall";
+    const wallMode = getValidWallMode(renderer.drawing.wallMode);
+    if (wallStyleRow) wallStyleRow.hidden = !isWallTool;
     if (wallStyleInput) wallStyleInput.value = getValidWallStyle(renderer.drawing.wallStyle);
+    if (wallVariantRow) wallVariantRow.hidden = !isWallTool || wallMode !== "regular";
+    if (wallVariantInput) wallVariantInput.value = getValidWallVariant(renderer.drawing.wallVariant);
+    if (wallModeRow) wallModeRow.hidden = !isWallTool;
+    if (wallModeInput) wallModeInput.value = wallMode;
+    if (wallSizeRow) wallSizeRow.hidden = !isWallTool || wallMode !== "shape";
+    const wallMinSize = wallMode === "plane" ? 2 : 1;
+    const wallMaxSize = wallMode === "regular" ? 2 : 8;
+    if (isWallTool) renderer.drawing.wallSize = clampNumber(Number(renderer.drawing.wallSize), wallMinSize, wallMaxSize, wallMinSize);
+    if (wallSizeInput) {
+      wallSizeInput.min = String(wallMinSize);
+      wallSizeInput.max = String(wallMaxSize);
+      wallSizeInput.value = String(renderer.drawing.wallSize || wallMinSize);
+    }
+    if (wallSizeValue) wallSizeValue.textContent = String(renderer.drawing.wallSize || wallMinSize);
+    if (wallShapeRow) wallShapeRow.hidden = !isWallTool || wallMode !== "shape";
+    if (wallShapeInput) wallShapeInput.value = getValidWallShape(renderer.drawing.wallShape);
     if (roadOverrideRow) roadOverrideRow.hidden = renderer.drawing.tool !== "road";
     if (roadOverrideInput) roadOverrideInput.checked = Boolean(renderer.drawing.roadWaterOverride);
     if (autoPassRow) autoPassRow.hidden = renderer.drawing.tool !== "road";
@@ -3795,7 +3897,6 @@
       };
       drawRoadSegments(roadSegments.filter(segment => !segment.Is_Major_Route));
       drawRoadSegments(roadSegments.filter(segment => segment.Is_Major_Route));
-      renderMajorRoadRiverBridges(ctx, renderer.mapOverlays || []);
     }
 
   }
@@ -4573,6 +4674,8 @@
 
   function renderDrawableOverlays(fragment, visibleHexes) {
     const visibleIds = new Set(visibleHexes.map(hex => hex.id));
+    const wallDecorations = document.createDocumentFragment();
+    const wallsBySegment = new Map();
 
     getOverlaysByType().wall.filter(overlay => renderer.drawing.visibleOverlays.wall && visibleIds.has(overlay.Hex_ID_Ref)).forEach(overlay => {
       const hex = hexForPathPoint(overlay.Hex_ID_Ref);
@@ -4582,19 +4685,168 @@
       if (edgeIndex < 0) return;
 
       const edge = { a: hex.points[edgeIndex], b: hex.points[(edgeIndex + 1) % hex.points.length] };
+      const segmentKey = edgeKey(edge.a, edge.b);
+      const existing = wallsBySegment.get(segmentKey);
+      if (!existing || shouldPreferWallRenderOverlay(overlay, existing.overlay)) {
+        wallsBySegment.set(segmentKey, { overlay, edge });
+      }
+    });
+    wallsBySegment.forEach(({ overlay, edge }) => {
+      renderWallOverlay(fragment, wallDecorations, overlay, edge);
+    });
+    fragment.appendChild(wallDecorations);
+  }
+
+  function shouldPreferWallRenderOverlay(nextOverlay, currentOverlay) {
+    const nextVariant = getWallVariant(nextOverlay?.Style);
+    const currentVariant = getWallVariant(currentOverlay?.Style);
+    if (nextVariant && !currentVariant) return true;
+    if (!nextVariant && currentVariant) return false;
+    return String(nextOverlay?.Updated_At || nextOverlay?.updated_at || "") > String(currentOverlay?.Updated_At || currentOverlay?.updated_at || "");
+  }
+
+  function renderWallOverlay(fragment, decorationFragment, overlay, edge) {
+    const baseStyle = getWallBaseStyle(overlay?.Style);
+    const variant = getRenderedWallVariant(overlay, edge);
+    const segments = variant ? splitWallEdgeForVariant(edge) : [edge];
+    if (baseStyle === "palisade") {
+      segments.forEach(segment => renderPalisadeWallOverlay(fragment, segment));
+      if (variant) renderWallVariantDecoration(decorationFragment, edge, baseStyle, variant);
+      return;
+    }
+    segments.forEach(segment => {
       getWallRenderLayers(overlay).forEach(layer => {
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         path.setAttribute("class", `generated-map-drawn-wall generated-map-drawn-wall-${layer}`);
-        path.setAttribute("d", pathCommand(edge.a, edge.b));
+        path.setAttribute("d", pathCommand(segment.a, segment.b));
         fragment.appendChild(path);
       });
     });
+    if (variant) renderWallVariantDecoration(decorationFragment, edge, baseStyle, variant);
+  }
+
+  function renderPalisadeWallOverlay(fragment, edge) {
+    ["palisade-shadow", "palisade-rail"].forEach(layer => {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("class", `generated-map-drawn-wall generated-map-drawn-wall-${layer}`);
+      path.setAttribute("d", pathCommand(edge.a, edge.b));
+      fragment.appendChild(path);
+    });
+
+    const dx = edge.b.x - edge.a.x;
+    const dy = edge.b.y - edge.a.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const normal = { x: -dy / length, y: dx / length };
+    const stakeLength = 5;
+    const stakeCount = 4;
+    const commands = [];
+    for (let index = 1; index <= stakeCount; index += 1) {
+      const t = index / (stakeCount + 1);
+      const center = {
+        x: edge.a.x + dx * t,
+        y: edge.a.y + dy * t
+      };
+      const from = {
+        x: center.x - normal.x * stakeLength * 0.5,
+        y: center.y - normal.y * stakeLength * 0.5
+      };
+      const to = {
+        x: center.x + normal.x * stakeLength * 0.5,
+        y: center.y + normal.y * stakeLength * 0.5
+      };
+      commands.push(`M ${from.x} ${from.y} L ${to.x} ${to.y}`);
+    }
+    const stakes = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    stakes.setAttribute("class", "generated-map-drawn-wall generated-map-drawn-wall-palisade-stakes");
+    stakes.setAttribute("d", commands.join(" "));
+    fragment.appendChild(stakes);
   }
 
   function getWallRenderLayers(overlay) {
-    return getValidWallStyle(overlay?.Style) === "palisade"
+    return getWallBaseStyle(overlay?.Style) === "palisade"
       ? ["palisade-shadow", "palisade-rail", "palisade-stakes"]
       : ["base", "body", "crenellations"];
+  }
+
+  function splitWallEdgeForVariant(edge) {
+    const gap = 0.18;
+    return [
+      {
+        a: edge.a,
+        b: {
+          x: edge.a.x + (edge.b.x - edge.a.x) * (0.5 - gap),
+          y: edge.a.y + (edge.b.y - edge.a.y) * (0.5 - gap)
+        }
+      },
+      {
+        a: {
+          x: edge.a.x + (edge.b.x - edge.a.x) * (0.5 + gap),
+          y: edge.a.y + (edge.b.y - edge.a.y) * (0.5 + gap)
+        },
+        b: edge.b
+      }
+    ];
+  }
+
+  function renderWallVariantDecoration(fragment, edge, baseStyle, variant) {
+    const dx = edge.b.x - edge.a.x;
+    const dy = edge.b.y - edge.a.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const along = { x: dx / length, y: dy / length };
+    const normal = { x: -along.y, y: along.x };
+    const center = { x: (edge.a.x + edge.b.x) / 2, y: (edge.a.y + edge.b.y) / 2 };
+    const radius = getGeneratedMapDimensions().radius;
+    const isPalisade = baseStyle === "palisade";
+    const decoration = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const normalized = variant === "gatehouse" || variant === "gate" ? "gate" : variant === "sluice" || variant === "water_gate" ? "sluice" : "broken";
+    const commands = [];
+
+    if (normalized === "gate") {
+      [-1, 1].forEach(side => {
+        const post = {
+          x: center.x + along.x * radius * 0.18 * side,
+          y: center.y + along.y * radius * 0.18 * side
+        };
+        commands.push(pathCommand(
+          { x: post.x - normal.x * radius * 0.24, y: post.y - normal.y * radius * 0.24 },
+          { x: post.x + normal.x * radius * 0.24, y: post.y + normal.y * radius * 0.24 }
+        ));
+      });
+      commands.push(pathCommand(
+        { x: center.x - along.x * radius * 0.20 - normal.x * radius * 0.18, y: center.y - along.y * radius * 0.20 - normal.y * radius * 0.18 },
+        { x: center.x + along.x * radius * 0.20 - normal.x * radius * 0.18, y: center.y + along.y * radius * 0.20 - normal.y * radius * 0.18 }
+      ));
+    } else if (normalized === "sluice") {
+      [-0.22, 0, 0.22].forEach(offset => {
+        const rib = {
+          x: center.x + along.x * radius * offset,
+          y: center.y + along.y * radius * offset
+        };
+        commands.push(pathCommand(
+          { x: rib.x - normal.x * radius * 0.22, y: rib.y - normal.y * radius * 0.22 },
+          { x: rib.x + normal.x * radius * 0.22, y: rib.y + normal.y * radius * 0.22 }
+        ));
+      });
+    } else {
+      [-0.12, 0.12].forEach(offset => {
+        const chip = {
+          x: center.x + along.x * radius * offset,
+          y: center.y + along.y * radius * offset
+        };
+        commands.push(pathCommand(
+          { x: chip.x - along.x * radius * 0.07 - normal.x * radius * 0.10, y: chip.y - along.y * radius * 0.07 - normal.y * radius * 0.10 },
+          { x: chip.x + along.x * radius * 0.07 + normal.x * radius * 0.10, y: chip.y + along.y * radius * 0.07 + normal.y * radius * 0.10 }
+        ));
+      });
+    }
+
+    decoration.setAttribute("class", `generated-map-drawn-wall generated-map-wall-variant generated-map-wall-variant-${isPalisade ? "palisade" : "stone"} generated-map-wall-variant-${normalized}`);
+    decoration.setAttribute("d", commands.join(" "));
+    fragment.appendChild(decoration);
+  }
+
+  function getRenderedWallVariant(overlay, edge) {
+    return getWallVariant(overlay?.Style);
   }
 
   function renderDrawingGuides(fragment, visibleHexes) {
@@ -4623,7 +4875,20 @@
       renderEditorBrushPreview(fragment, visibleHexes);
     }
 
-    if ((renderer.drawing.tool === "wall" || PATH_OVERLAY_TYPES.has(renderer.drawing.tool)) && renderer.drawing.hoverEdge) {
+    if (renderer.drawing.tool === "wall" && (renderer.drawing.hoverEdge || renderer.drawing.wallPlaneDrag?.previewEdges?.length)) {
+      const wallPreviewEdges = renderer.drawing.wallPlaneDrag?.previewEdges?.length
+        ? renderer.drawing.wallPlaneDrag.previewEdges
+        : getWallPreviewEdges(renderer.drawing.hoverEdge);
+      renderWallBrushCursor(fragment, renderer.drawing.wallPlaneDrag?.cursorPoint || renderer.drawing.hoverEdge?.point);
+      wallPreviewEdges.forEach(edgeRef => {
+        const segment = getWallEdgeSegment(edgeRef);
+        if (!segment) return;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("class", "generated-map-drawing-edge-preview");
+        path.setAttribute("d", pathCommand(segment.a, segment.b));
+        fragment.appendChild(path);
+      });
+    } else if (PATH_OVERLAY_TYPES.has(renderer.drawing.tool) && renderer.drawing.hoverEdge) {
       const hex = hexForPathPoint(renderer.drawing.hoverEdge.hexId);
       const edgeIndex = EDGE_NAMES.indexOf(renderer.drawing.hoverEdge.edge);
       if (hex && edgeIndex >= 0) {
@@ -4634,6 +4899,16 @@
         fragment.appendChild(path);
       }
     }
+  }
+
+  function renderWallBrushCursor(fragment, point) {
+    if (!point) return;
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("class", "generated-map-wall-brush-cursor");
+    dot.setAttribute("cx", String(point.x));
+    dot.setAttribute("cy", String(point.y));
+    dot.setAttribute("r", "4");
+    fragment.appendChild(dot);
   }
 
   function renderPoiMarkers(fragment, visibleHexes) {
@@ -5649,7 +5924,7 @@
 
   function getCurrentDrawOverlayStyle(tool) {
     if (tool === "sea_route") return "sea_route";
-    if (tool === "wall") return getValidWallStyle(renderer.drawing.wallStyle);
+    if (tool === "wall") return getCurrentWallStyle();
     if (tool === "river") {
       const autoFallsDisabled = getCurrentRouteMajor("river") || renderer.drawing.autoFalls === false;
       return composeOverlayStyle("river", autoFallsDisabled
@@ -5668,7 +5943,44 @@
   }
 
   function getValidWallStyle(style) {
-    return style === "palisade" ? "palisade" : "wall";
+    return getWallBaseStyle(style);
+  }
+
+  function getValidWallVariant(variant) {
+    return ["auto", "broken", "gate", "sluice"].includes(variant) ? variant : "auto";
+  }
+
+  function getCurrentWallStyle() {
+    const mode = getValidWallMode(renderer.drawing.wallMode);
+    return composeWallStyle(renderer.drawing.wallStyle, mode === "regular" ? renderer.drawing.wallVariant : "auto");
+  }
+
+  function composeWallStyle(style, variant) {
+    const base = getWallBaseStyle(style);
+    const normalizedVariant = getValidWallVariant(variant);
+    if (normalizedVariant === "auto") return base;
+    if (normalizedVariant === "broken") return `${base}:broken`;
+    if (normalizedVariant === "gate") return base === "palisade" ? "palisade:gate" : "wall:gatehouse";
+    if (normalizedVariant === "sluice") return base === "palisade" ? "palisade:water_gate" : "wall:sluice";
+    return base;
+  }
+
+  function getWallBaseStyle(style) {
+    const base = String(style || "").split(":")[0];
+    return WALL_BASE_STYLES.has(base) ? base : "wall";
+  }
+
+  function getWallVariant(style) {
+    const variant = String(style || "").split(":")[1] || "";
+    return WALL_VARIANTS.has(variant) ? variant : "";
+  }
+
+  function getValidWallMode(mode) {
+    return ["regular", "plane", "shape"].includes(mode) ? mode : "regular";
+  }
+
+  function getValidWallShape(shape) {
+    return ["round_keep", "long_keep", "square_keep"].includes(shape) ? shape : "round_keep";
   }
 
   function getCurrentRouteMetadata(tool) {
@@ -5855,118 +6167,6 @@
     });
   }
 
-  function renderMajorRoadRiverBridges(ctx, overlays) {
-    if (!renderer.drawing.visibleOverlays.river) return;
-    const majorRoadOverlays = overlays.filter(overlay => overlay.Overlay_Type === "road" && overlay.Is_Major_Route && !isAutoPassRoadSegment(overlay));
-    const riverOverlays = overlays.filter(overlay => overlay.Overlay_Type === "river");
-    const majorRoadPaths = connectedPathStrings(
-      majorRoadOverlays,
-      "road"
-    );
-    const riverPaths = getCanvasRiverPathStrings(riverOverlays);
-    if (!majorRoadPaths.length || !riverPaths.length) return;
-
-    const roadSegments = majorRoadPaths.flatMap(pathData => pathToLineSegments(pathData.d));
-    const riverSegments = riverPaths.flatMap(pathData => pathToLineSegments(pathData.d));
-    const radius = getGeneratedMapDimensions().radius;
-    const bridgeHalfLength = radius * 0.34;
-    const bridgeMergeDistance = radius * 0.9;
-    const drawn = new Set();
-
-    roadSegments.forEach(roadSegment => {
-      const dx = roadSegment.b.x - roadSegment.a.x;
-      const dy = roadSegment.b.y - roadSegment.a.y;
-      const length = Math.hypot(dx, dy) || 1;
-      const intersections = [];
-
-      riverSegments.forEach(riverSegment => {
-        const point = bridgeIntersectionPoint(roadSegment, riverSegment, radius);
-        if (!point) return;
-        const distanceAlongRoad = ((point.x - roadSegment.a.x) * dx + (point.y - roadSegment.a.y) * dy) / length;
-        intersections.push({ point, distanceAlongRoad });
-      });
-      if (!intersections.length) {
-        getHexBridgeCandidatesForRoadSegment(roadSegment, majorRoadOverlays, riverOverlays, radius).forEach(candidate => {
-          const distanceAlongRoad = ((candidate.point.x - roadSegment.a.x) * dx + (candidate.point.y - roadSegment.a.y) * dy) / length;
-          intersections.push({ point: candidate.point, distanceAlongRoad });
-        });
-      }
-
-      intersections
-        .sort((a, b) => a.distanceAlongRoad - b.distanceAlongRoad)
-        .reduce((clusters, intersection) => {
-          const cluster = clusters[clusters.length - 1];
-          if (cluster && intersection.distanceAlongRoad - cluster.lastDistance <= bridgeMergeDistance) {
-            cluster.points.push(intersection.point);
-            cluster.lastDistance = intersection.distanceAlongRoad;
-            return clusters;
-          }
-          clusters.push({ points: [intersection.point], lastDistance: intersection.distanceAlongRoad });
-          return clusters;
-        }, [])
-        .forEach(cluster => {
-          const point = cluster.points.reduce((total, clusterPoint) => ({
-            x: total.x + clusterPoint.x,
-            y: total.y + clusterPoint.y
-          }), { x: 0, y: 0 });
-          point.x /= cluster.points.length;
-          point.y /= cluster.points.length;
-
-        const key = `${Math.round(point.x / Math.max(1, radius * 0.9))}:${Math.round(point.y / Math.max(1, radius * 0.9))}`;
-        if (drawn.has(key)) return;
-        drawn.add(key);
-
-        const from = {
-          x: point.x - dx / length * bridgeHalfLength,
-          y: point.y - dy / length * bridgeHalfLength
-        };
-        const to = {
-          x: point.x + dx / length * bridgeHalfLength,
-          y: point.y + dy / length * bridgeHalfLength
-        };
-        const path = `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
-        drawCanvasOverlayPath(ctx, path, {
-          stroke: "rgba(88, 86, 78, 0.92)",
-          width: 14,
-          dash: [],
-          lineCap: "butt"
-        });
-        drawCanvasOverlayPath(ctx, path, {
-          stroke: "rgba(190, 184, 166, 0.72)",
-          width: 10,
-          dash: [3, 4],
-          lineCap: "butt"
-        });
-      });
-    });
-  }
-
-  function getHexBridgeCandidatesForRoadSegment(roadSegment, majorRoadOverlays, riverOverlays, radius) {
-    const riverHexIds = getOverlayTouchedHexIds(riverOverlays);
-    if (!riverHexIds.size) return [];
-
-    return majorRoadOverlays.flatMap(roadOverlay => {
-      const sharedHexIds = [roadOverlay.From_Hex_ID_Ref, roadOverlay.To_Hex_ID_Ref]
-        .filter(hexId => hexId && riverHexIds.has(hexId));
-      if (!sharedHexIds.length) return [];
-
-      const fromPoint = pathPointForHexId(roadOverlay.From_Hex_ID_Ref);
-      const toPoint = pathPointForHexId(roadOverlay.To_Hex_ID_Ref);
-      if (!fromPoint || !toPoint) return [];
-      if (!segmentsAreNearSameRoadPiece(roadSegment, { a: fromPoint, b: toPoint }, radius)) return [];
-
-      return sharedHexIds
-        .map(hexId => pathPointForHexId(hexId))
-        .filter(Boolean)
-        .map(hexPoint => {
-          const projection = projectPointToSegment(hexPoint, roadSegment.a, roadSegment.b);
-          const distance = Math.hypot(hexPoint.x - projection.point.x, hexPoint.y - projection.point.y);
-          return distance <= radius * 0.72 ? { point: projection.point } : null;
-        })
-        .filter(Boolean);
-    });
-  }
-
   function getOverlayTouchedHexIds(overlays) {
     const ids = new Set();
     overlays.forEach(overlay => {
@@ -5977,25 +6177,9 @@
     return ids;
   }
 
-  function segmentsAreNearSameRoadPiece(renderedSegment, overlaySegment, radius) {
-    return (
-      pointDistanceToSegment(overlaySegment.a, renderedSegment.a, renderedSegment.b) <= radius * 0.9 ||
-      pointDistanceToSegment(overlaySegment.b, renderedSegment.a, renderedSegment.b) <= radius * 0.9 ||
-      pointDistanceToSegment(renderedSegment.a, overlaySegment.a, overlaySegment.b) <= radius * 0.9 ||
-      pointDistanceToSegment(renderedSegment.b, overlaySegment.a, overlaySegment.b) <= radius * 0.9
-    );
-  }
-
   function pointDistanceToSegment(point, a, b) {
     const projection = projectPointToSegment(point, a, b);
     return Math.hypot(point.x - projection.point.x, point.y - projection.point.y);
-  }
-
-  function bridgeIntersectionPoint(roadSegment, riverSegment, radius) {
-    return lineSegmentIntersectionPoint(roadSegment.a, roadSegment.b, riverSegment.a, riverSegment.b, {
-      roadPadding: 0.02,
-      riverPadding: 0.12
-    });
   }
 
   function lineSegmentIntersectionPoint(a, b, c, d, options = {}) {
@@ -6387,7 +6571,7 @@
     )).length >= 2;
   }
 
-  function getCanvasRiverPathStrings(segments) {
+  function getCanvasRiverPathStrings(segments, options = {}) {
     const groups = new Map();
     segments.forEach(segment => {
       const key = `${segment.Is_Major_Route ? "major" : "minor"}::${segment.Route_Name || ""}`;
@@ -6396,7 +6580,7 @@
     });
 
     return [...groups.values()].flatMap(group => (
-      getWaterCutoffPathStrings(group.segments, "river").map(pathData => ({
+      getWaterCutoffPathStrings(group.segments, "river", new Set(), options).map(pathData => ({
         ...pathData,
         isMajor: group.isMajor,
         routeName: group.routeName
@@ -6404,7 +6588,7 @@
     ));
   }
 
-  function getWaterCutoffPathStrings(segments, type, breakHexIds = new Set()) {
+  function getWaterCutoffPathStrings(segments, type, breakHexIds = new Set(), options = {}) {
     const riverGraph = buildVisibleWaterCutoffGraph(segments, type, breakHexIds);
     const snapHexIds = getSnapHexIdsForPathType(type);
     const visited = new Set();
@@ -6416,7 +6600,7 @@
         if (visited.has(overlayEdgeVisitKey(start, next))) return;
       const chain = traceRiverNodeChain(start, next, riverGraph.graph, visited);
       paths.push({
-        d: pathForWaterCutoffNodeChain(chain, riverGraph.points, type, snapHexIds),
+        d: pathForWaterCutoffNodeChain(chain, riverGraph.points, type, snapHexIds, options),
         isExit: chain.some(nodeId => String(nodeId).includes(":exit")),
         isSteepRoadPass: type === "road" && getChainMaxElevationDelta(chain, riverGraph.points) >= EXTREME_ROUTE_ELEVATION_DELTA
       });
@@ -6427,7 +6611,7 @@
       if (visited.has(overlayEdgeVisitKey(edge.from, edge.to))) return;
       const chain = traceRiverNodeChain(edge.from, edge.to, riverGraph.graph, visited);
       paths.push({
-        d: pathForWaterCutoffNodeChain(chain, riverGraph.points, type, snapHexIds),
+        d: pathForWaterCutoffNodeChain(chain, riverGraph.points, type, snapHexIds, options),
         isExit: chain.some(nodeId => String(nodeId).includes(":exit")),
         isSteepRoadPass: type === "road" && getChainMaxElevationDelta(chain, riverGraph.points) >= EXTREME_ROUTE_ELEVATION_DELTA
       });
@@ -6568,17 +6752,26 @@
     return chain;
   }
 
-  function pathForWaterCutoffNodeChain(chain, pointsByNodeId, type, snapHexIds = new Set()) {
-    const pointRecords = chain.map(nodeId => pointsByNodeId.get(nodeId)).filter(Boolean);
-    const shapedPointRecords = getJitteredPathPointRecords(pointRecords, type, snapHexIds);
-    const points = getWobbledPathPoints(shapedPointRecords, type, snapHexIds);
+  function pathForWaterCutoffNodeChain(chain, pointsByNodeId, type, snapHexIds = new Set(), options = {}) {
+    const basePointRecords = chain.map(nodeId => pointsByNodeId.get(nodeId)).filter(Boolean);
+    const pointRecords = basePointRecords;
+    const sharedLaneSnapHexIds = getSharedRoadRiverLaneSnapHexIds(pointRecords, type);
+    const sluiceSnapHexIds = type === "river" ? getRiverWallSluiceSnapHexIds(pointRecords) : new Set();
+    const pathSnapHexIds = (sharedLaneSnapHexIds.size || sluiceSnapHexIds.size)
+      ? new Set([...snapHexIds, ...sharedLaneSnapHexIds, ...sluiceSnapHexIds])
+      : snapHexIds;
+    const hardLineSnapHexIds = sluiceSnapHexIds.size
+      ? new Set([...snapHexIds, ...sluiceSnapHexIds])
+      : snapHexIds;
+    const shapedPointRecords = getJitteredPathPointRecords(pointRecords, type, pathSnapHexIds);
+    const points = applyRiverRoadLaneOffsets(getWobbledPathPoints(shapedPointRecords, type, pathSnapHexIds), shapedPointRecords, type);
     if (points.length < 2) return "";
     if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
 
     const commands = [`M ${points[0].x} ${points[0].y}`];
     for (let index = 1; index < points.length - 1; index += 1) {
       const current = points[index];
-      if (snapHexIds.has(shapedPointRecords[index].hexId)) {
+      if (hardLineSnapHexIds.has(shapedPointRecords[index].hexId)) {
         commands.push(`L ${current.x} ${current.y}`);
         continue;
       }
@@ -6593,6 +6786,125 @@
     const last = points[points.length - 1];
     commands.push(`T ${last.x} ${last.y}`);
     return commands.join(" ");
+  }
+
+  function getSharedRoadRiverLaneSnapHexIds(pointRecords, type) {
+    if (!["road", "river"].includes(type) || pointRecords.length < 2) return new Set();
+    const sharedLaneEdgeKeys = type === "river" ? getRoadEdgeKeySet() : getRiverEdgeKeySet();
+    const snapHexIds = new Set();
+    for (let index = 0; index < pointRecords.length - 1; index += 1) {
+      const fromRecord = pointRecords[index];
+      const toRecord = pointRecords[index + 1];
+      if (!fromRecord?.hexId || !toRecord?.hexId) continue;
+      if (!sharedLaneEdgeKeys.has(overlayEdgeVisitKey(fromRecord.hexId, toRecord.hexId))) continue;
+      [index - 1, index, index + 1, index + 2].forEach(pointIndex => {
+        const hexId = pointRecords[pointIndex]?.hexId;
+        if (hexId) snapHexIds.add(hexId);
+      });
+    }
+    return snapHexIds;
+  }
+
+  function getRiverWallSluiceSnapHexIds(pointRecords) {
+    const snapHexIds = new Set();
+    const wallSegments = getWallSluiceSegments();
+    if (!wallSegments.length) return snapHexIds;
+    const radius = getGeneratedMapDimensions().radius;
+    for (let index = 0; index < pointRecords.length - 1; index += 1) {
+      const fromRecord = pointRecords[index];
+      const toRecord = pointRecords[index + 1];
+      if (!fromRecord?.hexId || !toRecord?.hexId) continue;
+      const riverSegment = { a: fromRecord.point, b: toRecord.point };
+      if (!wallSegments.some(wallSegment => wallRouteSegmentIntersectsRoute(wallSegment, riverSegment))) continue;
+      [index - 1, index, index + 1, index + 2].forEach(pointIndex => {
+        const record = pointRecords[pointIndex];
+        if (!record?.hexId) return;
+        if (pointIndex === index - 1 || pointIndex === index + 2) {
+          const projection = projectPointToSegment(record.point, fromRecord.point, toRecord.point);
+          if (Math.hypot(record.point.x - projection.point.x, record.point.y - projection.point.y) > radius * 1.2) return;
+        }
+        snapHexIds.add(record.hexId);
+      });
+    }
+    return snapHexIds;
+  }
+
+  function getWallSluiceSegments() {
+    if (renderer.wallSluiceSegmentCache?.revision === renderer.overlayRevision) return renderer.wallSluiceSegmentCache.segments;
+    const segments = [];
+    (getOverlaysByType().wall || []).forEach(wallOverlay => {
+      const wallHex = renderer.hexesById.get(wallOverlay.Hex_ID_Ref);
+      const wallEdge = getHexEdgeSegment(wallHex, wallOverlay.Edge);
+      if (wallEdge) segments.push(wallEdge);
+    });
+    renderer.wallSluiceSegmentCache = { revision: renderer.overlayRevision, segments };
+    return segments;
+  }
+
+  function applyRiverRoadLaneOffsets(points, pointRecords, type) {
+    if (type !== "river" || points.length < 2) return points;
+    const roadEdgeKeys = getRoadEdgeKeySet();
+    if (!roadEdgeKeys.size) return points;
+    const radius = getGeneratedMapDimensions().radius;
+    const offsetDistance = radius * 0.18;
+    const routeSign = seededPathFloat(`river-road-lane:${pointRecords[0]?.hexId || ""}:${pointRecords[pointRecords.length - 1]?.hexId || ""}`) < 0.5 ? -1 : 1;
+    const offsetFlags = points.map(() => false);
+    for (let index = 0; index < pointRecords.length - 1; index += 1) {
+      const fromRecord = pointRecords[index];
+      const toRecord = pointRecords[index + 1];
+      if (!fromRecord?.hexId || !toRecord?.hexId) continue;
+      if (!roadEdgeKeys.has(overlayEdgeVisitKey(fromRecord.hexId, toRecord.hexId))) continue;
+      [index - 1, index, index + 1, index + 2].forEach(pointIndex => {
+        if (pointIndex < 0 || pointIndex >= offsetFlags.length) return;
+        offsetFlags[pointIndex] = true;
+      });
+    }
+    if (!offsetFlags.some(Boolean)) return points;
+
+    return points.map((point, index) => {
+      if (!offsetFlags[index]) return point;
+      const direction = getRiverLaneDirection(points, offsetFlags, index);
+      if (!direction) return point;
+      return {
+        x: point.x + (-direction.y) * offsetDistance * routeSign,
+        y: point.y + direction.x * offsetDistance * routeSign
+      };
+    });
+  }
+
+  function getRiverLaneDirection(points, offsetFlags, index) {
+    let beforeIndex = index - 1;
+    while (beforeIndex >= 0 && !offsetFlags[beforeIndex]) beforeIndex -= 1;
+    let afterIndex = index + 1;
+    while (afterIndex < points.length && !offsetFlags[afterIndex]) afterIndex += 1;
+    const beforePoint = points[beforeIndex] || points[index - 1] || points[index];
+    const afterPoint = points[afterIndex] || points[index + 1] || points[index];
+    const dx = afterPoint.x - beforePoint.x;
+    const dy = afterPoint.y - beforePoint.y;
+    const length = Math.hypot(dx, dy);
+    return length ? { x: dx / length, y: dy / length } : null;
+  }
+
+  function getRoadEdgeKeySet() {
+    if (renderer.roadEdgeKeyCache?.revision === renderer.overlayRevision) return renderer.roadEdgeKeyCache.keys;
+    const keys = new Set();
+    (getOverlaysByType().road || []).forEach(overlay => {
+      if (isAutoPassRoadSegment(overlay) || !overlay.From_Hex_ID_Ref || !overlay.To_Hex_ID_Ref) return;
+      keys.add(overlayEdgeVisitKey(overlay.From_Hex_ID_Ref, overlay.To_Hex_ID_Ref));
+    });
+    renderer.roadEdgeKeyCache = { revision: renderer.overlayRevision, keys };
+    return keys;
+  }
+
+  function getRiverEdgeKeySet() {
+    if (renderer.riverEdgeKeyCache?.revision === renderer.overlayRevision) return renderer.riverEdgeKeyCache.keys;
+    const keys = new Set();
+    (getOverlaysByType().river || []).forEach(overlay => {
+      if (!overlay.From_Hex_ID_Ref || !overlay.To_Hex_ID_Ref) return;
+      keys.add(overlayEdgeVisitKey(overlay.From_Hex_ID_Ref, overlay.To_Hex_ID_Ref));
+    });
+    renderer.riverEdgeKeyCache = { revision: renderer.overlayRevision, keys };
+    return keys;
   }
 
   function curvedSegmentPath(from, to, seed) {
@@ -6671,7 +6983,9 @@
     const counts = {
       road: new Map(),
       path: new Map(),
-      river: new Map()
+      river: new Map(),
+      majorRiver: new Map(),
+      regularRiver: new Map()
     };
 
     ["road", "path", "river"].forEach(overlayType => {
@@ -6681,6 +6995,10 @@
         if (!hexId) return;
         const typeCounts = counts[overlay.Overlay_Type];
         typeCounts.set(hexId, (typeCounts.get(hexId) || 0) + 1);
+        if (overlay.Overlay_Type === "river") {
+          const routeCounts = overlay.Is_Major_Route ? counts.majorRiver : counts.regularRiver;
+          routeCounts.set(hexId, (routeCounts.get(hexId) || 0) + 1);
+        }
       });
       });
     });
@@ -6690,16 +7008,72 @@
       const roadCount = counts.road.get(hexId) || 0;
       const pathCount = counts.path.get(hexId) || 0;
       const riverCount = counts.river.get(hexId) || 0;
+      const majorRiverCount = counts.majorRiver.get(hexId) || 0;
+      const regularRiverCount = counts.regularRiver.get(hexId) || 0;
       if ((roadCount && pathCount) || roadCount >= 3 || pathCount >= 3) {
         snapHexIds.add(hexId);
       }
-      if (riverCount >= 3) {
+      if (riverCount >= 3 || majorRiverCount && regularRiverCount) {
         snapHexIds.add(hexId);
       }
     });
 
+    getDecoratedCrossingSnapHexIds(type).forEach(hexId => snapHexIds.add(hexId));
+
     renderer.snapHexIdsCache = { revision: renderer.overlayRevision, type, hexIds: snapHexIds };
     return snapHexIds;
+  }
+
+  function getDecoratedCrossingSnapHexIds(type) {
+    if (!["road", "river"].includes(type)) return new Set();
+    const snapHexIds = new Set();
+    const overlaysByType = getOverlaysByType();
+    const majorRoadSegments = getCenteredOverlaySegments(
+      overlaysByType.road.filter(overlay => overlay.Is_Major_Route && !isAutoPassRoadSegment(overlay))
+    );
+    const majorRiverSegments = getCenteredOverlaySegments(
+      overlaysByType.river.filter(overlay => overlay.Is_Major_Route)
+    );
+
+    if (type === "road") {
+      addWallDecorationSnapHexes(snapHexIds, majorRoadSegments);
+    }
+
+    if (type === "river") {
+      addWallDecorationSnapHexes(snapHexIds, majorRiverSegments);
+    }
+
+    return snapHexIds;
+  }
+
+  function addWallDecorationSnapHexes(snapHexIds, routeSegments) {
+    if (!routeSegments.length) return;
+    (getOverlaysByType().wall || []).forEach(wallOverlay => {
+      const wallHex = renderer.hexesById.get(wallOverlay.Hex_ID_Ref);
+      const wallEdge = getHexEdgeSegment(wallHex, wallOverlay.Edge);
+      if (!wallEdge) return;
+      routeSegments.forEach(routeSegment => {
+        if (!wallRouteSegmentIntersectsRoute(wallEdge, routeSegment)) return;
+        addOverlaySegmentSnapHexes(snapHexIds, routeSegment.overlay);
+      });
+    });
+  }
+
+  function wallRouteSegmentIntersectsRoute(wallEdge, routeSegment) {
+    const radius = getGeneratedMapDimensions().radius;
+    return Boolean(lineSegmentIntersectionPoint(wallEdge.a, wallEdge.b, routeSegment.a, routeSegment.b, {
+      roadPadding: 0.08,
+      riverPadding: 0.08
+    }) || pointDistanceToSegment({
+      x: (wallEdge.a.x + wallEdge.b.x) / 2,
+      y: (wallEdge.a.y + wallEdge.b.y) / 2
+    }, routeSegment.a, routeSegment.b) <= radius * 0.18);
+  }
+
+  function addOverlaySegmentSnapHexes(target, overlay) {
+    [overlay?.From_Hex_ID_Ref, overlay?.To_Hex_ID_Ref].forEach(hexId => {
+      if (hexId) target.add(hexId);
+    });
   }
 
   function getVisibleBounds(buffer = getGeneratedMapDimensions().radius * 2) {
@@ -7025,6 +7399,12 @@
       renderer.root.setPointerCapture?.(event.pointerId);
       renderer.drawing.paintedThisDrag = new Set();
       beginDragActionBatch();
+      if (renderer.drawing.tool === "wall" && getValidWallMode(renderer.drawing.wallMode) === "plane") {
+        beginWallPlaneDragPreview(event);
+        renderer.view.suppressClickUntil = performance.now() + 450;
+        renderSvgOnly();
+        return;
+      }
       applyDrawingAtEvent(event);
       renderer.view.suppressClickUntil = performance.now() + 450;
       return;
@@ -7098,6 +7478,11 @@
       renderer.drawing.hoverMistHexIds = nextMistHexIds;
       renderer.drawing.hoverBrushHexIds = nextBrushHexIds;
 
+      if (event.pointerType !== "touch" && renderer.drawing.tool === "wall" && getValidWallMode(renderer.drawing.wallMode) === "plane" && (event.buttons & 1) === 1) {
+        if (updateWallPlaneDragPreview(event)) renderSvgOnly();
+        return;
+      }
+
       if (event.pointerType !== "touch" && (PATH_OVERLAY_TYPES.has(renderer.drawing.tool) || REGION_PAINT_TYPES.has(renderer.drawing.tool) || renderer.drawing.tool === "terrain" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase" || renderer.drawing.tool === "mist") && (event.buttons & 1) === 1) {
         applyDrawingAtEvent(event, true);
         return;
@@ -7153,10 +7538,16 @@
     }
 
     if (renderer.drawing.enabled) {
+      if (renderer.drawing.tool === "wall" && getValidWallMode(renderer.drawing.wallMode) === "plane" && renderer.drawing.wallPlaneDrag?.previewEdges?.length) {
+        const wallEdges = renderer.drawing.wallPlaneDrag.previewEdges;
+        renderer.drawing.wallPlaneDrag = null;
+        persistWallOverlays(wallEdges);
+      }
       renderer.view.dragging = false;
       renderer.drawing.dragLastHexId = null;
       renderer.drawing.paintedThisDrag = new Set();
       scheduleDragActionBatchCommit();
+      renderer.view.suppressClickUntil = performance.now() + 450;
       renderer.root.releasePointerCapture?.(event.pointerId);
       renderSvgOnly();
       return;
@@ -7219,6 +7610,13 @@
 
     const tool = renderer.drawing.tool;
     if (tool === "sea_route" && !canSeaRouteUseHex(hex)) return;
+
+    if (tool === "wall") {
+      const wallEdges = getWallPlacementEdges(point, hex);
+      persistWallOverlays(wallEdges);
+      return;
+    }
+
     const dragKey = `${tool}:${hex.id}`;
     if (fromDrag && renderer.drawing.paintedThisDrag.has(dragKey)) return;
     renderer.drawing.paintedThisDrag.add(dragKey);
@@ -7237,11 +7635,6 @@
         return;
       }
       persistPathOverlaySequence(tool, previousHexId, hex.id, exitEdge);
-      return;
-    }
-
-    if (tool === "wall") {
-      persistWallOverlay(hex.id, nearestEdgeFromWorldPoint(point, hex));
       return;
     }
 
@@ -8819,17 +9212,97 @@
     const campaign = getActiveCampaign?.();
     if (!edge) return;
     if (!campaign) return;
-    if (renderer.mapOverlays.some(overlay => (
+    const style = getCurrentDrawOverlayStyle("wall");
+    renderer.drawing.saving = true;
+    refreshEditorActionControls();
+    try {
+      const previous = findExistingWallOverlay(hexId, edge);
+      if (previous && previous.Style === style) return;
+      const overlay = await savePathOverlaySegment(campaign.id, "wall", hexId, null, style, edge, {});
+      upsertLocalOverlay(overlay);
+      pushOverlayUndoAction(previous ? [overlay, { ...cloneOverlayRecord(previous), __undoDeleted: true }] : [overlay]);
+      renderSvgOnly();
+    } catch (error) {
+      handleWallSaveError(error);
+    } finally {
+      renderer.drawing.saving = false;
+      refreshEditorActionControls();
+    }
+  }
+
+  function getCenteredOverlaySegments(overlays) {
+    return (overlays || [])
+      .filter(overlay => overlay.To_Hex_ID_Ref)
+      .map(overlay => {
+        const fromHex = hexForPathPoint(overlay.From_Hex_ID_Ref);
+        const toHex = hexForPathPoint(overlay.To_Hex_ID_Ref);
+        return fromHex && toHex ? { a: fromHex.center, b: toHex.center, overlay } : null;
+      })
+      .filter(Boolean);
+  }
+
+  async function persistWallOverlays(edgeRefs) {
+    const campaign = getActiveCampaign?.();
+    if (!campaign || !edgeRefs?.length) return;
+    renderer.drawing.saving = true;
+    refreshEditorActionControls();
+    try {
+      const refsToSave = [];
+      const previousByKey = new Map();
+      const seen = new Set();
+      const style = getCurrentDrawOverlayStyle("wall");
+      for (const edgeRef of edgeRefs) {
+        if (!edgeRef?.hexId || !edgeRef.edge) continue;
+        const key = getWallSegmentKey(edgeRef) || `${edgeRef.hexId}:${edgeRef.edge}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const previous = findExistingWallOverlayBySegmentKey(key);
+        if (previous && previous.Style === style) continue;
+        if (previous) previousByKey.set(key, cloneOverlayRecord(previous));
+        refsToSave.push(edgeRef);
+      }
+      const overlays = (await Promise.all(refsToSave.map(edgeRef => (
+        savePathOverlaySegment(campaign.id, "wall", edgeRef.hexId, null, style, edgeRef.edge, {})
+      )))).filter(Boolean);
+      if (!overlays.length) return;
+      overlays.forEach(overlay => upsertLocalOverlay(overlay));
+      const previousOverlays = overlays
+        .map(overlay => previousByKey.get(getWallSegmentKey({ hexId: overlay.Hex_ID_Ref, edge: overlay.Edge }) || `${overlay.Hex_ID_Ref}:${overlay.Edge}`))
+        .filter(Boolean)
+        .map(overlay => ({ ...overlay, __undoDeleted: true }));
+      pushOverlayUndoAction([...overlays, ...previousOverlays]);
+      renderSvgOnly();
+    } catch (error) {
+      handleWallSaveError(error);
+    } finally {
+      renderer.drawing.saving = false;
+      refreshEditorActionControls();
+    }
+  }
+
+  function handleWallSaveError(error) {
+    console.error("Unable to save generated map wall:", error);
+    const message = String(error?.message || "");
+    if (/unsupported wall style|target_is_major_route|schema cache/i.test(message)) {
+      window.alert?.("Wall variants need the latest generated map overlay SQL. Run sql/generated_map_overlay_management.sql in Supabase, then try placing the wall again.");
+      return;
+    }
+    window.alert?.(message || "Unable to save wall overlay.");
+  }
+
+  function findExistingWallOverlay(hexId, edge) {
+    return (renderer.mapOverlays || []).find(overlay => (
       overlay.Overlay_Type === "wall" &&
       overlay.Hex_ID_Ref === hexId &&
       overlay.Edge === edge
-    ))) {
-      return;
-    }
-    const overlay = await savePathOverlaySegment(campaign.id, "wall", hexId, null, getCurrentDrawOverlayStyle("wall"), edge, {});
-    upsertLocalOverlay(overlay);
-    pushOverlayUndoAction([overlay]);
-    renderSvgOnly();
+    )) || null;
+  }
+
+  function findExistingWallOverlayBySegmentKey(key) {
+    return (renderer.mapOverlays || []).find(overlay => (
+      overlay.Overlay_Type === "wall" &&
+      (getWallSegmentKey({ hexId: overlay.Hex_ID_Ref, edge: overlay.Edge }) || `${overlay.Hex_ID_Ref}:${overlay.Edge}`) === key
+    )) || null;
   }
 
   async function persistMistOverlay(hexId) {
@@ -9744,10 +10217,464 @@
     return bestEdge;
   }
 
+  function getWallPlacementEdges(point, hex) {
+    if (!hex) return [];
+    return getWallPreviewEdges({ hexId: hex.id, edge: nearestEdgeFromWorldPoint(point, hex), point });
+  }
+
+  function getWallPreviewEdges(edgeRef) {
+    if (!edgeRef?.hexId || !edgeRef.edge) return [];
+    const mode = getValidWallMode(renderer.drawing.wallMode);
+    if (mode === "shape") {
+      return getWallShapeEdges(edgeRef.hexId);
+    }
+    if (mode === "plane") {
+      return getWallPlaneSeedEdges(edgeRef);
+    }
+    return [edgeRef];
+  }
+
+  function getWallPlaneSeedEdges(startRef) {
+    const startSegment = getWallEdgeSegment(startRef);
+    if (!startSegment) return [startRef];
+    const forwardEndpoint = getWallForwardEndpoint(startRef, startRef.point);
+    const forwardVector = getWallDirectionVectorFromSegment(startSegment, forwardEndpoint?.key);
+    const nextRef = getBestWallContinuation(
+      getWallEdgesAtEndpoint(forwardEndpoint?.key)
+        .filter(candidate => (getWallSegmentKey(candidate) || getWallRefKey(candidate)) !== (getWallSegmentKey(startRef) || getWallRefKey(startRef))),
+      forwardEndpoint,
+      forwardVector,
+      startRef.point || {
+        x: (startSegment.a.x + startSegment.b.x) / 2,
+        y: (startSegment.a.y + startSegment.b.y) / 2
+      }
+    );
+    return nextRef ? [startRef, nextRef] : [startRef];
+  }
+
+  function getWallPlaneDragEdges(branch, point, distanceLimit) {
+    if (!branch?.lastPair?.length) return [];
+    const nextStep = getNextWallPlanePair(branch);
+    if (!nextStep?.pair?.length) return [];
+    const nextCenter = getWallEdgeGroupCenter(nextStep.pair);
+    if (!nextCenter || distanceLimit < 1 || Math.hypot(point.x - nextCenter.x, point.y - nextCenter.y) > getGeneratedMapDimensions().radius * 4) {
+      return [];
+    }
+    applyWallPlaneStep(branch, nextStep);
+    return nextStep.pair;
+  }
+
+  function getNextWallPlanePair(state) {
+    const previousPair = state?.lastPair || [];
+    const anchor = previousPair[previousPair.length - 1];
+    const anchorEndpoint = state?.activeEndpointKey
+      ? getWallEndpointByKey(anchor, state.activeEndpointKey)
+      : getWallForwardEndpoint(anchor, null);
+    if (!anchor || !anchorEndpoint) return [];
+    const first = getBestWallContinuation(
+      getWallEdgeCandidatesNear(anchor)
+        .filter(candidate => !state.seen.has(getWallSegmentKey(candidate) || getWallRefKey(candidate)))
+        .filter(candidate => wallEdgeTouchesEndpointKey(candidate, anchorEndpoint.key)),
+      anchorEndpoint,
+      state.directionVector,
+      state.guidePoint || anchorEndpoint.point
+    );
+    if (!first) return [];
+    const firstEnd = getWallOppositeEndpoint(first, anchorEndpoint.key);
+    return {
+      pair: [first],
+      activeEndpointKey: firstEnd?.key || state.activeEndpointKey
+    };
+  }
+
+  function applyWallPlaneStep(state, step) {
+    if (!state || !step?.pair?.length) return;
+    step.pair.forEach(edgeRef => state.seen.add(getWallSegmentKey(edgeRef) || getWallRefKey(edgeRef)));
+    state.lastPair = step.pair;
+    state.activeEndpointKey = step.activeEndpointKey || state.activeEndpointKey;
+  }
+
+  function beginWallPlaneDragPreview(event) {
+    const point = clientToWorld(event);
+    const hex = getHexAtWorldPoint(point);
+    const seedEdges = getWallPlacementEdges(point, hex);
+    initializeWallPlaneDrag(seedEdges, point);
+  }
+
+  function updateWallPlaneDragPreview(event) {
+    const state = renderer.drawing.wallPlaneDrag;
+    if (!state?.previewEdges?.length) return false;
+    const point = clientToWorld(event);
+    state.cursorPoint = point;
+    if (state.previewEdges.length >= 80 || !state.axisUnit || !state.seedCenter) return true;
+    const relative = {
+      x: point.x - state.seedCenter.x,
+      y: point.y - state.seedCenter.y
+    };
+    const projection = relative.x * state.axisUnit.x + relative.y * state.axisUnit.y;
+    const radius = getGeneratedMapDimensions().radius;
+    const targetPairCount = Math.min(48, Math.floor(Math.abs(projection) / Math.max(1, radius * 0.85)));
+    const branch = projection >= 0 ? state.forwardBranch : state.backwardBranch;
+    if (!branch) return true;
+    while (branch.pairCount < targetPairCount && state.previewEdges.length < 80) {
+      const nextEdges = getWallPlaneDragEdges(branch, point, targetPairCount - branch.pairCount);
+      if (!nextEdges.length) break;
+      branch.pairCount += 1;
+      nextEdges.forEach(edgeRef => {
+        const key = getWallSegmentKey(edgeRef) || getWallRefKey(edgeRef);
+        if (state.previewKeys.has(key)) return;
+        state.previewKeys.add(key);
+        state.previewEdges.push(edgeRef);
+      });
+    }
+    return true;
+  }
+
+  function initializeWallPlaneDrag(seedEdges, cursorPoint = null) {
+    if (!seedEdges?.length) return;
+    const first = seedEdges[0];
+    const last = seedEdges[seedEdges.length - 1];
+    const firstSegment = getWallEdgeSegment(first);
+    const lastSegment = getWallEdgeSegment(last);
+    if (!firstSegment || !lastSegment) return;
+    const sharedEndpoint = getSharedWallEndpointKey(first, last);
+    const forwardEndpoint = sharedEndpoint ? getWallOppositeEndpoint(last, sharedEndpoint) : getWallForwardEndpoint(last, null);
+    const backwardEndpoint = sharedEndpoint ? getWallOppositeEndpoint(first, sharedEndpoint) : getWallOppositeEndpoint(first, forwardEndpoint?.key);
+    const startCenter = {
+      x: (firstSegment.a.x + firstSegment.b.x) / 2,
+      y: (firstSegment.a.y + firstSegment.b.y) / 2
+    };
+    const endCenter = {
+      x: (lastSegment.a.x + lastSegment.b.x) / 2,
+      y: (lastSegment.a.y + lastSegment.b.y) / 2
+    };
+    const axisLength = Math.hypot(endCenter.x - startCenter.x, endCenter.y - startCenter.y) || 1;
+    const axisUnit = {
+      x: (endCenter.x - startCenter.x) / axisLength,
+      y: (endCenter.y - startCenter.y) / axisLength
+    };
+    const seedCenter = {
+      x: (startCenter.x + endCenter.x) / 2,
+      y: (startCenter.y + endCenter.y) / 2
+    };
+    const sharedSeen = new Set(seedEdges.map(edgeRef => getWallSegmentKey(edgeRef) || getWallRefKey(edgeRef)));
+    renderer.drawing.wallPlaneDrag = {
+      lastPair: seedEdges,
+      activeEndpointKey: sharedEndpoint || "",
+      directionVector: {
+        x: endCenter.x - startCenter.x,
+        y: endCenter.y - startCenter.y
+      },
+      seen: sharedSeen,
+      previewEdges: [...seedEdges],
+      previewKeys: new Set(sharedSeen),
+      seedCenter,
+      axisUnit,
+      forwardBranch: {
+        lastPair: [last],
+        activeEndpointKey: forwardEndpoint?.key || "",
+        directionVector: { x: axisUnit.x, y: axisUnit.y },
+        guidePoint: seedCenter,
+        seen: sharedSeen,
+        pairCount: 0
+      },
+      backwardBranch: {
+        lastPair: [first],
+        activeEndpointKey: backwardEndpoint?.key || "",
+        directionVector: { x: -axisUnit.x, y: -axisUnit.y },
+        guidePoint: seedCenter,
+        seen: sharedSeen,
+        pairCount: 0
+      },
+      cursorPoint
+    };
+  }
+
+  function getSharedWallEndpointKey(first, second) {
+    const firstSegment = getWallEdgeSegment(first);
+    const secondSegment = getWallEdgeSegment(second);
+    if (!firstSegment || !secondSegment) return "";
+    const firstKeys = new Set([wallPointKey(firstSegment.a), wallPointKey(firstSegment.b)]);
+    const secondKeys = [wallPointKey(secondSegment.a), wallPointKey(secondSegment.b)];
+    return secondKeys.find(key => firstKeys.has(key)) || "";
+  }
+
+  function getWallEdgeGroupCenter(edgeRefs) {
+    const points = [];
+    edgeRefs.forEach(edgeRef => {
+      const segment = getWallEdgeSegment(edgeRef);
+      if (!segment) return;
+      points.push(segment.a, segment.b);
+    });
+    if (!points.length) return null;
+    return {
+      x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+      y: points.reduce((sum, point) => sum + point.y, 0) / points.length
+    };
+  }
+
+  function getWallLinearEdges(startRef, size) {
+    const targetSize = clampNumber(Number(size), 1, 8, 1);
+    const startSegment = getWallEdgeSegment(startRef);
+    if (!startSegment) return [startRef];
+    const guidePoint = startRef.point || {
+      x: (startSegment.a.x + startSegment.b.x) / 2,
+      y: (startSegment.a.y + startSegment.b.y) / 2
+    };
+    const forwardCount = Math.floor(targetSize / 2);
+    const backwardCount = targetSize - forwardCount - 1;
+    const forwardEndpoint = getWallForwardEndpoint(startRef, startRef.point);
+    const backwardEndpoint = getWallOppositeEndpoint(startRef, forwardEndpoint?.key);
+    const forwardVector = getWallDirectionVectorFromSegment(startSegment, forwardEndpoint?.key);
+    const backwardVector = getWallDirectionVectorFromSegment(startSegment, backwardEndpoint?.key);
+    const forwardRefs = getConnectedWallRun(startRef, forwardEndpoint, forwardVector, guidePoint, forwardCount);
+    const backwardRefs = getConnectedWallRun(startRef, backwardEndpoint, backwardVector, guidePoint, backwardCount);
+    return [...backwardRefs.reverse(), startRef, ...forwardRefs];
+  }
+
+  function getConnectedWallRun(startRef, startEndpoint, directionVector, guidePoint, count) {
+    const refs = [];
+    const seen = new Set([getWallSegmentKey(startRef) || getWallRefKey(startRef)]);
+    let activeEndpoint = startEndpoint;
+
+    while (refs.length < count && activeEndpoint) {
+      const candidates = getWallEdgesAtEndpoint(activeEndpoint.key)
+        .filter(candidate => !seen.has(getWallSegmentKey(candidate) || getWallRefKey(candidate)))
+        .filter(candidate => !isOppositeWallDuplicate(candidate, startRef));
+      const nextRef = getBestWallContinuation(candidates, activeEndpoint, directionVector, guidePoint);
+      if (!nextRef) break;
+      refs.push(nextRef);
+      seen.add(getWallSegmentKey(nextRef) || getWallRefKey(nextRef));
+      const nextEndpoint = getWallOppositeEndpoint(nextRef, activeEndpoint.key);
+      activeEndpoint = nextEndpoint;
+    }
+
+    return refs;
+  }
+
+  function getWallShapeEdges(centerHexId) {
+    const center = renderer.hexesById.get(centerHexId);
+    if (!center) return [];
+    const size = clampNumber(Number(renderer.drawing.wallSize), 1, 8, 1);
+    const effectiveSize = Math.max(0, size - 1);
+    const shape = getValidWallShape(renderer.drawing.wallShape);
+    const footprint = new Set();
+
+    if (effectiveSize <= 0) {
+      footprint.add(center.id);
+    } else if (shape === "round_keep") {
+      getHexesWithinRadius(center, effectiveSize).forEach(hex => footprint.add(hex.id));
+    } else if (shape === "long_keep") {
+      addWallRectFootprint(footprint, center, Math.max(1, effectiveSize), Math.max(2, effectiveSize * 2));
+    } else {
+      addWallRectFootprint(footprint, center, Math.max(2, effectiveSize * 2 - 1), Math.max(2, effectiveSize * 2 - 1));
+    }
+
+    if (!footprint.size) footprint.add(center.id);
+
+    const edges = [];
+    footprint.forEach(hexId => {
+      const hex = renderer.hexesById.get(hexId);
+      if (!hex) return;
+      EDGE_NAMES.forEach(edge => {
+        const neighbor = getNeighborHex(hex, edge);
+        if (!neighbor || !footprint.has(neighbor.id)) {
+          edges.push({ hexId, edge });
+        }
+      });
+    });
+    return edges;
+  }
+
+  function getHexesWithinRadius(centerHex, radius) {
+    const visited = new Set([centerHex.id]);
+    const queue = [{ hex: centerHex, distance: 0 }];
+    const results = [centerHex];
+    for (let index = 0; index < queue.length; index += 1) {
+      const current = queue[index];
+      if (current.distance >= radius) continue;
+      EDGE_NAMES.forEach(edgeName => {
+        const neighbor = getNeighborHex(current.hex, edgeName);
+        if (!neighbor || visited.has(neighbor.id)) return;
+        visited.add(neighbor.id);
+        results.push(neighbor);
+        queue.push({ hex: neighbor, distance: current.distance + 1 });
+      });
+    }
+    return results;
+  }
+
+  function addWallRectFootprint(footprint, center, width, height) {
+    const halfWidth = Math.floor(width / 2);
+    const halfHeight = Math.floor(height / 2);
+    for (let dx = -halfWidth; dx <= width - halfWidth - 1; dx += 1) {
+      for (let dy = -halfHeight; dy <= height - halfHeight - 1; dy += 1) {
+        const hex = renderer.hexesByCoord.get(`${center.x + dx}:${center.y + dy}`);
+        if (hex) footprint.add(hex.id);
+      }
+    }
+  }
+
+  function getWallEdgeSegment(edgeRef) {
+    const hex = renderer.hexesById.get(edgeRef?.hexId);
+    return getHexEdgeSegment(hex, edgeRef?.edge);
+  }
+
+  function getWallDirectionVectorFromSegment(segment, endpointKey) {
+    if (!segment || !endpointKey) return { x: 0, y: 0 };
+    const from = wallPointKey(segment.a) === endpointKey ? segment.b : segment.a;
+    const to = wallPointKey(segment.a) === endpointKey ? segment.a : segment.b;
+    return {
+      x: to.x - from.x,
+      y: to.y - from.y
+    };
+  }
+
+  function getWallForwardEndpoint(edgeRef, point) {
+    const segment = getWallEdgeSegment(edgeRef);
+    if (!segment) return null;
+    const endpoint = point ? getWallEndpointInCursorDirection(segment, point) : segment.b;
+    return { key: wallPointKey(endpoint), point: endpoint };
+  }
+
+  function getWallOppositeEndpoint(edgeRef, endpointKey) {
+    const segment = getWallEdgeSegment(edgeRef);
+    if (!segment) return null;
+    const opposite = wallPointKey(segment.a) === endpointKey ? segment.b : segment.a;
+    return { key: wallPointKey(opposite), point: opposite };
+  }
+
+  function getWallEndpointByKey(edgeRef, endpointKey) {
+    const segment = getWallEdgeSegment(edgeRef);
+    if (!segment || !endpointKey) return null;
+    if (wallPointKey(segment.a) === endpointKey) return { key: endpointKey, point: segment.a };
+    if (wallPointKey(segment.b) === endpointKey) return { key: endpointKey, point: segment.b };
+    return null;
+  }
+
+  function getBestWallContinuation(candidates, activeEndpoint, directionVector, guidePoint) {
+    if (!candidates.length || !activeEndpoint?.point) return null;
+    let best = null;
+    let bestScore = Infinity;
+    const directionLength = Math.hypot(directionVector?.x || 0, directionVector?.y || 0) || 1;
+    const direction = {
+      x: (directionVector?.x || 0) / directionLength,
+      y: (directionVector?.y || 0) / directionLength
+    };
+    const normal = { x: -direction.y, y: direction.x };
+    const radius = getGeneratedMapDimensions().radius;
+    candidates.forEach(candidate => {
+      const segment = getWallEdgeSegment(candidate);
+      if (!segment) return;
+      const otherPoint = wallPointKey(segment.a) === activeEndpoint.key ? segment.b : segment.a;
+      const edgeVector = {
+        x: otherPoint.x - activeEndpoint.point.x,
+        y: otherPoint.y - activeEndpoint.point.y
+      };
+      const edgeLength = Math.hypot(edgeVector.x, edgeVector.y) || 1;
+      const forwardAlignment = (direction.x * edgeVector.x + direction.y * edgeVector.y) / edgeLength;
+      if (forwardAlignment <= 0.05) return;
+      const midpoint = {
+        x: (segment.a.x + segment.b.x) / 2,
+        y: (segment.a.y + segment.b.y) / 2
+      };
+      const relative = {
+        x: midpoint.x - guidePoint.x,
+        y: midpoint.y - guidePoint.y
+      };
+      const lineDistance = Math.abs(relative.x * normal.x + relative.y * normal.y);
+      if (lineDistance > radius * 1.05) return;
+      const score = lineDistance - forwardAlignment * radius * 0.25;
+      if (score < bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    });
+    return best;
+  }
+
+  function getWallEdgeCandidatesNear(edgeRef) {
+    const candidates = [];
+    const seen = new Set();
+    const addHexEdges = hex => {
+      if (!hex) return;
+      EDGE_NAMES.forEach(edge => {
+        const candidate = { hexId: hex.id, edge };
+        const key = getWallRefKey(candidate);
+        if (seen.has(key)) return;
+        seen.add(key);
+        candidates.push(candidate);
+      });
+    };
+    const hex = renderer.hexesById.get(edgeRef?.hexId);
+    addHexEdges(hex);
+    if (hex) EDGE_NAMES.forEach(edge => addHexEdges(getNeighborHex(hex, edge)));
+    return candidates;
+  }
+
+  function getWallEdgesAtEndpoint(endpointKey) {
+    const candidates = [];
+    const seen = new Set();
+    renderer.hexes.forEach(hex => {
+      EDGE_NAMES.forEach(edge => {
+        const edgeRef = { hexId: hex.id, edge };
+        const key = getWallSegmentKey(edgeRef) || getWallRefKey(edgeRef);
+        if (seen.has(key)) return;
+        const segment = getWallEdgeSegment(edgeRef);
+        if (!segment) return;
+        if (wallPointKey(segment.a) !== endpointKey && wallPointKey(segment.b) !== endpointKey) return;
+        seen.add(key);
+        candidates.push(edgeRef);
+      });
+    });
+    return candidates;
+  }
+
+  function isOppositeWallDuplicate(candidate, reference) {
+    return Boolean(candidate && reference && (getWallSegmentKey(candidate) || getWallRefKey(candidate)) === (getWallSegmentKey(reference) || getWallRefKey(reference)));
+  }
+
+  function getWallEdgePlane(edge) {
+    const index = EDGE_NAMES.indexOf(edge);
+    if (index < 0) return "";
+    return EDGE_NAMES[Math.min(index, (index + 3) % EDGE_NAMES.length)];
+  }
+
+  function getWallEndpointInCursorDirection(segment, point) {
+    const center = {
+      x: (segment.a.x + segment.b.x) / 2,
+      y: (segment.a.y + segment.b.y) / 2
+    };
+    const cursorVector = { x: point.x - center.x, y: point.y - center.y };
+    const firstVector = { x: segment.a.x - center.x, y: segment.a.y - center.y };
+    const secondVector = { x: segment.b.x - center.x, y: segment.b.y - center.y };
+    const firstScore = cursorVector.x * firstVector.x + cursorVector.y * firstVector.y;
+    const secondScore = cursorVector.x * secondVector.x + cursorVector.y * secondVector.y;
+    return firstScore >= secondScore ? segment.a : segment.b;
+  }
+
+  function wallEdgeTouchesEndpointKey(edgeRef, endpointKey) {
+    const segment = getWallEdgeSegment(edgeRef);
+    return Boolean(segment && (wallPointKey(segment.a) === endpointKey || wallPointKey(segment.b) === endpointKey));
+  }
+
+  function wallPointKey(point) {
+    return `${Math.round(point.x * 100)}:${Math.round(point.y * 100)}`;
+  }
+
+  function getWallRefKey(edgeRef) {
+    return `${edgeRef?.hexId || ""}:${edgeRef?.edge || ""}`;
+  }
+
+  function getWallSegmentKey(edgeRef) {
+    const segment = getWallEdgeSegment(edgeRef);
+    return segment ? edgeKey(segment.a, segment.b) : "";
+  }
+
   function getDrawingHoverEdge(tool, point, hex) {
     if (!hex) return null;
     if (tool === "wall") {
-      return { hexId: hex.id, edge: nearestEdgeFromWorldPoint(point, hex) };
+      return { hexId: hex.id, edge: nearestEdgeFromWorldPoint(point, hex), point };
     }
 
     if (!PATH_OVERLAY_TYPES.has(tool)) return null;
