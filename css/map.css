@@ -537,6 +537,10 @@
   display: none !important;
 }
 
+[data-poi-subview-group][hidden] {
+  display: none !important;
+}
+
 .map-edit-rail-utility {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -547,7 +551,7 @@
 }
 
 .map-edit-rail-main[data-map-tool-mode-panel="surveyor"] {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .map-edit-section-menu button {
@@ -831,6 +835,15 @@
   overflow: hidden;
 }
 
+.map-draw-panel-section[data-map-edit-section="pois"].active {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-content: start;
+  overflow: hidden;
+}
+
 .map-generation-scroll {
   display: flex;
   min-height: 0;
@@ -913,6 +926,18 @@
   min-width: 0;
 }
 
+.map-poi-generation-footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.map-poi-generation-shared-controls {
+  margin-top: 0;
+}
+
 .map-draw-panel-section[data-map-edit-section="terrain"],
 .map-draw-panel-section[data-map-edit-section="features"] {
   gap: 5px;
@@ -930,6 +955,19 @@
   flex: 1 1 auto;
   flex-direction: column;
   align-content: start;
+}
+
+.map-draw-panel-section[data-map-edit-section="pois"] .map-draw-range-row,
+.map-draw-panel-section[data-map-edit-section="pois"] .map-draw-tool-row,
+.map-draw-panel-section[data-map-edit-section="pois"] .map-draw-option-row,
+.map-draw-panel-section[data-map-edit-section="pois"] .map-poi-generation-footer,
+.map-draw-panel-section[data-map-edit-section="pois"] .map-generation-shared-controls {
+  flex: 0 0 auto;
+}
+
+.map-draw-panel-section[data-map-edit-section="pois"] .map-draw-clear {
+  margin-top: 0;
+  align-self: stretch;
 }
 
 .map-draw-panel-section[data-map-edit-section="regions"] .map-draw-tool-row button {

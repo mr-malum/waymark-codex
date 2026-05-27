@@ -233,6 +233,10 @@
       title: "Overlay",
       copy: "Draw roads, rivers, paths, walls, and mist directly onto the saved map."
     },
+    pois: {
+      title: "POIs",
+      copy: "Generate and manage live-map points of interest directly in the codex."
+    },
     regions: {
       title: "Regions",
       copy: "Assign geographic and political regions without leaving the map."
@@ -492,6 +496,7 @@
       toolsMode: "chooser",
       surveyorSection: "overlay",
       surveyorOverlaySubview: "paint",
+      surveyorPoiSubview: "generate",
       cartographerSection: "terrain",
       cartographerSubviews: {
         terrain: "paint",
@@ -556,6 +561,11 @@
       generationRoadAmount: 100,
       generationRiverAmount: 100,
       generationRiverLength: 100,
+      generationSettlementDensity: 100,
+      generationPopulationConcentration: 100,
+      generationResourceAmount: 100,
+      generationWaypointAmount: 100,
+      generationReplaceGeneratedPois: true,
       generationSection: "terrain",
       stagedTerrainOriginals: new Map(),
       terrainDirtyHexIds: new Set(),
@@ -903,8 +913,9 @@
     const modeViewButton = document.getElementById("map-edit-view-button");
     const surveyorModeButton = document.getElementById("map-tools-surveyor-button");
     const cartographerModeButton = document.getElementById("map-tools-cartographer-button");
-    const surveyorRegionsButton = document.getElementById("map-surveyor-regions-button");
     const surveyorOverlayButton = document.getElementById("map-surveyor-overlay-button");
+    const surveyorPoisButton = document.getElementById("map-surveyor-pois-button");
+    const surveyorRegionsButton = document.getElementById("map-surveyor-regions-button");
     const surveyorUtilitiesButton = document.getElementById("map-surveyor-utilities-button");
     const cartographerTerrainButton = document.getElementById("map-cartographer-terrain-button");
     const cartographerFeaturesButton = document.getElementById("map-cartographer-features-button");
@@ -924,13 +935,17 @@
     const featureDensity = document.getElementById("map-feature-density");
     const featureMaxFeatures = document.getElementById("map-feature-max-features");
     const featureChaosToggle = document.getElementById("map-feature-chaos-toggle");
-    const generationSeed = document.getElementById("map-generation-seed");
     const generationDensity = document.getElementById("map-generation-density");
     const generationMaxFeatures = document.getElementById("map-generation-max-features");
     const generationRefreshExisting = document.getElementById("map-generation-refresh-existing");
     const generationRunFeatures = document.getElementById("map-generation-run-features");
     const generationRunRoads = document.getElementById("map-generation-run-roads");
     const generationRunRivers = document.getElementById("map-generation-run-rivers");
+    const generationRunPois = document.getElementById("map-generation-run-pois");
+    const clearGeneratedPoisButton = document.getElementById("map-clear-generated-pois");
+    const clearPoisButton = document.getElementById("map-clear-pois");
+    const poiGenerationResetSliders = document.getElementById("map-poi-generation-reset-sliders");
+    const poiGenerationReplaceGenerated = document.getElementById("map-poi-generation-replace-generated");
     const generationResetSliders = document.getElementById("map-generation-reset-sliders");
     const generationPreviewTerrain = document.getElementById("map-generation-preview-terrain");
     const sharedApplyButton = document.getElementById("map-editor-apply-staged");
@@ -1044,6 +1059,11 @@
       event.stopPropagation();
       setMapEditSection("overlay");
     });
+    surveyorPoisButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMapEditSection("pois");
+    });
     surveyorUtilitiesButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -1062,7 +1082,9 @@
     cartographerPaintButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
+      if ((renderer.drawing.toolsMode || "chooser") === "surveyor" && renderer.drawing.surveyorSection === "pois") {
+        setSurveyorPoiSubview("generate");
+      } else if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
         setSurveyorOverlaySubview("paint");
       } else {
         setCartographerSubview(renderer.drawing.cartographerSection, "paint");
@@ -1072,7 +1094,9 @@
     cartographerGenerateButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
+      if ((renderer.drawing.toolsMode || "chooser") === "surveyor" && renderer.drawing.surveyorSection === "pois") {
+        setSurveyorPoiSubview("purge");
+      } else if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
         setSurveyorOverlaySubview("generate");
         setGenerationSection("overlays");
       } else {
@@ -1321,9 +1345,11 @@
       setFeatureChaosEnabled(Boolean(featureChaosToggle.checked));
     });
 
-    generationSeed?.addEventListener("input", () => {
-      renderer.drawing.generationSeed = String(generationSeed.value || "").slice(0, 80);
-      updateGenerationControls();
+    panel.querySelectorAll("[data-generation-seed-input]").forEach(seedInput => {
+      seedInput.addEventListener("input", () => {
+        renderer.drawing.generationSeed = String(seedInput.value || "").slice(0, 80);
+        updateGenerationControls();
+      });
     });
 
     generationDensity?.addEventListener("input", () => {
@@ -1365,18 +1391,38 @@
       runGenerationRiverPass();
     });
 
-    panel.querySelectorAll("[data-generation-section-button]").forEach(sectionButton => {
-      sectionButton.addEventListener("click", event => {
-        event.preventDefault();
-        event.stopPropagation();
-        setGenerationSection(sectionButton.dataset.generationSectionButton || "terrain");
-      });
+    generationRunPois?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      runGenerationPoiPass();
+    });
+
+    clearPoisButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      purgePois();
+    });
+
+    clearGeneratedPoisButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      purgePois({ generatedOnly: true });
     });
 
     generationResetSliders?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
       resetGenerationTerrainSliders();
+    });
+
+    poiGenerationResetSliders?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      resetPoiGenerationSliders();
+    });
+    poiGenerationReplaceGenerated?.addEventListener("change", () => {
+      renderer.drawing.generationReplaceGeneratedPois = Boolean(poiGenerationReplaceGenerated.checked);
+      updateGenerationControls();
     });
 
     panel.querySelectorAll("[data-generation-random-seed]").forEach(seedButton => {
@@ -1408,7 +1454,11 @@
       ["map-generation-continuity", "generationContinuity"],
       ["map-generation-road", "generationRoadAmount"],
       ["map-generation-river", "generationRiverAmount"],
-      ["map-generation-river-length", "generationRiverLength"]
+      ["map-generation-river-length", "generationRiverLength"],
+      ["map-generation-settlement-density", "generationSettlementDensity"],
+      ["map-generation-population-concentration", "generationPopulationConcentration"],
+      ["map-generation-resource-amount", "generationResourceAmount"],
+      ["map-generation-waypoint-amount", "generationWaypointAmount"]
     ].forEach(([inputId, drawingKey]) => {
       const input = document.getElementById(inputId);
       input?.addEventListener("input", () => {
@@ -1641,12 +1691,21 @@
     renderer.drawing.surveyorOverlaySubview = ["generate", "purge"].includes(subview) ? subview : "paint";
   }
 
+  function getSurveyorPoiSubview() {
+    return renderer.drawing.surveyorPoiSubview === "purge" ? "purge" : "generate";
+  }
+
+  function setSurveyorPoiSubview(subview) {
+    renderer.drawing.surveyorPoiSubview = subview === "purge" ? "purge" : "generate";
+  }
+
   function getVisibleMapEditSection() {
     const mode = renderer.drawing.toolsMode || "chooser";
     if (mode === "surveyor") {
       if (renderer.drawing.surveyorSection === "overlay") {
         return getSurveyorOverlaySubview() === "generate" ? "generation" : "overlay";
       }
+      if (renderer.drawing.surveyorSection === "pois") return "pois";
       return renderer.drawing.surveyorSection === "nuke" ? "nuke" : "regions";
     }
     if (mode === "cartographer") {
@@ -1670,8 +1729,9 @@
     });
     document.getElementById("map-tools-surveyor-button")?.classList.toggle("active", mode === "surveyor");
     document.getElementById("map-tools-cartographer-button")?.classList.toggle("active", mode === "cartographer");
-    document.getElementById("map-surveyor-regions-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "regions");
     document.getElementById("map-surveyor-overlay-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "overlay");
+    document.getElementById("map-surveyor-pois-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "pois");
+    document.getElementById("map-surveyor-regions-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "regions");
     document.getElementById("map-surveyor-utilities-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "nuke");
     document.getElementById("map-cartographer-terrain-button")?.classList.toggle("active", mode === "cartographer" && renderer.drawing.cartographerSection === "terrain");
     document.getElementById("map-cartographer-features-button")?.classList.toggle("active", mode === "cartographer" && renderer.drawing.cartographerSection === "features");
@@ -1680,9 +1740,11 @@
   function updateGenerationPopout() {
     const popout = document.getElementById("map-cartographer-subsection-popout");
     const mode = renderer.drawing.toolsMode || "chooser";
-    const section = mode === "surveyor" ? "overlay" : (renderer.drawing.cartographerSection || "terrain");
+    const section = mode === "surveyor"
+      ? (renderer.drawing.surveyorSection === "pois" ? "pois" : "overlay")
+      : (renderer.drawing.cartographerSection || "terrain");
     const isVisible = (
-      mode === "surveyor" && renderer.drawing.surveyorSection === "overlay" ||
+      mode === "surveyor" && ["overlay", "pois"].includes(renderer.drawing.surveyorSection) ||
       mode === "cartographer" && ["terrain", "features"].includes(section)
     );
     if (!popout) return;
@@ -1693,16 +1755,32 @@
     const generateButton = document.getElementById("map-cartographer-subsection-generate");
     const purgeButton = document.getElementById("map-cartographer-subsection-purge");
     const isOverlay = section === "overlay";
+    const isPois = section === "pois";
     const surveyorOverlaySubview = getSurveyorOverlaySubview();
+    const surveyorPoiSubview = getSurveyorPoiSubview();
     popout.classList.toggle("map-generation-popout-three", isOverlay);
-    if (title) title.textContent = section === "terrain" ? "Terrain" : section === "features" ? "Features" : "Overlay";
+    if (title) title.textContent = section === "terrain" ? "Terrain" : section === "features" ? "Features" : section === "pois" ? "POIs" : "Overlay";
     if (paintButton) {
-      paintButton.textContent = isOverlay ? "Drawing" : "Painting";
-      paintButton.classList.toggle("active", isOverlay ? surveyorOverlaySubview === "paint" : getCartographerSubview(section) !== "generate");
+      paintButton.hidden = false;
+      paintButton.textContent = isPois ? "Generation" : isOverlay ? "Drawing" : "Painting";
+      paintButton.classList.toggle("active",
+        isPois
+          ? surveyorPoiSubview === "generate"
+          : isOverlay
+            ? surveyorOverlaySubview === "paint"
+            : getCartographerSubview(section) !== "generate"
+      );
     }
     if (generateButton) {
-      generateButton.textContent = "Generation";
-      generateButton.classList.toggle("active", isOverlay ? surveyorOverlaySubview === "generate" : getCartographerSubview(section) === "generate");
+      generateButton.hidden = false;
+      generateButton.textContent = isPois ? "Purge" : "Generation";
+      generateButton.classList.toggle("active",
+        isPois
+          ? surveyorPoiSubview === "purge"
+          : isOverlay
+            ? surveyorOverlaySubview === "generate"
+            : getCartographerSubview(section) === "generate"
+      );
     }
     if (purgeButton) {
       purgeButton.hidden = !isOverlay;
@@ -1726,6 +1804,15 @@
     if (copy) copy.textContent = detailMeta?.copy || meta.copy;
   }
 
+  function syncGenerationSectionUi(section) {
+    document.querySelectorAll("[data-generation-section]").forEach(sectionPane => {
+      sectionPane.classList.toggle("active", sectionPane.dataset.generationSection === section);
+    });
+    document.querySelectorAll("[data-generation-action-panel]").forEach(actionPanel => {
+      actionPanel.classList.toggle("active", actionPanel.dataset.generationActionPanel === section);
+    });
+  }
+
   function updateMapEditSurface() {
     const visibleSection = getVisibleMapEditSection();
     const mode = renderer.drawing.toolsMode || "chooser";
@@ -1739,12 +1826,7 @@
         ? "overlays"
         : (renderer.drawing.cartographerSection || "terrain");
       renderer.drawing.generationSection = generationSection;
-      document.querySelectorAll("[data-generation-section]").forEach(sectionPane => {
-        sectionPane.classList.toggle("active", sectionPane.dataset.generationSection === generationSection);
-      });
-      document.querySelectorAll("[data-generation-action-panel]").forEach(actionPanel => {
-        actionPanel.classList.toggle("active", actionPanel.dataset.generationActionPanel === generationSection);
-      });
+      syncGenerationSectionUi(generationSection);
     }
     document.querySelectorAll("[data-map-edit-section]").forEach(sectionPane => {
       sectionPane.classList.toggle("active", Boolean(visibleSection) && sectionPane.dataset.mapEditSection === visibleSection);
@@ -1759,6 +1841,7 @@
     syncMapInteractionCursor();
     updateDrawHint();
     updateOverlaySubviewGroups();
+    updatePoiSubviewGroups();
   }
 
   function updateOverlaySubviewGroups() {
@@ -1777,6 +1860,16 @@
     if (isOverlayVisible && subview === "purge" && renderer.drawing.tool) {
       clearDrawTool();
     }
+  }
+
+  function updatePoiSubviewGroups() {
+    const isPoiVisible = (renderer.drawing.toolsMode || "chooser") === "surveyor" && renderer.drawing.surveyorSection === "pois";
+    const subview = isPoiVisible ? getSurveyorPoiSubview() : "generate";
+    const activeGroup = subview === "purge" ? "purge" : "generation";
+    document.querySelectorAll("[data-poi-subview-group]").forEach(element => {
+      const group = element.dataset.poiSubviewGroup || "generation";
+      element.hidden = isPoiVisible ? group !== activeGroup : false;
+    });
   }
 
   function isOverlayToolSpecificControl(element) {
@@ -1809,10 +1902,11 @@
   }
 
   function setMapEditSection(section) {
-    const normalized = ["terrain", "features", "overlay", "regions", "nuke", "generation"].includes(section) ? section : "terrain";
+    const normalized = ["terrain", "features", "overlay", "pois", "regions", "nuke", "generation"].includes(section) ? section : "terrain";
     renderer.drawing.tool = "";
     resetDrawingState();
-    if (normalized === "regions" || normalized === "nuke" || normalized === "overlay") {
+    if (normalized === "regions" || normalized === "nuke" || normalized === "overlay" || normalized === "pois") {
+      if (normalized === "pois") setSurveyorPoiSubview(getSurveyorPoiSubview());
       renderer.drawing.surveyorSection = normalized;
       setMapToolsMode("surveyor");
       return;
@@ -1838,12 +1932,7 @@
   function setGenerationSection(section) {
     const normalized = ["terrain", "features", "overlays"].includes(section) ? section : "terrain";
     renderer.drawing.generationSection = normalized;
-    document.querySelectorAll("[data-generation-section]").forEach(sectionPane => {
-      sectionPane.classList.toggle("active", sectionPane.dataset.generationSection === normalized);
-    });
-    document.querySelectorAll("[data-generation-action-panel]").forEach(actionPanel => {
-      actionPanel.classList.toggle("active", actionPanel.dataset.generationActionPanel === normalized);
-    });
+    syncGenerationSectionUi(normalized);
     if ((renderer.drawing.toolsMode || "chooser") === "cartographer" && getCartographerSubview(renderer.drawing.cartographerSection) === "generate") {
       updateMapEditSurface();
     } else {
@@ -2142,6 +2231,10 @@
     renderer.drawing.generationMountains = 100;
     renderer.drawing.generationCompression = 100;
     renderer.drawing.generationContinuity = 100;
+    renderer.drawing.generationSettlementDensity = 100;
+    renderer.drawing.generationPopulationConcentration = 100;
+    renderer.drawing.generationResourceAmount = 100;
+    renderer.drawing.generationWaypointAmount = 100;
     renderer.drawing.stagedTerrainOriginals.clear();
     renderer.drawing.stagedOverlayBaseline = null;
     renderer.drawing.stagedUndoStack = [];
@@ -2927,7 +3020,6 @@
   }
 
   function updateGenerationControls() {
-    const generationSeed = document.getElementById("map-generation-seed");
     const generationRegionStyle = document.getElementById("map-generation-region-style");
     const generationDensity = document.getElementById("map-generation-density");
     const generationDensityValue = document.getElementById("map-generation-density-value");
@@ -2937,14 +3029,23 @@
     const generationRunFeatures = document.getElementById("map-generation-run-features");
     const generationRunRoads = document.getElementById("map-generation-run-roads");
     const generationRunRivers = document.getElementById("map-generation-run-rivers");
+    const generationRunPois = document.getElementById("map-generation-run-pois");
+    const clearGeneratedPoisButton = document.getElementById("map-clear-generated-pois");
+    const clearPoisButton = document.getElementById("map-clear-pois");
+    const poiGenerationResetSliders = document.getElementById("map-poi-generation-reset-sliders");
+    const poiGenerationReplaceGenerated = document.getElementById("map-poi-generation-replace-generated");
     const generationResetSliders = document.getElementById("map-generation-reset-sliders");
     const generationPreviewTerrain = document.getElementById("map-generation-preview-terrain");
     const sharedApplyButton = document.getElementById("map-editor-apply-staged");
     const sharedDiscardButton = document.getElementById("map-editor-discard-staged");
+    const hasSavedPois = ((db?.raw?.pois?.length || 0) + (db?.raw?.poiGroups?.length || 0)) > 0;
+    const hasGeneratedPois = ((db?.raw?.pois || []).filter(poi => poi?.Generation_Source).length + (db?.raw?.poiGroups || []).filter(group => group?.Generation_Source).length) > 0;
 
-    if (generationSeed && generationSeed.value !== renderer.drawing.generationSeed) {
-      generationSeed.value = renderer.drawing.generationSeed || "";
-    }
+    document.querySelectorAll("[data-generation-seed-input]").forEach(seedInput => {
+      if (seedInput.value !== (renderer.drawing.generationSeed || "")) {
+        seedInput.value = renderer.drawing.generationSeed || "";
+      }
+    });
     if (generationRegionStyle && generationRegionStyle.value !== (renderer.drawing.generationRegionStyle || "balanced")) {
       generationRegionStyle.value = renderer.drawing.generationRegionStyle || "balanced";
     }
@@ -2961,6 +3062,14 @@
     }
     if (generationRunRoads) generationRunRoads.disabled = Boolean(renderer.drawing.saving);
     if (generationRunRivers) generationRunRivers.disabled = Boolean(renderer.drawing.saving);
+    if (generationRunPois) generationRunPois.disabled = Boolean(renderer.drawing.saving);
+    if (clearGeneratedPoisButton) clearGeneratedPoisButton.disabled = Boolean(renderer.drawing.saving || !hasGeneratedPois);
+    if (clearPoisButton) clearPoisButton.disabled = Boolean(renderer.drawing.saving || !hasSavedPois);
+    if (poiGenerationResetSliders) poiGenerationResetSliders.disabled = Boolean(renderer.drawing.saving);
+    if (poiGenerationReplaceGenerated) {
+      poiGenerationReplaceGenerated.checked = Boolean(renderer.drawing.generationReplaceGeneratedPois);
+      poiGenerationReplaceGenerated.disabled = Boolean(renderer.drawing.saving);
+    }
     if (generationResetSliders) generationResetSliders.disabled = Boolean(renderer.drawing.saving);
     document.querySelectorAll("[data-generation-random-seed], [data-generation-discard-section]").forEach(button => {
       button.disabled = Boolean(renderer.drawing.saving);
@@ -2978,7 +3087,11 @@
       ["continuity", "generationContinuity"],
       ["road", "generationRoadAmount"],
       ["river", "generationRiverAmount"],
-      ["river-length", "generationRiverLength"]
+      ["river-length", "generationRiverLength"],
+      ["settlement-density", "generationSettlementDensity"],
+      ["population-concentration", "generationPopulationConcentration"],
+      ["resource-amount", "generationResourceAmount"],
+      ["waypoint-amount", "generationWaypointAmount"]
     ].forEach(([control, drawingKey]) => {
       const input = document.getElementById(`map-generation-${control}`);
       const value = document.getElementById(`map-generation-${control}-value`);
@@ -3006,7 +3119,21 @@
       generationContinuity: 100,
       generationRoadAmount: 100,
       generationRiverAmount: 100,
-      generationRiverLength: 100
+      generationRiverLength: 100,
+      generationSettlementDensity: 100,
+      generationPopulationConcentration: 100,
+      generationResourceAmount: 100,
+      generationWaypointAmount: 100
+    });
+    updateGenerationControls();
+  }
+
+  function resetPoiGenerationSliders() {
+    Object.assign(renderer.drawing, {
+      generationSettlementDensity: 100,
+      generationPopulationConcentration: 100,
+      generationResourceAmount: 100,
+      generationWaypointAmount: 100
     });
     updateGenerationControls();
   }
@@ -3480,6 +3607,10 @@
         return;
       }
       hint.textContent = "Preview a full terrain draft locally before applying it.";
+      return;
+    }
+    if (activeSection === "pois") {
+      hint.textContent = "Generate settlements, resource sites, and waypoints directly into the live POI system.";
       return;
     }
     hint.textContent = "Right-drag or middle-drag pans. Ctrl+Z undoes, Ctrl+Y redoes.";
@@ -8386,17 +8517,17 @@
     updateGenerationControls();
   }
 
-  async function runGenerationRoadPass() {
+  async function runGenerationRoadPass(options = {}) {
     const campaign = getActiveCampaign?.();
-    if (!campaign || renderer.drawing.saving) return;
-    if (!await confirmOverlayGeneration("road", "roads")) return;
+    if (!campaign || renderer.drawing.saving) return false;
+    if (!options.skipConfirm && !await confirmOverlayGeneration("road", "roads")) return false;
     const routes = buildGeneratedRoadRoutes(campaign.id);
     if (!routes.length) {
       window.alert?.("No road routes could be generated from the current POI layout.");
-      return;
+      return false;
     }
 
-    await persistGeneratedOverlayRoutes({
+    return persistGeneratedOverlayRoutes({
       campaignId: campaign.id,
       routes,
       tool: "road",
@@ -8406,17 +8537,17 @@
     });
   }
 
-  async function runGenerationRiverPass() {
+  async function runGenerationRiverPass(options = {}) {
     const campaign = getActiveCampaign?.();
-    if (!campaign || renderer.drawing.saving) return;
-    if (!await confirmOverlayGeneration("river", "rivers")) return;
+    if (!campaign || renderer.drawing.saving) return false;
+    if (!options.skipConfirm && !await confirmOverlayGeneration("river", "rivers")) return false;
     const routes = buildGeneratedRiverRoutes(campaign.id);
     if (!routes.length) {
       window.alert?.("No river routes could be generated from the current terrain.");
-      return;
+      return false;
     }
 
-    await persistGeneratedOverlayRoutes({
+    return persistGeneratedOverlayRoutes({
       campaignId: campaign.id,
       routes,
       tool: "river",
@@ -8424,6 +8555,208 @@
       routeMetadata: { isMajorRoute: false, routeName: "" },
       emptyMessage: "Generated rivers already matched existing river overlays."
     });
+  }
+
+  async function runGenerationPoiPass() {
+    const campaign = getActiveCampaign?.();
+    const generator = window.CampaignGeneratedMapGenerator;
+    if (!campaign || renderer.drawing.saving || !generator?.generatePoiDrafts) return;
+    if (!await confirmPoiGeneration()) return;
+    if (!await ensurePoiGenerationRiverBackdrop()) return;
+
+    if (renderer.drawing.generationReplaceGeneratedPois) {
+      const purgeResult = await purgePois({
+        generatedOnly: true,
+        skipConfirm: true,
+        silentIfEmpty: true,
+        showSuccessAlert: false
+      });
+      if (purgeResult?.success === false) return;
+    }
+
+    try {
+      const drafts = generator.generatePoiDrafts({
+        ...getPoiGeneratorOptions(campaign.id),
+        hexes: renderer.hexes,
+        existingPois: db?.raw?.pois || [],
+        mapOverlays: renderer.mapOverlays || []
+      });
+
+      if (!drafts.length) {
+        window.alert?.("No new POIs could be generated from the current map state.");
+        return;
+      }
+
+      const result = await persistGeneratedPois(campaign.id, drafts, { showSuccessAlert: false });
+      if (!result?.success) return;
+      const summary = `Generated ${result.createdCount} POIs: ${result.settlementCount} settlement${result.settlementCount === 1 ? "" : "s"}, ${result.resourceCount} resource site${result.resourceCount === 1 ? "" : "s"}, and ${result.waypointCount} waypoint${result.waypointCount === 1 ? "" : "s"}.`;
+      await maybeGenerateRoadsAfterPoiGeneration(summary);
+    } catch (error) {
+      console.error("Unable to prepare generated POIs:", error);
+      window.alert?.(error?.message || "Unable to generate POIs.");
+    }
+  }
+
+  function removePoiFromLocalDbFallback(poiUuid) {
+    const poi = (db?.raw?.pois || []).find(row => row?.__uuid === poiUuid);
+    if (!poi) return;
+
+    db.raw.pois = (db.raw.pois || []).filter(row => row?.__uuid !== poiUuid);
+    if (db.poisById) delete db.poisById[poi.POI_ID];
+
+    if (poi.Hex_ID_Ref && Array.isArray(db.poisByHexId?.[poi.Hex_ID_Ref])) {
+      db.poisByHexId[poi.Hex_ID_Ref] = db.poisByHexId[poi.Hex_ID_Ref]
+        .filter(row => row.POI_ID !== poi.POI_ID);
+    }
+    if (poi.POI_Group_ID && Array.isArray(db.poisByGroupId?.[poi.POI_Group_ID])) {
+      db.poisByGroupId[poi.POI_Group_ID] = db.poisByGroupId[poi.POI_Group_ID]
+        .filter(row => row.POI_ID !== poi.POI_ID);
+    }
+
+    (db?.raw?.npcs || []).forEach(npc => {
+      if (npc.Home_ID_Ref === poi.POI_ID) npc.Home_ID_Ref = "";
+    });
+    Object.values(db?.npcsById || {}).forEach(npc => {
+      if (npc.Home_ID_Ref === poi.POI_ID) npc.Home_ID_Ref = "";
+    });
+    db.npcsByHomeId = {};
+    (db?.raw?.npcs || []).forEach(npc => {
+      if (!npc.Home_ID_Ref) return;
+      if (!db.npcsByHomeId[npc.Home_ID_Ref]) db.npcsByHomeId[npc.Home_ID_Ref] = [];
+      db.npcsByHomeId[npc.Home_ID_Ref].push(npc);
+    });
+  }
+
+  function removePoiGroupFromLocalDbFallback(groupUuid) {
+    const group = (db?.raw?.poiGroups || []).find(row => row?.__uuid === groupUuid);
+    if (!group) return;
+
+    db.raw.poiGroups = (db.raw.poiGroups || []).filter(row => row?.__uuid !== groupUuid);
+    if (db.poiGroupsById) delete db.poiGroupsById[group.POI_Group_ID];
+    if (db.poisByGroupId?.[group.POI_Group_ID]) delete db.poisByGroupId[group.POI_Group_ID];
+    Object.values(db.poisById || {}).forEach(poi => {
+      if (poi.POI_Group_ID === group.POI_Group_ID) poi.POI_Group_ID = "";
+    });
+  }
+
+  function refreshPoiViewsAfterPurgeFallback() {
+    refreshPoiLayerFromDatabase();
+    const currentPage = typeof getCurrentCodexPage === "function" ? getCurrentCodexPage() : null;
+    if (currentPage?.type === "poi") {
+      renderCodexPage?.(db?.poisById?.[currentPage.id] ? "poi" : "pois", db?.poisById?.[currentPage.id] ? currentPage.id : null);
+      fitCodexHeaderText?.();
+      updateCodexBackButton?.();
+      return;
+    }
+    if (currentPage?.type === "poi-group") {
+      renderCodexPage?.(db?.poiGroupsById?.[currentPage.id] ? "poi-group" : "pois", db?.poiGroupsById?.[currentPage.id] ? currentPage.id : null);
+      fitCodexHeaderText?.();
+      updateCodexBackButton?.();
+      return;
+    }
+    if (currentPage?.type === "pois") {
+      renderCodexPage?.("pois", null);
+      fitCodexHeaderText?.();
+      updateCodexBackButton?.();
+      return;
+    }
+    if (currentPage?.type === "hex" || currentPage?.type === "npc") {
+      renderCodexPage?.(currentPage.type, currentPage.id);
+      fitCodexHeaderText?.();
+      updateCodexBackButton?.();
+      return;
+    }
+    window.renderPoiListIntoContainer?.();
+  }
+
+  async function purgePois(options = {}) {
+    const generatedOnly = options.generatedOnly === true;
+    const skipConfirm = options.skipConfirm === true;
+    const silentIfEmpty = options.silentIfEmpty === true;
+    const showSuccessAlert = options.showSuccessAlert !== false;
+    const campaign = getActiveCampaign?.();
+    if (!campaign || renderer.drawing.saving) return { success: false, cancelled: true };
+
+    const poiRows = Array.isArray(db?.raw?.pois)
+      ? db.raw.pois.filter(poi => !generatedOnly || poi?.Generation_Source).map(poi => ({ ...poi }))
+      : [];
+    const groupRows = Array.isArray(db?.raw?.poiGroups)
+      ? db.raw.poiGroups.filter(group => !generatedOnly || group?.Generation_Source).map(group => ({ ...group }))
+      : [];
+    const totalCount = poiRows.length + groupRows.length;
+    if (!totalCount) {
+      if (!silentIfEmpty) {
+        window.alert?.(generatedOnly ? "There are no generated POIs to purge." : "There are no saved POIs to purge.");
+      }
+      return { success: true, empty: true, deletedPoiCount: 0, deletedGroupCount: 0 };
+    }
+
+    const poiLabel = `${poiRows.length} ${generatedOnly ? "generated " : ""}POI${poiRows.length === 1 ? "" : "s"}`;
+    const groupLabel = groupRows.length ? ` and ${groupRows.length} ${generatedOnly ? "generated " : ""}grouped POI${groupRows.length === 1 ? "" : "s"}` : "";
+    const message = generatedOnly
+      ? `Purge all saved ${poiLabel}${groupLabel} from the live map and codex immediately? Manually created POIs will be kept.`
+      : `Purge all saved ${poiLabel}${groupLabel} from the live map and codex immediately? This cannot be undone.`;
+    if (!skipConfirm && !await confirmNukeAction(message)) return { success: false, cancelled: true };
+
+    const removeLocalPoi = window.CampaignCodexPoiMutations?.removePoiByUuidFromLocalDb || removePoiFromLocalDbFallback;
+    const removeLocalPoiGroup = window.CampaignCodexPoiMutations?.removePoiGroupByUuidFromLocalDb || removePoiGroupFromLocalDbFallback;
+    const refreshPoiViews = window.CampaignCodexPoiMutations?.refreshPoiViewsAfterPurge || refreshPoiViewsAfterPurgeFallback;
+
+    renderer.drawing.saving = true;
+    const showBulkLoading = totalCount >= 8;
+    if (showBulkLoading) setLoading(true);
+    refreshEditorPreviewControls();
+
+    let deletedPoiCount = 0;
+    let deletedGroupCount = 0;
+    try {
+      for (const poi of poiRows) {
+        if (!poi?.__uuid) continue;
+        const { error } = await campaignSupabase.rpc("delete_campaign_record", {
+          target_campaign_id: campaign.id,
+          target_record_type: "poi",
+          target_record_id: poi.__uuid
+        });
+        if (error) throw error;
+        removeLocalPoi?.(poi.__uuid);
+        deletedPoiCount += 1;
+      }
+
+      for (const group of groupRows) {
+        if (!group?.__uuid) continue;
+        const { error } = await campaignSupabase.rpc("delete_campaign_record", {
+          target_campaign_id: campaign.id,
+          target_record_type: "poi_group",
+          target_record_id: group.__uuid
+        });
+        if (error) throw error;
+        removeLocalPoiGroup?.(group.__uuid);
+        deletedGroupCount += 1;
+      }
+
+      refreshPoiViews?.();
+      const successSummary = deletedGroupCount
+        ? `${deletedPoiCount} ${generatedOnly ? "generated " : ""}POI${deletedPoiCount === 1 ? "" : "s"} and ${deletedGroupCount} ${generatedOnly ? "generated " : ""}grouped POI${deletedGroupCount === 1 ? "" : "s"}`
+        : `${deletedPoiCount} ${generatedOnly ? "generated " : ""}POI${deletedPoiCount === 1 ? "" : "s"}`;
+      if (showSuccessAlert) window.alert?.(`Purged ${successSummary}.`);
+      return { success: true, deletedPoiCount, deletedGroupCount };
+    } catch (error) {
+      console.error(`Unable to purge ${generatedOnly ? "generated " : ""}POIs:`, error);
+      if (deletedPoiCount || deletedGroupCount) {
+        refreshPoiViews?.();
+      }
+      const deletedSummary = (deletedPoiCount || deletedGroupCount)
+        ? (deletedGroupCount
+          ? ` ${deletedPoiCount} ${generatedOnly ? "generated " : ""}POI${deletedPoiCount === 1 ? "" : "s"} and ${deletedGroupCount} ${generatedOnly ? "generated " : ""}grouped POI${deletedGroupCount === 1 ? "" : "s"} were purged before the error.`
+          : ` ${deletedPoiCount} ${generatedOnly ? "generated " : ""}POI${deletedPoiCount === 1 ? "" : "s"} were purged before the error.`)
+        : "";
+      window.alert?.(`${error?.message || `Unable to purge ${generatedOnly ? "generated " : ""}POIs.`}${deletedSummary}`);
+      return { success: false, deletedPoiCount, deletedGroupCount, error };
+    } finally {
+      renderer.drawing.saving = false;
+      if (showBulkLoading) setLoading(false);
+      refreshEditorPreviewControls();
+    }
   }
 
   async function confirmOverlayGeneration(type, label) {
@@ -8435,6 +8768,148 @@
       title: "Generate Overlays?",
       confirmLabel: "Generate"
     });
+  }
+
+  async function confirmPoiGeneration() {
+    const existing = (db?.raw?.pois || []).length;
+    if (!existing) return true;
+    return showMapConfirm(`Generate new POIs on top of ${existing} existing saved POI${existing === 1 ? "" : "s"}? This saves directly to the live map and avoids occupied hexes when possible.`, {
+      title: "Generate POIs?",
+      confirmLabel: "Generate"
+    });
+  }
+
+  function hasSavedRiverOverlays() {
+    return (renderer.mapOverlays || []).some(overlay => (
+      !overlay?.__preview &&
+      String(overlay?.Overlay_Type || "").toLowerCase() === "river" &&
+      (overlay?.Hex_ID_Ref || overlay?.From_Hex_ID_Ref || overlay?.To_Hex_ID_Ref)
+    ));
+  }
+
+  function countSavedOverlaySegmentsByType(type) {
+    return (renderer.mapOverlays || [])
+      .filter(overlay => (
+        !overlay?.__preview &&
+        String(overlay?.Overlay_Type || "").toLowerCase() === String(type || "").toLowerCase() &&
+        overlay?.To_Hex_ID_Ref
+      ))
+      .length;
+  }
+
+  async function maybeGenerateRoadsAfterPoiGeneration(summary) {
+    const existingRoads = countSavedOverlaySegmentsByType("road");
+    if (existingRoads > 0) {
+      const shouldReplaceRoads = await showMapConfirm(
+        `${summary}\n\nReplace ${existingRoads} existing saved road segment${existingRoads === 1 ? "" : "s"} so the road network fits the newly generated POIs?`,
+        {
+          title: "Replace Roads?",
+          confirmLabel: "Replace Roads",
+          cancelLabel: "Not Now"
+        }
+      );
+      if (!shouldReplaceRoads) return;
+      const purged = await purgeSavedOverlayType("road", { skipConfirm: true, showSuccessAlert: false });
+      if (!purged) return;
+      await runGenerationRoadPass({ skipConfirm: true });
+      return;
+    }
+
+    const shouldGenerateRoads = await showMapConfirm(
+      `${summary}\n\nGenerate roads now from the current settlement backbone?`,
+      {
+        title: "Generate Roads Now?",
+        confirmLabel: "Generate Roads",
+        cancelLabel: "Not Now"
+      }
+    );
+    if (shouldGenerateRoads) {
+      await runGenerationRoadPass({ skipConfirm: true });
+    }
+  }
+
+  async function ensurePoiGenerationRiverBackdrop() {
+    if (hasSavedRiverOverlays()) return true;
+    const generateFirst = await showMapConfirm(
+      "POI generation works best with rivers already generated or drawn. Generate rivers first?",
+      {
+        title: "Generate Rivers First?",
+        confirmLabel: "Generate Rivers First",
+        cancelLabel: "More Options"
+      }
+    );
+    if (generateFirst) {
+      return await runGenerationRiverPass({ skipConfirm: true }) === true;
+    }
+    return showMapConfirm(
+      "Continue POI generation without rivers? Settlements will lean more on coasts, lakes, and broad terrain fertility.",
+      {
+        title: "Continue Without Rivers?",
+        confirmLabel: "Continue",
+        cancelLabel: "Cancel"
+      }
+    );
+  }
+
+  function adaptGeneratedPoiRpcRow(row) {
+    const record = Array.isArray(row) ? row[0] : row;
+    if (!record?.id || !record?.ref_code) return null;
+    return {
+      __uuid: record.id,
+      POI_ID: record.ref_code,
+      POI_Group_ID: db?.raw?.poiGroups?.find(group => group.__uuid === record.poi_group_id)?.POI_Group_ID || "",
+      Name: record.name || "",
+      Hex_ID_Ref: db?.raw?.hexes?.find(hex => hex.__uuid === record.hex_id)?.Hex_ID || "",
+      POI_Type: window.CampaignPoiTypes?.getTypeLabel?.(record.poi_type) || record.poi_type || "",
+      POI_Type_Value: window.CampaignPoiTypes?.getStoredTypeValue?.(record.poi_type) || record.poi_type || "",
+      POI_Icon: record.poi_icon || "",
+      POI_Tags: Array.isArray(record.poi_tags) ? record.poi_tags.filter(Boolean) : [],
+      Generation_Source: record.generation_source || "",
+      "Notoriety Tier": window.CampaignPoiTypes?.getNotorietyLabel?.(record.notoriety_tier) || record.notoriety_tier || "",
+      "Notoriety Tier_Value": window.CampaignPoiTypes?.getStoredNotorietyValue?.(record.notoriety_tier) || record.notoriety_tier || "",
+      Population: record.population || "",
+      Lore: record.lore || "",
+      Image: ""
+    };
+  }
+
+  function addGeneratedPoiToLocalDb(poi) {
+    if (!poi?.POI_ID || !db?.raw) return;
+    if (!Array.isArray(db.raw.pois)) db.raw.pois = [];
+    if (!db.poisById) db.poisById = {};
+    if (!db.poisByHexId) db.poisByHexId = {};
+    if (!db.poisByGroupId) db.poisByGroupId = {};
+
+    const existing = db.poisById[poi.POI_ID] || null;
+    if (existing?.Hex_ID_Ref && Array.isArray(db.poisByHexId[existing.Hex_ID_Ref])) {
+      db.poisByHexId[existing.Hex_ID_Ref] = db.poisByHexId[existing.Hex_ID_Ref].filter(candidate => candidate.POI_ID !== poi.POI_ID);
+    }
+    if (existing?.POI_Group_ID && Array.isArray(db.poisByGroupId[existing.POI_Group_ID])) {
+      db.poisByGroupId[existing.POI_Group_ID] = db.poisByGroupId[existing.POI_Group_ID].filter(candidate => candidate.POI_ID !== poi.POI_ID);
+    }
+
+    const existingIndex = db.raw.pois.findIndex(candidate => candidate.POI_ID === poi.POI_ID || candidate.__uuid === poi.__uuid);
+    if (existingIndex >= 0) db.raw.pois.splice(existingIndex, 1, poi);
+    else db.raw.pois.push(poi);
+
+    db.poisById[poi.POI_ID] = poi;
+    if (poi.Hex_ID_Ref) {
+      if (!Array.isArray(db.poisByHexId[poi.Hex_ID_Ref])) db.poisByHexId[poi.Hex_ID_Ref] = [];
+      db.poisByHexId[poi.Hex_ID_Ref].push(poi);
+    }
+    if (poi.POI_Group_ID) {
+      if (!Array.isArray(db.poisByGroupId[poi.POI_Group_ID])) db.poisByGroupId[poi.POI_Group_ID] = [];
+      db.poisByGroupId[poi.POI_Group_ID].push(poi);
+    }
+  }
+
+  function registerGeneratedPoiRowsInLocalDb(rows) {
+    const list = Array.isArray(rows) ? rows : [rows];
+    const createdPois = list
+      .map(adaptGeneratedPoiRpcRow)
+      .filter(Boolean);
+    createdPois.forEach(addGeneratedPoiToLocalDb);
+    return createdPois;
   }
 
   function previewGeneratedOverlayRoutes({ campaignId, routes, tool, style, routeMetadata, emptyMessage }) {
@@ -8468,10 +8943,11 @@
 
     if (!segments.length) {
       window.alert?.(emptyMessage || "No new overlays were generated.");
-      return;
+      return false;
     }
 
-    await persistGeneratedOverlaySegments(campaignId, segments, existingOverlayIds);
+    const saved = await persistGeneratedOverlaySegments(campaignId, segments, existingOverlayIds);
+    return Array.isArray(saved) && saved.length > 0;
   }
 
   function getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting = true }) {
@@ -8573,6 +9049,7 @@
 
       pushOverlayUndoAction(saved.filter(overlay => !existingOverlayIds.has(overlay.__uuid)));
       render();
+      return saved;
     } catch (error) {
       removeLocalOverlaysById(pendingOverlays.map(overlay => overlay.__uuid));
       pushOverlayUndoAction(saved.filter(overlay => !existingOverlayIds.has(overlay.__uuid)));
@@ -8582,8 +9059,77 @@
       render();
       console.error("Unable to generate map overlays:", error);
       window.alert?.(error.message || "Unable to generate map overlays.");
+      return [];
     } finally {
       renderer.drawing.saving = false;
+      refreshEditorPreviewControls();
+    }
+  }
+
+  async function persistGeneratedPois(campaignId, drafts, options = {}) {
+    const showSuccessAlert = options.showSuccessAlert !== false;
+    const registerCreatedPois = window.CampaignCodexPoiMutations?.registerCreatedPoiRowsInLocalDb || registerGeneratedPoiRowsInLocalDb;
+    const refreshPoiViews = window.CampaignCodexPoiMutations?.refreshPoiViews || (() => {
+      refreshPoiLayerFromDatabase();
+    });
+
+    const showBulkLoading = drafts.length >= 8;
+    renderer.drawing.saving = true;
+    if (showBulkLoading) setLoading(true);
+    refreshEditorPreviewControls();
+
+    let createdCount = 0;
+    try {
+      for (const draft of drafts) {
+        const hexUuid = db?.hexesById?.[draft.hexId]?.__uuid
+          || db?.raw?.hexes?.find(hex => hex.Hex_ID === draft.hexId)?.__uuid
+          || "";
+        if (!hexUuid) throw new Error(`Unable to locate generated hex ${draft.hexId} in this campaign.`);
+
+        const { data, error } = await campaignSupabase.rpc("create_poi_with_next_ref_code", {
+          target_campaign_id: campaignId,
+          poi_name: draft.name,
+          poi_type: draft.type,
+          poi_icon: draft.icon,
+          poi_hex_id: hexUuid,
+          poi_tags: draft.tags || [],
+          poi_notoriety_tier: draft.notoriety || null,
+          poi_population: draft.population || null,
+          poi_lore: draft.lore || null,
+          poi_generation_source: "poi_generation_v1",
+          poi_visibility: "shared",
+          poi_group_id: null
+        });
+
+        if (error) throw error;
+
+        registerCreatedPois(data, { refresh: false });
+        createdCount += 1;
+      }
+
+      refreshPoiViews?.();
+      const settlementCount = drafts.filter(draft => draft.type === "settlement").length;
+      const resourceCount = drafts.filter(draft => draft.type === "resource_site").length;
+      const waypointCount = drafts.filter(draft => draft.type === "waypoint").length;
+      if (showSuccessAlert) {
+        window.alert?.(`Generated ${createdCount} POIs: ${settlementCount} settlement${settlementCount === 1 ? "" : "s"}, ${resourceCount} resource site${resourceCount === 1 ? "" : "s"}, and ${waypointCount} waypoint${waypointCount === 1 ? "" : "s"}.`);
+      }
+      return {
+        success: true,
+        createdCount,
+        settlementCount,
+        resourceCount,
+        waypointCount
+      };
+    } catch (error) {
+      console.error("Unable to generate POIs:", error);
+      refreshPoiViews?.();
+      const createdText = createdCount ? ` ${createdCount} POI${createdCount === 1 ? "" : "s"} were created before the error.` : "";
+      window.alert?.(`${error.message || "Unable to generate POIs."}${createdText}`);
+      return { success: false, createdCount, error };
+    } finally {
+      renderer.drawing.saving = false;
+      if (showBulkLoading) setLoading(false);
       refreshEditorPreviewControls();
     }
   }
@@ -8855,6 +9401,7 @@
   function buildGeneratedRiverRoutes(campaignId) {
     const seedBase = getGenerationSeedBase(campaignId);
     const amountScale = Math.max(0.25, Math.min(2, Number(renderer.drawing.generationRiverAmount || 100) / 100));
+    const lengthScale = Math.max(0.5, Math.min(1.75, Number(renderer.drawing.generationRiverLength || 100) / 100));
     const maxRivers = Math.max(1, Math.round(7 * amountScale));
     const sources = renderer.hexes
       .filter(hex => !isWaterHex(hex) && getRiverSourceScore(hex) > 0)
@@ -8864,14 +9411,16 @@
       ));
     const routes = [];
     const usedHexes = new Set();
+    let trunkCount = 0;
 
     for (const source of sources) {
-      if (routes.length >= maxRivers) break;
+      if (trunkCount >= maxRivers) break;
       if (nearbyHexesWithin(source, 4).some(hex => usedHexes.has(hex.id))) continue;
-      const route = getGeneratedRiverRoute(source, campaignId);
-      const sequence = Array.isArray(route) ? route : route?.sequence || [];
+      const route = getGeneratedRiverRoute(source, campaignId, { seedBase, lengthScale });
+      const sequence = route?.sequence || [];
       if (!sequence || sequence.length < 4) continue;
-      routes.push(route);
+      routes.push(...(route.routes || []));
+      trunkCount += 1;
       sequence.forEach(hexId => usedHexes.add(hexId));
     }
 
@@ -8889,42 +9438,170 @@
     return getRiverSourceScore(hex) + seededUnit(`${seedBase}:river-source:${hex.id}`) * 5;
   }
 
-  function getGeneratedRiverRoute(source, campaignId) {
-    const route = [source.id];
-    const visited = new Set(route);
-    let current = source;
-    const lengthScale = Math.max(0.5, Math.min(1.75, Number(renderer.drawing.generationRiverLength || 100) / 100));
-    const maxSteps = Math.round(54 * lengthScale);
-    const entryEdge = getOuterMapEdge(current);
-    const seedBase = getGenerationSeedBase(campaignId);
+  function getGeneratedRiverRoute(source, campaignId, options = {}) {
+    const seedBase = options.seedBase || getGenerationSeedBase(campaignId);
+    const lengthScale = options.lengthScale || Math.max(0.5, Math.min(1.75, Number(renderer.drawing.generationRiverLength || 100) / 100));
+    const entryEdge = getOuterMapEdge(source);
     const startsOffMap = Boolean(entryEdge && seededUnit(`${seedBase}:river-entry:${source.id}`) < 0.45);
+    const goals = getGeneratedRiverGoalCandidates(source, seedBase, lengthScale);
+    if (!goals.length) return null;
 
-    for (let step = 0; step < maxSteps; step += 1) {
-      const neighbors = EDGE_NAMES.map(edgeName => getNeighborHex(current, edgeName)).filter(Boolean);
-      const waterNeighbor = neighbors
-        .filter(neighbor => isWaterHex(neighbor))
-        .sort((a, b) => seededUnit(`${seedBase}:river-water:${current.id}:${a.id}`) - seededUnit(`${seedBase}:river-water:${current.id}:${b.id}`))[0];
-      if (waterNeighbor) {
-        route.push(waterNeighbor.id);
-        return startsOffMap ? { sequence: route, startEdge: entryEdge } : route;
+    const previousSalt = renderer.drawing.manualRiverPathSalt;
+    const salt = createManualRiverPathSalt(source.id, goals.slice(0, 4).map(goal => goal.id).join(":"));
+    renderer.drawing.manualRiverPathSalt = salt;
+    const sequence = getGeneratedRiverAdaptivePathSequence(source.id, goals, { source, seedBase, lengthScale });
+    renderer.drawing.manualRiverPathSalt = previousSalt;
+    if (!sequence?.length || sequence.length < 4) return null;
+
+    const visibleRoutes = getManualRiverVisibleRoutes(sequence, salt, { isMajorRoute: false, routeName: "" })
+      .map((route, index) => ({
+        ...route,
+        startEdge: startsOffMap && index === 0 ? entryEdge : route.startEdge || ""
+      }));
+    visibleRoutes.push(...getManualRiverTributaryRoutes(sequence, salt));
+    return { routes: visibleRoutes, sequence };
+  }
+
+  function getGeneratedRiverGoalCandidates(source, seedBase, lengthScale) {
+    if (!source) return [];
+    const ranges = [
+      {
+        minDistance: Math.max(4, Math.round(5 * lengthScale)),
+        maxDistance: Math.max(8, Math.round(18 + lengthScale * 18)),
+        allowDeepSea: false
+      },
+      {
+        minDistance: 2,
+        maxDistance: Math.max(10, Math.round(24 + lengthScale * 18)),
+        allowDeepSea: true
       }
-
-      const next = neighbors
-        .filter(neighbor => !visited.has(neighbor.id))
-        .map(neighbor => ({
-          hex: neighbor,
-          score: getRiverStepScore(current, neighbor, seedBase, step)
+    ];
+    for (const range of ranges) {
+      const matches = renderer.hexes
+        .filter(hex => {
+          if (!hex?.id || hex.id === source.id || !isWaterHex(hex)) return false;
+          if (!range.allowDeepSea && hex.baseTerrain === "deep_sea") return false;
+          const distance = roadPathHeuristic(source, hex);
+          return distance >= range.minDistance && distance <= range.maxDistance;
+        })
+        .map(hex => ({
+          hex,
+          score: getGeneratedRiverGuideGoalScore(source, source, hex, seedBase, lengthScale)
         }))
         .filter(candidate => Number.isFinite(candidate.score))
-        .sort((a, b) => a.score - b.score)[0]?.hex;
+        .sort((a, b) => a.score - b.score || a.hex.id.localeCompare(b.hex.id));
+      if (!matches.length) continue;
 
-      if (!next) break;
-      route.push(next.id);
-      visited.add(next.id);
-      current = next;
+      const spaced = [];
+      matches.forEach(candidate => {
+        if (spaced.length >= 14) return;
+        if (spaced.some(existing => hexDistance(existing.hex, candidate.hex) < 5)) return;
+        spaced.push(candidate);
+      });
+      if (spaced.length) return spaced.map(candidate => candidate.hex);
+      return matches.slice(0, 10).map(candidate => candidate.hex);
+    }
+    return [];
+  }
+
+  function getGeneratedRiverAdaptivePathSequence(fromHexId, goalCandidates, options = {}) {
+    const start = hexForPathPoint(fromHexId);
+    const goals = Array.isArray(goalCandidates) ? goalCandidates.filter(goal => goal?.id) : [];
+    if (!start || !goals.length) return null;
+
+    const goalIds = new Set(goals.map(goal => goal.id));
+    const maxIterations = getGeneratedRiverAdaptivePathSearchLimit(start, goals, options.lengthScale);
+    let iterations = 0;
+    const startState = createManualRiverPathState(start, 0, 0, 0, "");
+    const startKey = manualRiverStateKey(startState);
+    const open = new Set([startKey]);
+    const states = new Map([[startKey, startState]]);
+    const cameFrom = new Map();
+    const bestCost = new Map([[startKey, 0]]);
+    const estimatedTotal = new Map([[startKey, getGeneratedRiverAdaptiveHeuristic(startState, goals, options)]]);
+
+    while (open.size && iterations < maxIterations) {
+      iterations += 1;
+      const currentKey = [...open].reduce((bestKey, candidateKey) => (
+        (estimatedTotal.get(candidateKey) ?? Infinity) < (estimatedTotal.get(bestKey) ?? Infinity)
+          ? candidateKey
+          : bestKey
+      ));
+      const currentState = states.get(currentKey);
+      const currentHex = currentState?.hex;
+      if (!currentHex) {
+        open.delete(currentKey);
+        continue;
+      }
+      if (goalIds.has(currentHex.id)) return reconstructManualRiverPath(cameFrom, states, currentKey);
+
+      open.delete(currentKey);
+      const guideGoal = getGeneratedRiverGuideGoalHex(currentHex, goals, options);
+      if (!guideGoal) continue;
+
+      EDGE_NAMES.forEach(edgeName => {
+        const neighbor = getNeighborHex(currentHex, edgeName);
+        if (!neighbor) return;
+        const transition = getManualRiverPathTransition(currentState, neighbor, guideGoal);
+        if (!transition || !Number.isFinite(transition.cost)) return;
+
+        const nextState = transition.state;
+        const nextKey = manualRiverStateKey(nextState);
+        const nextCost = (bestCost.get(currentKey) ?? Infinity) + transition.cost;
+        if (nextCost >= (bestCost.get(nextKey) ?? Infinity)) return;
+
+        states.set(nextKey, nextState);
+        cameFrom.set(nextKey, currentKey);
+        bestCost.set(nextKey, nextCost);
+        estimatedTotal.set(nextKey, nextCost + getGeneratedRiverAdaptiveHeuristic(nextState, goals, options));
+        open.add(nextKey);
+      });
     }
 
     return null;
+  }
+
+  function getGeneratedRiverAdaptivePathSearchLimit(start, goalCandidates, lengthScale = 1) {
+    const nearestGoalDistance = goalCandidates.reduce((best, goal) => (
+      Math.min(best, Math.max(1, getHexLineSequence(start.id, goal.id).length))
+    ), Infinity);
+    const mapScale = Math.max(700, renderer.hexes.length);
+    return Math.min(3200, Math.max(mapScale, Math.round(nearestGoalDistance * (42 + Math.max(0.5, lengthScale) * 14))));
+  }
+
+  function getGeneratedRiverAdaptiveHeuristic(state, goalCandidates, options = {}) {
+    const goal = getGeneratedRiverGuideGoalHex(state?.hex, goalCandidates, options);
+    return goal && state?.hex ? riverPathHeuristic(state.hex, goal) : 0;
+  }
+
+  function getGeneratedRiverGuideGoalHex(fromHex, goalCandidates, options = {}) {
+    if (!fromHex || !Array.isArray(goalCandidates) || !goalCandidates.length) return null;
+    const seedBase = options.seedBase || "";
+    const source = options.source || fromHex;
+    const lengthScale = options.lengthScale || 1;
+    return goalCandidates
+      .map(goal => ({
+        goal,
+        score: getGeneratedRiverGuideGoalScore(source, fromHex, goal, seedBase, lengthScale)
+      }))
+      .filter(candidate => Number.isFinite(candidate.score))
+      .sort((a, b) => a.score - b.score || a.goal.id.localeCompare(b.goal.id))[0]?.goal || null;
+  }
+
+  function getGeneratedRiverGuideGoalScore(source, fromHex, goal, seedBase, lengthScale) {
+    const distance = roadPathHeuristic(fromHex, goal);
+    const sourceElevation = Number(source?.elevation || 0);
+    const waterBias = goal.baseTerrain === "coastal_water"
+      ? -2.8
+      : goal.baseTerrain === "inland_water"
+        ? -2.2
+        : goal.baseTerrain === "sea"
+          ? -1.3
+          : 0.2;
+    const edgeBias = getOuterMapEdge(goal) ? -0.7 : 0;
+    const elevationBias = sourceElevation >= 4 && ["coastal_water", "sea"].includes(goal.baseTerrain) ? -0.45 : 0;
+    const roll = seededUnit(`${seedBase}:river-goal:${source.id}:${goal.id}`) * (2.4 - Math.min(1.15, lengthScale * 0.5));
+    return distance + waterBias + edgeBias + elevationBias + roll;
   }
 
   function getOuterMapEdge(hex) {
@@ -8995,6 +9672,17 @@
       continuity: getGeneratorControlScale("generationContinuity"),
       featureDensity: Math.max(0.5, Math.min(1.65, Number(renderer.drawing.generationFeatureDensity || 100) / 100)),
       maxFeatures: clampNumber(Number(renderer.drawing.generationMaxFeatures), 0, 2, 2)
+    };
+  }
+
+  function getPoiGeneratorOptions(campaignId) {
+    const seedBase = getGenerationSeedBase(campaignId);
+    return {
+      seed: seedBase.replace(":feature-pass", ":poi-pass"),
+      settlementDensity: Math.max(0.4, Math.min(1.8, Number(renderer.drawing.generationSettlementDensity || 100) / 100)),
+      populationConcentration: Math.max(0.5, Math.min(1.5, Number(renderer.drawing.generationPopulationConcentration || 100) / 100)),
+      resourceAmount: Math.max(0.5, Math.min(1.5, Number(renderer.drawing.generationResourceAmount || 100) / 100)),
+      waypointAmount: Math.max(0.5, Math.min(1.5, Number(renderer.drawing.generationWaypointAmount || 100) / 100))
     };
   }
 
@@ -10004,13 +10692,15 @@
     });
   }
 
-  async function clearDrawnOverlaysByType(type) {
+  async function purgeSavedOverlayType(type, options = {}) {
     const campaign = getActiveCampaign?.();
     const normalizedType = OVERLAY_TYPE_LABELS[type] ? type : "";
-    if (!campaign || !normalizedType) return;
+    const skipConfirm = Boolean(options.skipConfirm);
+    const showSuccessAlert = options.showSuccessAlert !== false;
+    if (!campaign || !normalizedType) return false;
 
     const label = OVERLAY_TYPE_LABELS[normalizedType];
-    if (!await confirmNukeAction(`Purge all saved live-map ${label} immediately? This does not affect staged preview edits.`)) return;
+    if (!skipConfirm && !await confirmNukeAction(`Purge all saved live-map ${label} immediately? This does not affect staged preview edits.`)) return false;
 
     renderer.drawing.saving = true;
     let showBulkLoading = false;
@@ -10021,7 +10711,7 @@
       const removed = persistedOverlays
         .filter(overlay => overlay.Overlay_Type === normalizedType)
         .map(overlay => ({ ...cloneOverlayRecord(overlay), __undoDeleted: true }));
-      if (!removed.length) return;
+      if (!removed.length) return true;
 
       showBulkLoading = removed.length >= BULK_OVERLAY_LOADING_THRESHOLD;
       if (showBulkLoading) setLoading(true);
@@ -10033,14 +10723,21 @@
       markRouteCacheDirty();
       markOverlayCacheDirty();
       render();
+      if (showSuccessAlert) window.alert?.(`Purged ${removed.length} saved ${label} segment${removed.length === 1 ? "" : "s"}.`);
+      return true;
     } catch (error) {
       console.error(`Unable to purge generated map ${label}:`, error);
       window.alert?.(error.message || `Unable to purge ${label}.`);
+      return false;
     } finally {
       renderer.drawing.saving = false;
       if (showBulkLoading) setLoading(false);
       refreshEditorActionControls();
     }
+  }
+
+  async function clearDrawnOverlaysByType(type) {
+    await purgeSavedOverlayType(type);
   }
 
   function openNamedRoutesMenu() {

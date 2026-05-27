@@ -246,6 +246,115 @@ begin
 end;
 $$;
 
+create or replace function public.are_poi_group_hex_refs_adjacent(left_hex_ref text, right_hex_ref text)
+returns boolean
+language plpgsql
+immutable
+as $$
+declare
+  left_match text[];
+  right_match text[];
+  left_x integer;
+  left_y integer;
+  right_x integer;
+  right_y integer;
+begin
+  if nullif(trim(coalesce(left_hex_ref, '')), '') is null
+    or nullif(trim(coalesce(right_hex_ref, '')), '') is null then
+    return false;
+  end if;
+
+  left_match := regexp_match(trim(left_hex_ref), '^(-?\d+)\s*:\s*(-?\d+)$');
+  right_match := regexp_match(trim(right_hex_ref), '^(-?\d+)\s*:\s*(-?\d+)$');
+  if left_match is null or right_match is null then
+    return false;
+  end if;
+
+  left_x := left_match[1]::integer;
+  left_y := left_match[2]::integer;
+  right_x := right_match[1]::integer;
+  right_y := right_match[2]::integer;
+
+  if mod(left_x, 2) = 0 then
+    return
+      (right_x = left_x + 1 and right_y = left_y)
+      or (right_x = left_x and right_y = left_y + 1)
+      or (right_x = left_x - 1 and right_y = left_y)
+      or (right_x = left_x - 1 and right_y = left_y - 1)
+      or (right_x = left_x and right_y = left_y - 1)
+      or (right_x = left_x + 1 and right_y = left_y - 1);
+  end if;
+
+  return
+    (right_x = left_x + 1 and right_y = left_y + 1)
+    or (right_x = left_x and right_y = left_y + 1)
+    or (right_x = left_x - 1 and right_y = left_y + 1)
+    or (right_x = left_x - 1 and right_y = left_y)
+    or (right_x = left_x and right_y = left_y - 1)
+    or (right_x = left_x + 1 and right_y = left_y);
+end;
+$$;
+
+create or replace function public.ensure_poi_group_child_adjacency(
+  target_campaign_id uuid,
+  target_hex_id uuid,
+  target_poi_group_id uuid,
+  excluded_poi_id uuid default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_hex_ref text;
+  sibling_count integer := 0;
+begin
+  if target_poi_group_id is null or target_hex_id is null then
+    return;
+  end if;
+
+  select coalesce(nullif(trim(h.ref_code), ''), nullif(trim(h.map_xy), ''))
+    into target_hex_ref
+  from public.hexes h
+  where h.campaign_id = target_campaign_id
+    and h.id = target_hex_id;
+
+  if nullif(trim(coalesce(target_hex_ref, '')), '') is null then
+    return;
+  end if;
+
+  select count(*)
+    into sibling_count
+  from public.pois p
+  where p.campaign_id = target_campaign_id
+    and p.poi_group_id = target_poi_group_id
+    and (excluded_poi_id is null or p.id <> excluded_poi_id);
+
+  if sibling_count = 0 then
+    return;
+  end if;
+
+  if exists (
+    select 1
+    from public.pois p
+    join public.hexes h
+      on h.id = p.hex_id
+    where p.campaign_id = target_campaign_id
+      and p.poi_group_id = target_poi_group_id
+      and (excluded_poi_id is null or p.id <> excluded_poi_id)
+      and public.are_poi_group_hex_refs_adjacent(
+        target_hex_ref,
+        coalesce(nullif(trim(h.ref_code), ''), nullif(trim(h.map_xy), ''))
+      )
+  ) then
+    return;
+  end if;
+
+  raise exception 'Child Areas added to a grouped POI must use a hex adjacent to an existing child Area in that group.';
+end;
+$$;
+
 drop function if exists public.update_poi_record(
   uuid,
   uuid,
@@ -319,6 +428,8 @@ declare
   normalized_poi_icon text;
   normalized_notoriety_tier text;
   normalized_poi_tags text[];
+  current_group_id uuid;
+  current_hex_id uuid;
   updated_record public.pois;
 begin
   if auth.uid() is null then
@@ -372,12 +483,13 @@ begin
     raise exception 'POI hex is required.';
   end if;
 
-  if not exists (
-    select 1
-    from public.pois p
-    where p.campaign_id = target_campaign_id
-      and p.id = target_poi_id
-  ) then
+  select p.poi_group_id, p.hex_id
+    into current_group_id, current_hex_id
+  from public.pois p
+  where p.campaign_id = target_campaign_id
+    and p.id = target_poi_id;
+
+  if current_hex_id is null then
     raise exception 'POI not found.';
   end if;
 
@@ -397,6 +509,19 @@ begin
       and pg.id = new_poi_group_id
   ) then
     raise exception 'Selected POI group does not belong to this campaign.';
+  end if;
+
+  if new_poi_group_id is not null
+    and (
+      current_group_id is distinct from new_poi_group_id
+      or current_hex_id is distinct from poi_hex_id
+    ) then
+    perform public.ensure_poi_group_child_adjacency(
+      target_campaign_id,
+      poi_hex_id,
+      new_poi_group_id,
+      target_poi_id
+    );
   end if;
 
   update public.pois
@@ -529,6 +654,8 @@ security definer
 set search_path = public
 as $$
 declare
+  current_group_id uuid;
+  current_hex_id uuid;
   updated_record public.pois;
 begin
   if auth.uid() is null then
@@ -539,12 +666,13 @@ begin
     raise exception 'not authorized';
   end if;
 
-  if not exists (
-    select 1
-    from public.pois p
-    where p.campaign_id = target_campaign_id
-      and p.id = target_poi_id
-  ) then
+  select p.poi_group_id, p.hex_id
+    into current_group_id, current_hex_id
+  from public.pois p
+  where p.campaign_id = target_campaign_id
+    and p.id = target_poi_id;
+
+  if current_hex_id is null then
     raise exception 'POI not found.';
   end if;
 
@@ -555,6 +683,16 @@ begin
       and pg.id = target_poi_group_id
   ) then
     raise exception 'Selected POI group does not belong to this campaign.';
+  end if;
+
+  if target_poi_group_id is not null
+    and current_group_id is distinct from target_poi_group_id then
+    perform public.ensure_poi_group_child_adjacency(
+      target_campaign_id,
+      current_hex_id,
+      target_poi_group_id,
+      target_poi_id
+    );
   end if;
 
   update public.pois

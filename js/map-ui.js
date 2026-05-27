@@ -261,6 +261,7 @@ function buildAddPoiButtonAction(hexId, regionId = "") {
     argumentsList.push(`hexId: '${escapeJsString(hexId)}'`);
     argumentsList.push("lockHex: true");
   }
+  argumentsList.push("lockCreateGroup: true");
 
   return `closeMobileHexPopup(); openAddPoiEditor({ ${argumentsList.join(", ")} });`;
 }

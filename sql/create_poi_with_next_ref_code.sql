@@ -11,6 +11,12 @@ alter table public.pois
 alter table public.poi_groups
   add column if not exists created_by uuid references auth.users(id) on delete set null;
 
+alter table public.pois
+  add column if not exists generation_source text;
+
+alter table public.poi_groups
+  add column if not exists generation_source text;
+
 create or replace function public.normalize_poi_category_type(raw_value text)
 returns text
 language sql
@@ -89,6 +95,12 @@ alter table public.pois
 
 alter table public.poi_groups
   add column if not exists group_icon text;
+
+create index if not exists idx_pois_campaign_generation_source
+  on public.pois (campaign_id, generation_source);
+
+create index if not exists idx_poi_groups_campaign_generation_source
+  on public.poi_groups (campaign_id, generation_source);
 
 create or replace function public.normalize_poi_tag_value(raw_value text)
 returns text
@@ -284,6 +296,115 @@ as $$
   from prepared
 $$;
 
+create or replace function public.are_poi_group_hex_refs_adjacent(left_hex_ref text, right_hex_ref text)
+returns boolean
+language plpgsql
+immutable
+as $$
+declare
+  left_match text[];
+  right_match text[];
+  left_x integer;
+  left_y integer;
+  right_x integer;
+  right_y integer;
+begin
+  if nullif(trim(coalesce(left_hex_ref, '')), '') is null
+    or nullif(trim(coalesce(right_hex_ref, '')), '') is null then
+    return false;
+  end if;
+
+  left_match := regexp_match(trim(left_hex_ref), '^(-?\d+)\s*:\s*(-?\d+)$');
+  right_match := regexp_match(trim(right_hex_ref), '^(-?\d+)\s*:\s*(-?\d+)$');
+  if left_match is null or right_match is null then
+    return false;
+  end if;
+
+  left_x := left_match[1]::integer;
+  left_y := left_match[2]::integer;
+  right_x := right_match[1]::integer;
+  right_y := right_match[2]::integer;
+
+  if mod(left_x, 2) = 0 then
+    return
+      (right_x = left_x + 1 and right_y = left_y)
+      or (right_x = left_x and right_y = left_y + 1)
+      or (right_x = left_x - 1 and right_y = left_y)
+      or (right_x = left_x - 1 and right_y = left_y - 1)
+      or (right_x = left_x and right_y = left_y - 1)
+      or (right_x = left_x + 1 and right_y = left_y - 1);
+  end if;
+
+  return
+    (right_x = left_x + 1 and right_y = left_y + 1)
+    or (right_x = left_x and right_y = left_y + 1)
+    or (right_x = left_x - 1 and right_y = left_y + 1)
+    or (right_x = left_x - 1 and right_y = left_y)
+    or (right_x = left_x and right_y = left_y - 1)
+    or (right_x = left_x + 1 and right_y = left_y);
+end;
+$$;
+
+create or replace function public.ensure_poi_group_child_adjacency(
+  target_campaign_id uuid,
+  target_hex_id uuid,
+  target_poi_group_id uuid,
+  excluded_poi_id uuid default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_hex_ref text;
+  sibling_count integer := 0;
+begin
+  if target_poi_group_id is null or target_hex_id is null then
+    return;
+  end if;
+
+  select coalesce(nullif(trim(h.ref_code), ''), nullif(trim(h.map_xy), ''))
+    into target_hex_ref
+  from public.hexes h
+  where h.campaign_id = target_campaign_id
+    and h.id = target_hex_id;
+
+  if nullif(trim(coalesce(target_hex_ref, '')), '') is null then
+    return;
+  end if;
+
+  select count(*)
+    into sibling_count
+  from public.pois p
+  where p.campaign_id = target_campaign_id
+    and p.poi_group_id = target_poi_group_id
+    and (excluded_poi_id is null or p.id <> excluded_poi_id);
+
+  if sibling_count = 0 then
+    return;
+  end if;
+
+  if exists (
+    select 1
+    from public.pois p
+    join public.hexes h
+      on h.id = p.hex_id
+    where p.campaign_id = target_campaign_id
+      and p.poi_group_id = target_poi_group_id
+      and (excluded_poi_id is null or p.id <> excluded_poi_id)
+      and public.are_poi_group_hex_refs_adjacent(
+        target_hex_ref,
+        coalesce(nullif(trim(h.ref_code), ''), nullif(trim(h.map_xy), ''))
+      )
+  ) then
+    return;
+  end if;
+
+  raise exception 'Child Areas added to a grouped POI must use a hex adjacent to an existing child Area in that group.';
+end;
+$$;
+
 alter table public.pois
   drop constraint if exists pois_poi_type_canonical_check;
 
@@ -411,6 +532,35 @@ drop function if exists public.create_poi_with_next_ref_code(
   uuid
 );
 
+drop function if exists public.create_poi_with_next_ref_code(
+  uuid,
+  text,
+  text,
+  text,
+  uuid,
+  text,
+  text[],
+  text,
+  text,
+  public.content_visibility,
+  uuid
+);
+
+drop function if exists public.create_poi_with_next_ref_code(
+  uuid,
+  text,
+  text,
+  text,
+  uuid,
+  text,
+  text[],
+  text,
+  text,
+  text,
+  public.content_visibility,
+  uuid
+);
+
 drop function if exists public.create_poi_group_with_slug(
   uuid,
   text,
@@ -432,6 +582,31 @@ drop function if exists public.create_poi_group_with_slug(
   public.content_visibility
 );
 
+drop function if exists public.create_poi_group_with_slug(
+  uuid,
+  text,
+  text,
+  text,
+  uuid,
+  text[],
+  text,
+  text,
+  public.content_visibility
+);
+
+drop function if exists public.create_poi_group_with_slug(
+  uuid,
+  text,
+  text,
+  text,
+  uuid,
+  text[],
+  text,
+  text,
+  text,
+  public.content_visibility
+);
+
 create or replace function public.create_poi_with_next_ref_code(
   target_campaign_id uuid,
   poi_name text,
@@ -442,6 +617,7 @@ create or replace function public.create_poi_with_next_ref_code(
   poi_tags text[] default '{}'::text[],
   poi_population text default null,
   poi_lore text default null,
+  poi_generation_source text default null,
   poi_visibility public.content_visibility default 'shared',
   poi_group_id uuid default null
 )
@@ -528,6 +704,13 @@ begin
     raise exception 'Selected hex does not belong to this campaign.';
   end if;
 
+  perform public.ensure_poi_group_child_adjacency(
+    target_campaign_id,
+    poi_hex_id,
+    poi_group_id,
+    null
+  );
+
   select coalesce(max(substring(ref_code from '^POI-([0-9]+)$')::integer), 0) + 1
     into next_number
   from public.pois
@@ -545,6 +728,7 @@ begin
     poi_type,
     poi_icon,
     poi_tags,
+    generation_source,
     notoriety_tier,
     population,
     lore,
@@ -560,6 +744,7 @@ begin
     normalized_poi_type,
     normalized_poi_icon,
     normalized_poi_tags,
+    nullif(trim(poi_generation_source), ''),
     normalized_notoriety_tier,
     nullif(trim(poi_population), ''),
     nullif(trim(poi_lore), ''),
@@ -582,6 +767,7 @@ grant execute on function public.create_poi_with_next_ref_code(
   text[],
   text,
   text,
+  text,
   public.content_visibility,
   uuid
 ) to authenticated;
@@ -600,6 +786,7 @@ create or replace function public.create_poi_group_with_slug(
   group_tags text[] default '{}'::text[],
   group_population text default null,
   group_lore text default null,
+  group_generation_source text default null,
   group_visibility public.content_visibility default 'shared'
 )
 returns public.poi_groups
@@ -688,6 +875,7 @@ begin
     group_type,
     group_icon,
     group_tags,
+    generation_source,
     population,
     lore,
     visibility,
@@ -700,6 +888,7 @@ begin
     normalized_group_type,
     normalized_group_icon,
     normalized_group_tags,
+    nullif(trim(group_generation_source), ''),
     nullif(trim(group_population), ''),
     nullif(trim(group_lore), ''),
     group_visibility,
@@ -724,6 +913,7 @@ grant execute on function public.create_poi_group_with_slug(
   text,
   uuid,
   text[],
+  text,
   text,
   text,
   public.content_visibility

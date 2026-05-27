@@ -378,6 +378,10 @@
         <span class="map-edit-mode-icon" aria-hidden="true">≈</span>
         <span class="map-edit-mode-label">Overlay</span>
       </button>
+      <button id="map-surveyor-pois-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">⌘</span>
+        <span class="map-edit-mode-label">POIs</span>
+      </button>
       <button id="map-surveyor-regions-button" type="button" class="map-edit-mode-button">
         <span class="map-edit-mode-icon map-edit-region-icon" aria-hidden="true">⬡</span>
         <span class="map-edit-mode-label">Regions</span>
@@ -679,6 +683,61 @@
         <p class="map-edit-empty-note">No archive tools are active right now. Overlay, region, and feature purge actions live with their matching tools.</p>
       </section>
 
+      <section class="map-draw-panel-section" data-map-edit-section="pois">
+        <div class="map-draw-section-title map-draw-section-title-with-help" data-poi-subview-group="generation">
+          <span>POI Generation</span>
+          <span class="map-editor-help-wrap">
+            <button class="map-editor-help-button" type="button" aria-describedby="map-generation-poi-help">?</button>
+            <span id="map-generation-poi-help" class="map-editor-help-tooltip" role="tooltip">
+              <span>Generate a first civilization backbone with settlements, supporting resource sites, and travel waypoints.</span>
+              <span>Best results come after rivers exist. These POIs save directly to the live map and codex, and generated roads can build on them afterward.</span>
+            </span>
+          </span>
+        </div>
+        <p class="map-edit-empty-note" data-poi-subview-group="generation">This first POI pass creates standalone Settlements, Resource Sites, and Waypoints. It avoids occupied hexes when possible and leaves grouped POIs for a later pass.</p>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Settlement Density <strong id="map-generation-settlement-density-value">100%</strong></span>
+          <input id="map-generation-settlement-density" type="range" min="40" max="180" step="5" value="100">
+        </label>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Population Concentration <strong id="map-generation-population-concentration-value">100%</strong></span>
+          <input id="map-generation-population-concentration" type="range" min="50" max="150" step="5" value="100">
+        </label>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Resource Site Amount <strong id="map-generation-resource-amount-value">100%</strong></span>
+          <input id="map-generation-resource-amount" type="range" min="50" max="150" step="5" value="100">
+        </label>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Waypoint Amount <strong id="map-generation-waypoint-amount-value">100%</strong></span>
+          <input id="map-generation-waypoint-amount" type="range" min="50" max="150" step="5" value="100">
+        </label>
+        <label class="map-draw-option-row" data-poi-subview-group="generation">
+          <input id="map-poi-generation-replace-generated" type="checkbox">
+          <span>Replace Generated POIs First</span>
+        </label>
+        <div class="map-poi-generation-footer" data-poi-subview-group="generation">
+          <div class="map-draw-tool-row map-draw-tool-row-paired" role="group" aria-label="POI generation actions">
+            <button id="map-generation-run-pois" class="map-draw-secondary-button" type="button">Generate POIs</button>
+            <button id="map-poi-generation-reset-sliders" class="map-draw-secondary-button" type="button">Reset Sliders</button>
+          </div>
+          <div class="map-generation-shared-controls map-poi-generation-shared-controls">
+            <label class="map-draw-route-name-row">
+              <span>Seed</span>
+              <input id="map-poi-generation-seed" data-generation-seed-input type="text" maxlength="80" placeholder="Campaign seed">
+            </label>
+            <div class="map-draw-tool-row map-generation-footer-actions" role="group" aria-label="POI generation seed actions">
+              <button id="map-poi-generation-random-seed" data-generation-random-seed type="button">Random Seed</button>
+            </div>
+          </div>
+        </div>
+        <div class="map-draw-section-title map-draw-subsection-title" data-poi-subview-group="purge">Purge Saved POIs</div>
+        <p class="map-edit-empty-note map-edit-warning-note" data-poi-subview-group="purge">These purge live-map POIs from the codex immediately. Generated-only purge keeps your manual POIs intact.</p>
+        <div class="map-draw-tool-row map-draw-tool-row-paired" data-poi-subview-group="purge" role="group" aria-label="POI purge actions">
+          <button id="map-clear-generated-pois" class="map-draw-clear" type="button">Purge Generated POIs</button>
+          <button id="map-clear-pois" class="map-draw-clear" type="button">Purge All POIs</button>
+        </div>
+      </section>
+
       <section class="map-draw-panel-section" data-map-edit-section="generation">
         <div class="map-generation-scroll">
           <div class="map-generation-subsection active" data-generation-section="terrain">
@@ -814,7 +873,7 @@
         <div class="map-generation-shared-controls">
           <label class="map-draw-route-name-row">
             <span>Seed</span>
-            <input id="map-generation-seed" type="text" maxlength="80" placeholder="Campaign seed">
+            <input id="map-generation-seed" data-generation-seed-input type="text" maxlength="80" placeholder="Campaign seed">
           </label>
           <div class="map-draw-tool-row map-generation-footer-actions" role="group" aria-label="Generation actions">
             <button id="map-generation-random-seed" data-generation-random-seed type="button">Random Seed</button>
@@ -1032,13 +1091,18 @@
         <label id="codex-add-poi-parent-row">
           <span>Child of</span>
           <select id="codex-add-poi-parent-group"></select>
-          <small>Optional. Use this for Areas inside a grouped POI.</small>
+          <small
+            id="codex-add-poi-parent-help"
+            data-default-text="Optional. Use this for Areas inside a grouped POI. After the first child Area, added Areas must be adjacent to an existing child Area in the group."
+          >
+            Optional. Use this for Areas inside a grouped POI. After the first child Area, added Areas must be adjacent to an existing child Area in the group.
+          </small>
         </label>
 
         <label id="codex-add-poi-initial-child-row" hidden>
           <span>Initial child Area *</span>
           <select id="codex-add-poi-initial-child"></select>
-          <small>A grouped POI needs at least one child Area so it has a location and appears in the index.</small>
+          <small>A grouped POI needs at least one child Area so it has a location and appears in the index. That first child establishes the footprint future child Areas must grow from.</small>
         </label>
 
         <label>
@@ -1217,6 +1281,12 @@
           <label>
             <span>Add existing Area</span>
             <select id="codex-edit-poi-group-add-child"></select>
+            <small
+              id="codex-edit-poi-group-add-child-help"
+              data-default-text="After the first child Area, added Areas must be adjacent to an existing child Area in the group."
+            >
+              After the first child Area, added Areas must be adjacent to an existing child Area in the group.
+            </small>
           </label>
           <button id="codex-edit-poi-group-add-child-button" type="button">Add Child Area</button>
         </section>

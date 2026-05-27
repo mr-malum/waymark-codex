@@ -925,8 +925,1307 @@
     return result;
   }
 
+  function normalizePoiOptions(options = {}) {
+    return {
+      seed: String(options.seed || "campaign-codex-pois"),
+      settlementDensity: clamp(options.settlementDensity, 0.4, 1.8, 1),
+      populationConcentration: clamp(options.populationConcentration, 0.5, 1.5, 1),
+      resourceAmount: clamp(options.resourceAmount, 0.5, 1.5, 1),
+      waypointAmount: clamp(options.waypointAmount, 0.5, 1.5, 1)
+    };
+  }
+
+  function clonePoiHexes(hexes) {
+    return (hexes || [])
+      .map(hex => ({
+        id: hex.id,
+        x: Number(hex.x),
+        y: Number(hex.y),
+        baseTerrain: String(hex.baseTerrain || "plains").trim() || "plains",
+        features: Array.isArray(hex.features) ? [...hex.features] : [],
+        elevation: Number.isFinite(Number(hex.elevation)) ? Number(hex.elevation) : 1,
+        regionId: hex.regionId || hex.Region_ID_Ref || "",
+        politicalRegionId: hex.politicalRegionId || hex.Political_Region_ID_Ref || ""
+      }))
+      .filter(hex => hex.id && Number.isFinite(hex.x) && Number.isFinite(hex.y));
+  }
+
+  function generatePoiDrafts(options = {}) {
+    const settings = normalizePoiOptions(options);
+    const random = makeRandom(`${settings.seed}:poi-pass`);
+    const hexes = clonePoiHexes(options.hexes || []);
+    if (!hexes.length) return [];
+
+    const byId = new Map(hexes.map(hex => [hex.id, hex]));
+    const byCoord = new Map(hexes.map(hex => [`${hex.x}:${hex.y}`, hex]));
+    const dimensions = getDimensions(hexes);
+    const riverData = buildPoiRiverData(options.mapOverlays || []);
+    const existingPois = Array.isArray(options.existingPois) ? options.existingPois.filter(Boolean) : [];
+    const occupiedHexIds = new Set(existingPois.map(poi => poi?.Hex_ID_Ref).filter(Boolean));
+    const usedNames = new Set(existingPois.map(poi => normalizeGeneratedNameKey(poi?.Name || "")));
+    const existingSettlementAnchors = getExistingSettlementAnchors(existingPois, byId, riverData, settings);
+    const candidateHexes = hexes.filter(hex => !occupiedHexIds.has(hex.id) && isPoiLandHex(hex));
+
+    const settlementScoreFloor = getSettlementCandidateScoreFloor(settings);
+    const settlementCandidates = candidateHexes
+      .map(hex => buildSettlementCandidate(hex, byId, byCoord, dimensions, riverData, settings))
+      .filter(candidate => candidate && candidate.score >= settlementScoreFloor);
+
+    const targetSettlements = getTargetSettlementCount(candidateHexes, settings, existingSettlementAnchors.length);
+    const settlementDrafts = buildSettlementDrafts({
+      candidates: settlementCandidates,
+      targetCount: targetSettlements,
+      existingAnchors: existingSettlementAnchors,
+      occupiedHexIds,
+      settings,
+      usedNames,
+      random
+    }).slice(0, targetSettlements);
+
+    settlementDrafts.forEach(draft => occupiedHexIds.add(draft.hexId));
+
+    const settlementAnchors = [
+      ...existingSettlementAnchors,
+      ...settlementDrafts.map((draft, index) => makeGeneratedSettlementAnchor(draft, index))
+    ];
+
+    const resourceDrafts = buildResourceSiteDrafts({
+      candidateHexes: hexes.filter(hex => !occupiedHexIds.has(hex.id) && isPoiLandHex(hex)),
+      settlementAnchors,
+      occupiedHexIds,
+      byId,
+      byCoord,
+      dimensions,
+      riverData,
+      settings,
+      usedNames,
+      random,
+      existingPois
+    });
+    resourceDrafts.forEach(draft => occupiedHexIds.add(draft.hexId));
+
+    const waypointDrafts = buildWaypointDrafts({
+      candidateHexes: hexes.filter(hex => !occupiedHexIds.has(hex.id) && isPoiLandHex(hex)),
+      settlementAnchors,
+      occupiedHexIds,
+      byId,
+      byCoord,
+      dimensions,
+      riverData,
+      settings,
+      usedNames,
+      random,
+      existingPois
+    });
+
+    return [...settlementDrafts, ...resourceDrafts, ...waypointDrafts].map(({ meta, ...draft }) => draft);
+  }
+
+  function buildPoiRiverData(overlays) {
+    const riverHexIds = new Set();
+    const degreeByHexId = new Map();
+    (overlays || [])
+      .filter(overlay => String(overlay?.Overlay_Type || "").toLowerCase() === "river")
+      .forEach(overlay => {
+        const fromHexId = overlay?.Hex_ID_Ref || overlay?.From_Hex_ID_Ref || "";
+        const toHexId = overlay?.To_Hex_ID_Ref || "";
+        if (fromHexId) riverHexIds.add(fromHexId);
+        if (toHexId) riverHexIds.add(toHexId);
+        if (fromHexId && toHexId) {
+          degreeByHexId.set(fromHexId, (degreeByHexId.get(fromHexId) || 0) + 1);
+          degreeByHexId.set(toHexId, (degreeByHexId.get(toHexId) || 0) + 1);
+        }
+      });
+    return { riverHexIds, degreeByHexId };
+  }
+
+  function getExistingSettlementAnchors(existingPois, byId, riverData, settings) {
+    const byPlace = new Map();
+    existingPois.forEach(poi => {
+      const type = window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || "") || "";
+      if (type !== "settlement") return;
+      const placeKey = poi?.POI_Group_ID ? `group:${poi.POI_Group_ID}` : `poi:${poi.POI_ID}`;
+      const candidate = {
+        poi,
+        type,
+        hex: byId.get(poi?.Hex_ID_Ref || ""),
+        notoriety: Number(window.CampaignPoiTypes?.normalizeNotorietyValue?.(poi?.["Notoriety Tier_Value"] || poi?.["Notoriety Tier"] || "") || 7),
+        population: parsePopulationNumber(poi?.Population)
+      };
+      if (!candidate.hex) return;
+      const existing = byPlace.get(placeKey);
+      if (!existing || compareExistingSettlementAnchors(candidate, existing) < 0) {
+        byPlace.set(placeKey, candidate);
+      }
+    });
+
+    return [...byPlace.values()].map((record, index) => {
+      const fallbackCandidate = buildSettlementCandidate(record.hex, byId, null, null, riverData, settings);
+      const importance = Math.max(
+        0.35,
+        record.population ? clamp(record.population / 22000, 0.25, 1.8, 0.5) : 0.4,
+        1.15 - ((record.notoriety || 7) - 1) * 0.12,
+        fallbackCandidate?.score || 0.4
+      );
+      return {
+        id: record.poi?.POI_ID || `existing-settlement-${index}`,
+        hex: record.hex,
+        importance,
+        notoriety: String(Math.max(1, Math.min(10, record.notoriety || 7))),
+        population: record.poi?.Population || "",
+        name: String(record.poi?.Name || "").trim() || "Settlement"
+      };
+    });
+  }
+
+  function compareExistingSettlementAnchors(left, right) {
+    return (
+      (left.notoriety || 10) - (right.notoriety || 10) ||
+      (right.population || 0) - (left.population || 0) ||
+      String(left.poi?.Name || "").localeCompare(String(right.poi?.Name || ""))
+    );
+  }
+
+  function getTargetSettlementCount(candidateHexes, settings, existingCount = 0) {
+    const viableCount = candidateHexes.filter(hex => isViableSettlementHex(hex)).length;
+    const totalTarget = Math.max(0, Math.min(40, Math.round((viableCount / 72) * settings.settlementDensity)));
+    return Math.max(0, totalTarget - Math.max(0, existingCount));
+  }
+
+  function getSettlementCandidateScoreFloor(settings) {
+    const density = settings?.settlementDensity ?? 1;
+    return clamp(0.24 - (density - 1) * 0.10, 0.16, 0.32, 0.24);
+  }
+
+  function getSettlementSelectionFloor(settings) {
+    const density = settings?.settlementDensity ?? 1;
+    return clamp(0.22 - (density - 1) * 0.12, 0.12, 0.30, 0.22);
+  }
+
+  function getSettlementSpacingScale(settings) {
+    const density = settings?.settlementDensity ?? 1;
+    if (density >= 1) {
+      return clamp(1 - (density - 1) * 0.45, 0.55, 1, 1);
+    }
+    return clamp(1 + (1 - density) * 0.8, 1, 1.5, 1);
+  }
+
+  function buildSettlementDrafts({ candidates, targetCount, existingAnchors, occupiedHexIds, settings, usedNames, random }) {
+    const chosen = [];
+    const remaining = [...candidates];
+    const selectionFloor = getSettlementSelectionFloor(settings);
+    while (remaining.length && chosen.length < targetCount) {
+      let bestIndex = -1;
+      let bestScore = 0;
+      remaining.forEach((candidate, index) => {
+        if (!candidate?.hex || occupiedHexIds.has(candidate.hex.id)) return;
+        const score = candidate.score
+          - getSettlementSpacingPenalty(candidate.hex, chosen, existingAnchors, settings)
+          + seededNoise(`${settings.seed}:settlement-candidate:${candidate.hex.id}`, -0.04, 0.04);
+        if (score > bestScore) {
+          bestScore = score;
+          bestIndex = index;
+        }
+      });
+      if (bestIndex < 0 || bestScore < selectionFloor) break;
+      const [candidate] = remaining.splice(bestIndex, 1);
+      chosen.push({ ...candidate, adjustedScore: bestScore });
+      occupiedHexIds.add(candidate.hex.id);
+    }
+
+    const ranked = chosen
+      .sort((a, b) => b.adjustedScore - a.adjustedScore || a.hex.id.localeCompare(b.hex.id))
+      .map((candidate, index, list) => {
+        const sizeTier = getSettlementSizeTier(index, list.length);
+        const population = formatGeneratedPopulation(generateSettlementPopulation(sizeTier, index, list.length, settings, candidate));
+        const tags = getGeneratedSettlementTags(candidate, sizeTier);
+        const notoriety = getGeneratedSettlementNotoriety(candidate, sizeTier, index, list.length);
+        const icon = chooseSettlementIcon(candidate, sizeTier, tags);
+        const name = reserveGeneratedName(
+          generateSettlementName(candidate, sizeTier, settings, usedNames),
+          usedNames,
+          buildSettlementFallbackName(candidate, sizeTier),
+          { seed: `${settings.seed}:settlement-name:${candidate.hex.id}` }
+        );
+        return {
+          name,
+          type: "settlement",
+          icon,
+          hexId: candidate.hex.id,
+          tags,
+          notoriety,
+          population,
+          lore: "",
+          meta: {
+            importance: getSettlementImportanceFromTier(sizeTier, index, list.length),
+            sizeTier,
+            hex: { ...candidate.hex }
+          }
+        };
+      });
+
+    return ranked;
+  }
+
+  function makeGeneratedSettlementAnchor(draft, index) {
+    return {
+      id: `generated-settlement-${index}:${draft.hexId}`,
+      hex: draft.meta?.hex ? { ...draft.meta.hex } : { id: draft.hexId },
+      importance: draft.meta?.importance || 0.5,
+      notoriety: draft.notoriety,
+      population: draft.population,
+      name: draft.name
+    };
+  }
+
+  function buildSettlementCandidate(hex, byId, byCoord, dimensions, riverData, settings) {
+    if (!hex || !isPoiLandHex(hex) || !isViableSettlementHex(hex)) return null;
+    const localByCoord = byCoord || new Map([...byId.values()].map(entry => [`${entry.x}:${entry.y}`, entry]));
+    const localDimensions = dimensions || getDimensions([...byId.values()]);
+    const adjacent = neighbors(hex, localByCoord);
+    const nearby = nearbyWithin(hex, localByCoord, 2);
+    const edgeDistance = distanceToMapEdge(hex, localDimensions);
+    const waterAccess = scoreSettlementWaterAccess(hex, adjacent, riverData);
+    const fertility = scoreSettlementFertility(hex, nearby);
+    const routeability = scoreSettlementRouteability(hex, nearby, riverData);
+    const strategic = scoreSettlementStrategicValue(hex, nearby, localDimensions, riverData);
+    const resources = scoreSettlementResourceDiversity(hex, nearby);
+    const score = (
+      waterAccess * 0.19 +
+      fertility * 0.34 +
+      routeability * 0.25 +
+      strategic * 0.10 +
+      resources * 0.12
+    ) - getSettlementEdgePenalty({
+      edgeDistance,
+      coastal: adjacent.some(neighbor => ["coastal_water", "sea", "deep_sea"].includes(neighbor.baseTerrain)),
+      inlandWater: adjacent.some(neighbor => neighbor.baseTerrain === "inland_water"),
+      riverAccess: hasRiverAccess(hex, adjacent, riverData),
+      settings
+    });
+    return {
+      hex,
+      score,
+      waterAccess,
+      fertility,
+      routeability,
+      strategic,
+      resources,
+      coastal: adjacent.some(neighbor => ["coastal_water", "sea", "deep_sea"].includes(neighbor.baseTerrain)),
+      inlandWater: adjacent.some(neighbor => neighbor.baseTerrain === "inland_water"),
+      riverAccess: hasRiverAccess(hex, adjacent, riverData),
+      highland: getNearbyTerrainCount(nearby, ["rock", "snow"]) >= 2 || (hex.features || []).some(feature => ["mountains", "snowcapped_mountains", "lone_mountain", "volcano"].includes(feature)),
+      frontier: edgeDistance <= 1
+    };
+  }
+
+  function scoreSettlementWaterAccess(hex, nearby, riverData) {
+    let score = 0;
+    const adjacentWater = nearby.filter(neighbor => isWaterBase(neighbor.baseTerrain));
+    if (adjacentWater.some(neighbor => ["coastal_water", "sea", "deep_sea"].includes(neighbor.baseTerrain))) score += 0.34;
+    if (adjacentWater.some(neighbor => neighbor.baseTerrain === "inland_water")) score += 0.24;
+    if (adjacentWater.some(neighbor => neighbor.baseTerrain === "coastal_water") && adjacentWater.some(neighbor => neighbor.baseTerrain === "inland_water")) score += 0.06;
+    if (riverData.riverHexIds.has(hex.id)) score += 0.06;
+    if (nearby.some(neighbor => riverData.riverHexIds.has(neighbor.id))) score += 0.03;
+    const confluence = Math.max(
+      riverData.degreeByHexId.get(hex.id) || 0,
+      ...nearby.map(neighbor => riverData.degreeByHexId.get(neighbor.id) || 0)
+    );
+    if (confluence >= 3) score += 0.1;
+    if (adjacentWater.length >= 2) score += 0.03;
+    return Math.min(1.05, score);
+  }
+
+  function scoreSettlementFertility(hex, nearby) {
+    const own = getTerrainFertility(hex.baseTerrain, hex.features);
+    const neighborhood = nearby
+      .filter(neighbor => !isWaterBase(neighbor.baseTerrain))
+      .map(neighbor => getTerrainFertility(neighbor.baseTerrain, neighbor.features));
+    const nearbyAverage = neighborhood.length
+      ? neighborhood.reduce((sum, value) => sum + value, 0) / neighborhood.length
+      : own;
+    return Math.max(0, Math.min(1.2, own * 0.6 + nearbyAverage * 0.4));
+  }
+
+  function scoreSettlementRouteability(hex, nearby, riverData) {
+    const landHexes = [hex, ...nearby].filter(neighbor => !isWaterBase(neighbor.baseTerrain));
+    const averageRoughness = landHexes.length
+      ? landHexes.reduce((sum, neighbor) => sum + getTerrainRoughness(neighbor.baseTerrain, neighbor.features), 0) / landHexes.length
+      : 1;
+    let score = 1 - averageRoughness;
+    if (getNearbyTerrainCount(nearby, ["rock", "snow"]) >= 2 && averageRoughness < 0.58) score += 0.08;
+    return Math.max(0.05, Math.min(1.1, score));
+  }
+
+  function scoreSettlementStrategicValue(hex, nearby, dimensions, riverData) {
+    let score = 0;
+    const highlands = getNearbyTerrainCount(nearby, ["rock", "snow"]);
+    if (highlands >= 2) score += 0.14;
+    if (highlands >= 3) score += 0.08;
+    if ((hex.features || []).some(feature => ["cliffs", "mountains", "snowcapped_mountains", "lone_mountain"].includes(feature))) score += 0.08;
+    return Math.min(1, score);
+  }
+
+  function scoreSettlementResourceDiversity(hex, nearby) {
+    const terrainKinds = new Set();
+    [hex, ...nearby].forEach(neighbor => {
+      const group = TERRAIN_PROFILES[neighbor.baseTerrain]?.group || "other";
+      if (!["water", "coast", "freshwater"].includes(group)) terrainKinds.add(group);
+      (neighbor.features || [])
+        .filter(feature => ["forest", "dead_trees", "farmland", "waves", "shoals", "reef", "water_rocks"].includes(feature))
+        .forEach(feature => terrainKinds.add(feature));
+    });
+    return Math.min(1, terrainKinds.size / 6);
+  }
+
+  function getSettlementEdgePenalty({ edgeDistance, coastal, inlandWater, riverAccess, settings }) {
+    if (!Number.isFinite(edgeDistance) || edgeDistance >= 3) return 0;
+
+    let penalty = edgeDistance <= 0
+      ? 0.18
+      : edgeDistance === 1
+        ? 0.1
+        : 0.04;
+
+    if (coastal && !inlandWater && !riverAccess) {
+      penalty += edgeDistance <= 0 ? 0.08 : 0.04;
+    }
+
+    if (settings?.regionStyle === "island_chain") {
+      penalty *= 0.6;
+    } else if (settings?.regionStyle === "coastal_realm") {
+      penalty *= 0.78;
+    }
+
+    return penalty;
+  }
+
+  function getSettlementSpacingPenalty(hex, chosen, existingAnchors, settings) {
+    const anchors = [
+      ...chosen.map(candidate => candidate.hex),
+      ...existingAnchors.map(anchor => anchor.hex).filter(Boolean)
+    ];
+    const spacingScale = getSettlementSpacingScale(settings);
+    return anchors.reduce((penalty, anchorHex) => {
+      const distance = hexDistance(hex, anchorHex);
+      if (distance <= 2) return penalty + 1.7 * spacingScale;
+      if (distance === 3) return penalty + 0.5 * spacingScale;
+      if (distance === 4) return penalty + 0.18 * spacingScale;
+      return penalty;
+    }, 0);
+  }
+
+  function getSettlementSizeTier(index, total) {
+    if (index === 0 && total >= 8) return "grand_hub";
+    if (index <= Math.max(1, Math.floor(total * 0.18))) return "city";
+    if (index <= Math.max(3, Math.floor(total * 0.52))) return "town";
+    return "village";
+  }
+
+  function getSettlementImportanceFromTier(sizeTier, index, total) {
+    if (sizeTier === "grand_hub") return 1.45;
+    if (sizeTier === "city") return 1.08 - index / Math.max(12, total * 10);
+    if (sizeTier === "town") return 0.78;
+    return 0.52;
+  }
+
+  function generateSettlementPopulation(sizeTier, index, total, settings, candidate) {
+    const concentration = settings.populationConcentration;
+    const topScale = 0.7 + concentration * 0.8;
+    const broadScale = 1.25 - (concentration - 0.5) * 0.35;
+    const scoreScale = 0.85 + Math.max(0, candidate.score - 0.35);
+    if (sizeTier === "grand_hub") return randomIntegerFromSeed(`${settings.seed}:population:${candidate.hex.id}`, 22000, 52000) * topScale * scoreScale;
+    if (sizeTier === "city") return randomIntegerFromSeed(`${settings.seed}:population:${candidate.hex.id}`, 7000, 22000) * topScale * scoreScale;
+    if (sizeTier === "town") return randomIntegerFromSeed(`${settings.seed}:population:${candidate.hex.id}`, 1800, 8000) * broadScale * scoreScale;
+    return randomIntegerFromSeed(`${settings.seed}:population:${candidate.hex.id}`, 250, 2600) * broadScale * Math.max(0.7, scoreScale * 0.95);
+  }
+
+  function getGeneratedSettlementTags(candidate, sizeTier) {
+    const tags = [];
+    if (candidate.coastal || candidate.inlandWater || candidate.riverAccess) tags.push("trade");
+    if (candidate.coastal || candidate.inlandWater) tags.push("fishing");
+    if (candidate.fertility >= 0.72) tags.push("farming");
+    if (candidate.routeability >= 0.72) tags.push("crossroads");
+    if (candidate.riverAccess && !candidate.coastal && candidate.routeability >= 0.56) tags.push("river_crossing");
+    if (candidate.frontier && sizeTier !== "grand_hub") tags.push("frontier");
+    if (candidate.frontier && candidate.strategic >= 0.22) tags.push("borderland");
+    if (sizeTier === "grand_hub" || sizeTier === "city") tags.push("administration");
+    return coerceGeneratedTags(tags);
+  }
+
+  function chooseSettlementIcon(candidate, sizeTier, tags) {
+    if (candidate.coastal && (sizeTier === "grand_hub" || sizeTier === "city")) return "port_town";
+    if (candidate.highland && (sizeTier === "grand_hub" || sizeTier === "city")) return "mountain_city";
+    if (candidate.highland && sizeTier === "town") return "hilltop_town";
+    if (tags.includes("frontier") && sizeTier === "village") return "walled_encampment";
+    if (sizeTier === "grand_hub" || sizeTier === "city") return candidate.strategic >= 0.22 ? "walled_city" : "city";
+    if (sizeTier === "town") return "hilltop_town";
+    return "village";
+  }
+
+  function getGeneratedSettlementNotoriety(candidate, sizeTier, index, total) {
+    let value = sizeTier === "grand_hub"
+      ? 2
+      : sizeTier === "city"
+        ? 4
+        : sizeTier === "town"
+          ? 6
+          : 7;
+    if (sizeTier === "grand_hub" && candidate.coastal && candidate.routeability >= 0.72) value = 1;
+    if (candidate.coastal || candidate.inlandWater) value -= 1;
+    if (candidate.frontier && sizeTier === "village") value += 1;
+    if (candidate.routeability >= 0.78 && index <= Math.max(1, Math.floor(total * 0.2))) value -= 1;
+    return String(Math.max(1, Math.min(10, value)));
+  }
+
+  function buildSettlementFallbackName(candidate, sizeTier) {
+    const fallbackPatterns = [];
+    if (candidate.riverAccess) {
+      fallbackPatterns.push({
+        prefixes: ["Stone", "Willow", "Alder", "Grey", "Otter", "Reed", "White", "Kings", "Moss"],
+        suffixes: ["ford", "bridge", "reach", "weir", "brook"],
+        forceSpace: false
+      });
+    }
+    if (candidate.highland) {
+      fallbackPatterns.push({
+        prefixes: ["Iron", "Raven", "Stone", "High", "Ash", "Wolf", "Cold", "Black", "Crag"],
+        suffixes: ["hold", "crest", "gate", "watch", "fell"],
+        forceSpace: false
+      });
+    }
+    if (candidate.fertility >= 0.8) {
+      fallbackPatterns.push({
+        prefixes: ["Amber", "Oak", "Willow", "Green", "Fair", "Elm", "Honey", "Harvest"],
+        suffixes: ["stead", "vale", "mead", "field", "grove"],
+        forceSpace: false
+      });
+    }
+    fallbackPatterns.push({
+      prefixes: ["Grey", "Stone", "Kings", "Queens", "Bracken", "White", "Red", "Oak", "Deep"],
+      suffixes: ["wick", "holm", "mere", "hurst", "croft", "combe", "burg", "bury", "dale", "thorpe", "ham"],
+      forceSpace: false
+    });
+    fallbackPatterns.push({
+      prefixes: ["Crown", "Lantern", "Guild", "Saint", "Oath", "Gloam", "Rune", "Star", "Banner", "Warden"],
+      suffixes: ["ward", "mark", "watch", "hall", "court", "gate", "rest", "veil", "burg", "vale", "dale"],
+      forceSpace: false
+    });
+    return buildGeneratedPatternName(`fallback:settlement:${candidate.hex.id}:${sizeTier}`, fallbackPatterns);
+  }
+
+  function generateSettlementName(candidate, sizeTier, settings, usedNames) {
+    const seed = `${settings.seed}:settlement-name:${candidate.hex.id}`;
+    const patterns = [];
+
+    if (candidate.riverAccess) {
+      patterns.push({
+        prefixes: ["Stone", "Willow", "Alder", "Grey", "Reed", "Otter", "White", "Kings", "Bracken", "Long", "Moss", "Clear", "Ash", "Mill", "Red", "Elm"],
+        suffixes: ["ford", "bridge", "reach", "weir", "brook", "mouth", "cross", "flow"],
+        forceSpace: false
+      });
+      patterns.push({
+        prefixes: ["Lower", "Upper", "Grey", "Stone", "Reed", "Willow", "Alder", "King's", "Otter"],
+        suffixes: ["Ford", "Bridge", "Crossing", "Reach"],
+        forceSpace: true
+      });
+    }
+
+    if (candidate.highland) {
+      patterns.push({
+        prefixes: ["Iron", "Raven", "Stone", "High", "Ash", "Wolf", "Cold", "Black", "Crag", "Crown", "Frost", "Granite", "Storm", "Red", "North", "Cinder"],
+        suffixes: ["hold", "crest", "gate", "watch", "fell", "peak", "keep", "cairn", "spire", "cliff"],
+        forceSpace: false
+      });
+      patterns.push({
+        prefixes: ["High", "Cold", "Wolf", "Stone", "Raven", "Iron", "Black", "North"],
+        suffixes: ["Keep", "Watch", "Gate"],
+        forceSpace: true
+      });
+    }
+
+    if (candidate.fertility >= 0.8) {
+      patterns.push({
+        prefixes: ["Amber", "Oak", "Willow", "Green", "Fair", "Elm", "Honey", "Harvest", "Meadow", "Barley", "Sun", "Silver", "Alder", "Golden", "Moss", "Red"],
+        suffixes: ["stead", "vale", "mead", "field", "grove", "lea", "brook", "hollow", "croft", "meadow"],
+        forceSpace: false
+      });
+      patterns.push({
+        prefixes: ["Amber", "Harvest", "Green", "Willow", "Elm", "Sun", "Oak", "Fair"],
+        suffixes: ["Market", "Fields", "Meadow"],
+        forceSpace: true
+      });
+    }
+
+    if (candidate.coastal && (sizeTier === "grand_hub" || sizeTier === "city")) {
+      patterns.push({
+        prefixes: ["Storm", "Grey", "Salt", "Tide", "Wave", "Drift", "Seabreak", "Windward", "Anchor", "Harrow", "West", "North", "Blackwater", "Breaker"],
+        suffixes: ["Harbor", "Port", "Quay", "Haven", "Roads", "Sound", "Anchorage"],
+        forceSpace: true
+      });
+    }
+
+    if (candidate.coastal || candidate.inlandWater) {
+      patterns.push({
+        prefixes: ["Reed", "Marsh", "Drift", "Willow", "Low", "Tide", "Salt", "Shore", "Lagoon", "Mud", "Wave", "Cove", "Wash", "Mere"],
+        suffixes: ["strand", "shore", "haven", "ness", "cove", "mere", "wash", "fleet"],
+        forceSpace: false
+      });
+      patterns.push({
+        prefixes: ["Willow", "Reed", "Grey", "Low", "Marsh", "Salt", "Mud", "Drift"],
+        suffixes: ["Shore", "Cove", "Strand"],
+        forceSpace: true
+      });
+    }
+
+    patterns.push(
+      {
+        prefixes: ["Grey", "White", "Kings", "Queens", "Bracken", "Deep", "Oak", "Red", "Moon", "Low", "West", "East", "South", "North", "Stone", "Long"],
+        suffixes: ["wick", "holm", "mere", "mark", "hurst", "croft", "combe", "stead", "barrow", "byre", "burg", "bury", "dale", "vale", "hollow", "by", "thorpe", "ham", "minster", "chester", "caster"],
+        forceSpace: false
+      },
+      {
+        prefixes: ["Crown", "King's", "Queen's", "Regent", "Royal", "Guild", "Coin", "Mercer", "Lantern", "Bell", "Candle", "Saint", "Oath", "Vigil", "Gloam", "Sable", "Bright", "Whisper", "Rune", "Star", "Moon", "Ivory", "Glass", "Banner", "Warden", "Marshal", "Tinker", "Charter", "Heir's", "Pilgrim's", "Morrow", "Ember", "Sentinel", "Astral", "Sigil"],
+        suffixes: ["ward", "mark", "rest", "court", "hall", "watch", "gate", "veil", "grace", "banner", "burg", "bury", "vale", "dale", "wick", "stead", "holm", "mere", "croft", "combe", "ham", "thorpe", "minster", "haven", "port"],
+        forceSpace: false
+      },
+      {
+        prefixes: ["Old", "South", "North", "West", "East", "Kings", "Queens", "White", "Grey", "High", "Low", "Lantern", "Guild", "Saint", "Gloam", "Rune", "Banner"],
+        suffixes: ["Market", "Gate", "Watch", "Court", "Hall", "Exchange", "Post"],
+        forceSpace: true
+      },
+      {
+        prefixes: ["King's", "Queen's", "Royal", "Lantern", "Pilgrim's", "Mercers", "Wayfarers", "Vigil", "Saint's", "Marshal's", "Heir's"],
+        suffixes: ["Gate", "Hall", "Court", "Market", "Watch", "Exchange", "Rest"],
+        forceSpace: true
+      }
+    );
+
+    return buildGeneratedPatternName(seed, patterns, usedNames);
+  }
+
+  function buildResourceSiteDrafts({ candidateHexes, settlementAnchors, occupiedHexIds, byId, byCoord, dimensions, riverData, settings, usedNames, random, existingPois }) {
+    const existingCount = getExistingPoiTypeCount(existingPois, "resource_site");
+    const targetCount = Math.max(0, Math.round(settlementAnchors.length * 1.05 * settings.resourceAmount) - existingCount);
+    if (!targetCount || !settlementAnchors.length) return [];
+
+    const candidates = candidateHexes
+      .map(hex => buildResourceCandidate(hex, settlementAnchors, byId, byCoord, dimensions, riverData, settings))
+      .filter(candidate => candidate && candidate.score >= 0.34)
+      .sort((a, b) => b.score - a.score || a.hex.id.localeCompare(b.hex.id));
+
+    const chosen = [];
+    candidates.forEach(candidate => {
+      if (chosen.length >= targetCount || occupiedHexIds.has(candidate.hex.id)) return;
+      if (isTooCloseToExistingPoi(candidate.hex, chosen.map(entry => entry.hex), 2)) return;
+      chosen.push(candidate);
+      occupiedHexIds.add(candidate.hex.id);
+    });
+
+    return chosen.map(candidate => {
+      const name = reserveGeneratedName(
+        generateResourceSiteName(candidate, settings),
+        usedNames,
+        buildResourceSiteFallbackName(candidate),
+        { seed: `${settings.seed}:resource-name:${candidate.hex.id}` }
+      );
+      return {
+        name,
+        type: "resource_site",
+        icon: candidate.icon,
+        hexId: candidate.hex.id,
+        tags: candidate.tags,
+        notoriety: candidate.notoriety,
+        population: "",
+        lore: "",
+        meta: candidate.meta
+      };
+    });
+  }
+
+  function buildResourceCandidate(hex, settlementAnchors, byId, byCoord, dimensions, riverData, settings) {
+    const nearby = nearbyWithin(hex, byCoord, 2);
+    const nearestSettlement = findNearestSettlementAnchor(hex, settlementAnchors);
+    if (!nearestSettlement || nearestSettlement.distance < 1 || nearestSettlement.distance > 6) return null;
+    const specialization = chooseResourceSpecialization(hex, nearby, riverData);
+    if (!specialization) return null;
+    const proximityScore = nearestSettlement.distance <= 3
+      ? 1 - (nearestSettlement.distance - 1) * 0.18
+      : 0.52 - (nearestSettlement.distance - 4) * 0.11;
+    const routeability = scoreSettlementRouteability(hex, nearby, riverData);
+    const remoteness = Math.min(1, nearestSettlement.distance / 6);
+    const score = specialization.score * 0.5 + proximityScore * 0.28 + routeability * 0.12 + remoteness * 0.10;
+    if (score < 0.3) return null;
+    const tags = getResourceTags(specialization, nearestSettlement.distance);
+    return {
+      hex,
+      score,
+      icon: specialization.icon,
+      tags,
+      notoriety: getResourceNotoriety(specialization, nearestSettlement.distance),
+      meta: {
+        kind: specialization.kind,
+        label: specialization.label,
+        nearestSettlement: nearestSettlement.anchor?.name || ""
+      }
+    };
+  }
+
+  function chooseResourceSpecialization(hex, nearby, riverData) {
+    const candidates = [];
+    const rockCount = getNearbyTerrainCount([hex, ...nearby], ["rock", "snow"]);
+    const forestCount = (hex.features || []).filter(feature => ["forest", "dead_trees", "jungle", "jungle_trees"].includes(feature)).length
+      + nearby.reduce((sum, neighbor) => sum + (neighbor.features || []).filter(feature => ["forest", "dead_trees", "jungle", "jungle_trees"].includes(feature)).length, 0);
+    const fertility = scoreSettlementFertility(hex, nearby);
+    const waterish = hasRiverAccess(hex, nearby, riverData) || nearby.some(neighbor => ["coastal_water", "sea", "inland_water"].includes(neighbor.baseTerrain));
+
+    if (rockCount >= 3 || (hex.features || []).some(feature => ["mountains", "snowcapped_mountains", "lone_mountain", "volcano"].includes(feature))) {
+      candidates.push({ kind: "mine", label: "Mine", icon: "mine", score: 0.92 });
+    }
+    if (rockCount >= 2) {
+      candidates.push({ kind: "quarry", label: "Quarry", icon: "quarry", score: 0.74 });
+    }
+    if (forestCount >= 2 || ["jungle_floor", "lush_grassland", "wetland"].includes(hex.baseTerrain)) {
+      candidates.push({ kind: "lumber", label: "Lumber Camp", icon: "lumber_camp", score: 0.76 });
+    }
+    if (fertility >= 0.78) {
+      candidates.push({ kind: "farm", label: "Farms", icon: "farmstead", score: 0.88 });
+    }
+    if (waterish) {
+      candidates.push({ kind: "fishery", label: "Fishery", icon: nearby.some(neighbor => ["coastal_water", "sea"].includes(neighbor.baseTerrain)) ? "docks" : "windmill", score: 0.72 });
+    }
+
+    return candidates.sort((a, b) => b.score - a.score)[0] || null;
+  }
+
+  function getResourceTags(specialization, distance) {
+    const tags = [];
+    if (specialization.kind === "mine") tags.push("mining");
+    if (specialization.kind === "quarry") tags.push("craftwork");
+    if (specialization.kind === "lumber") tags.push("craftwork");
+    if (specialization.kind === "farm") tags.push("farming");
+    if (specialization.kind === "fishery") tags.push("fishing");
+    if (distance >= 4) tags.push("remote");
+    if (distance <= 2) tags.push("occupied");
+    return coerceGeneratedTags(tags);
+  }
+
+  function getResourceNotoriety(specialization, distance) {
+    let value = 7;
+    if (specialization.kind === "mine") value = 6;
+    if (specialization.kind === "farm") value = 7;
+    if (specialization.kind === "fishery") value = 7;
+    if (distance >= 4) value += 1;
+    return String(Math.max(4, Math.min(9, value)));
+  }
+
+  function generateResourceSiteName(candidate, settings) {
+    const seed = `${settings.seed}:resource-name:${candidate.hex.id}`;
+    const nearestSettlement = String(candidate.meta?.nearestSettlement || "").trim();
+    const kind = candidate.meta?.kind || "resource";
+    const relatedSuffixes = kind === "mine"
+      ? ["Mine", "Diggings", "Delve", "Pit", "Shaft"]
+      : kind === "quarry"
+        ? ["Quarry", "Stoneworks", "Cut", "Face"]
+        : kind === "lumber"
+          ? ["Timber Camp", "Logging Camp", "Mill", "Woodlot", "Yard"]
+          : kind === "fishery"
+            ? ["Fishery", "Fish Weir", "Docks", "Net Yard"]
+            : ["Farms", "Fields", "Grange", "Holdings", "Meadows"];
+    const relatedQualifiers = kind === "mine"
+      ? ["Old", "Upper", "Lower", "North", "South", "Red", "Black", "Deep"]
+      : kind === "quarry"
+        ? ["Old", "Upper", "Lower", "Grey", "White", "East", "West"]
+        : kind === "lumber"
+          ? ["Upper", "Lower", "Old", "North", "South", "Green", "Outer"]
+          : kind === "fishery"
+            ? ["Upper", "Lower", "Reed", "Willow", "North", "South"]
+            : ["North", "South", "East", "West", "Upper", "Lower", "Outer"];
+
+    if (nearestSettlement && seededUnit(`${seed}:related-roll`) < 0.72) {
+      return buildRelatedGeneratedSiteName(seed, nearestSettlement, relatedSuffixes, relatedQualifiers, {
+        qualifierChance: kind === "farm" ? 0.58 : 0.38
+      });
+    }
+
+    const patterns = kind === "mine"
+      ? [
+          {
+            prefixes: ["Iron", "Copper", "Black", "Stone", "Deep", "Cinder", "Ash", "Red", "Tin", "Silver", "Lead", "Cold", "Raven", "Torch", "Crag", "Hammer"],
+            suffixes: ["Mine", "Delve", "Diggings", "Pit", "Shaft"],
+            forceSpace: true
+          }
+        ]
+      : kind === "quarry"
+        ? [
+            {
+              prefixes: ["Grey", "Stone", "King's", "Old", "White", "Brass", "Slate", "Hard", "Hill", "Red", "Cold", "Marble", "Flint"],
+              suffixes: ["Quarry", "Cut", "Stoneworks", "Face"],
+              forceSpace: true
+            }
+          ]
+        : kind === "lumber"
+          ? [
+              {
+                prefixes: ["Pine", "Oak", "Willow", "Moss", "Bracken", "Timber", "Green", "Cedar", "Alder", "Ash", "Birch", "Fern", "Southwood", "Lantern", "Warden's"],
+                suffixes: ["Camp", "Mill", "Woodlot", "Yard"],
+                forceSpace: true
+              }
+            ]
+          : kind === "fishery"
+            ? [
+                {
+                  prefixes: ["Reed", "Marsh", "River", "Salt", "Shore", "Tide", "Eel", "Mud", "Delta", "Shallows", "Willow", "Netter's"],
+                  suffixes: ["Fishery", "Fish Weir", "Docks", "Net Yard"],
+                  forceSpace: true
+                }
+              ]
+            : [
+                {
+                  prefixes: ["South", "West", "Green", "Amber", "Meadow", "Willow", "Barley", "Harvest", "Sun", "Long", "Mill", "Elm", "Red", "Candle", "Bell"],
+                  suffixes: ["Farms", "Fields", "Grange", "Holdings", "Meadows", "Croft", "Dale"],
+                  forceSpace: true
+                }
+              ];
+    return buildGeneratedPatternName(seed, patterns);
+  }
+
+  function buildWaypointDrafts({ candidateHexes, settlementAnchors, occupiedHexIds, byId, byCoord, dimensions, riverData, settings, usedNames, random, existingPois }) {
+    const existingCount = getExistingPoiTypeCount(existingPois, "waypoint");
+    const targetCount = Math.max(0, Math.round(settlementAnchors.length * 0.7 * settings.waypointAmount) - existingCount);
+    if (!targetCount || settlementAnchors.length < 2) return [];
+
+    const routes = buildWaypointRouteCandidates(settlementAnchors, byId, byCoord, dimensions, riverData, settings);
+    const byHex = new Map();
+    routes.forEach(route => {
+      const startTrim = Math.max(1, Math.floor(route.path.length * 0.2));
+      const endTrim = Math.max(startTrim + 1, Math.ceil(route.path.length * 0.8));
+      route.path.slice(startTrim, endTrim).forEach((hexId, index) => {
+        if (occupiedHexIds.has(hexId)) return;
+        const hex = byId.get(hexId);
+        if (!hex || !isPoiLandHex(hex)) return;
+        const nearby = nearbyWithin(hex, byCoord, 1);
+        const crossing = hasRiverAccess(hex, nearby, riverData) ? 1 : 0;
+        const pass = getNearbyTerrainCount([hex, ...nearby], ["rock", "snow"]) >= 2 ? 1 : 0;
+        const midpointBias = 1 - Math.abs((index / Math.max(1, route.path.length - 1)) - 0.5);
+        const record = byHex.get(hexId) || { hex, corridorCount: 0, crossing: 0, pass: 0, midpoint: 0, nearby };
+        record.corridorCount += 1;
+        record.crossing = Math.max(record.crossing, crossing);
+        record.pass = Math.max(record.pass, pass);
+        record.midpoint = Math.max(record.midpoint, midpointBias);
+        if (!record.routeNames) record.routeNames = new Set();
+        if (route.from?.name) record.routeNames.add(route.from.name);
+        if (route.to?.name) record.routeNames.add(route.to.name);
+        byHex.set(hexId, record);
+      });
+    });
+
+    const candidates = [...byHex.values()]
+      .map(record => {
+        const nearestSettlement = findNearestSettlementAnchor(record.hex, settlementAnchors);
+        if (!nearestSettlement || nearestSettlement.distance < 2) return null;
+        const baseScore = Math.min(1, record.corridorCount / 3) * 0.4 + record.crossing * 0.22 + record.pass * 0.16 + record.midpoint * 0.12;
+        const frontier = distanceToMapEdge(record.hex, dimensions) <= 2 ? 0.08 : 0;
+        const routeability = scoreSettlementRouteability(record.hex, record.nearby, riverData) * 0.1;
+        const score = baseScore + frontier + routeability;
+        if (score < 0.32) return null;
+        const icon = chooseWaypointIcon(record);
+        const tags = getWaypointTags(record);
+        return {
+          hex: record.hex,
+          score,
+          icon,
+          tags,
+          notoriety: getWaypointNotoriety(record, nearestSettlement.distance),
+          meta: {
+            corridorCount: record.corridorCount,
+            crossing: record.crossing,
+            pass: record.pass,
+            nearestSettlement: nearestSettlement.anchor?.name || "",
+            routeNames: record.routeNames ? [...record.routeNames].filter(Boolean).slice(0, 4) : []
+          }
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score || a.hex.id.localeCompare(b.hex.id));
+
+    const chosen = [];
+    candidates.forEach(candidate => {
+      if (chosen.length >= targetCount || occupiedHexIds.has(candidate.hex.id)) return;
+      if (isTooCloseToExistingPoi(candidate.hex, chosen.map(entry => entry.hex), 2)) return;
+      chosen.push(candidate);
+      occupiedHexIds.add(candidate.hex.id);
+    });
+
+    return chosen.map(candidate => ({
+      name: reserveGeneratedName(
+        generateWaypointName(candidate, settings),
+        usedNames,
+        buildWaypointFallbackName(candidate),
+        { seed: `${settings.seed}:waypoint-name:${candidate.hex.id}` }
+      ),
+      type: "waypoint",
+      icon: candidate.icon,
+      hexId: candidate.hex.id,
+      tags: candidate.tags,
+      notoriety: candidate.notoriety,
+      population: "",
+      lore: "",
+      meta: candidate.meta
+    }));
+  }
+
+  function buildWaypointRouteCandidates(settlementAnchors, byId, byCoord, dimensions, riverData, settings) {
+    const pairs = [];
+    settlementAnchors.forEach((anchor, index) => {
+      const nearest = settlementAnchors
+        .filter((_, candidateIndex) => candidateIndex !== index)
+        .map(other => ({
+          from: anchor,
+          to: other,
+          distance: hexDistance(anchor.hex, other.hex)
+        }))
+        .filter(candidate => candidate.distance >= 5 && candidate.distance <= 14)
+        .sort((a, b) => a.distance - b.distance || (b.to.importance || 0) - (a.to.importance || 0))
+        .slice(0, 2);
+      nearest.forEach(candidate => {
+        const key = [candidate.from.hex.id, candidate.to.hex.id].sort().join(":");
+        if (!pairs.some(existing => existing.key === key)) {
+          pairs.push({ ...candidate, key });
+        }
+      });
+    });
+
+    return pairs
+      .map(pair => {
+        const path = findPoiLandPath(pair.from.hex.id, pair.to.hex.id, byId, byCoord);
+        return path && path.length >= 7 ? { ...pair, path } : null;
+      })
+      .filter(Boolean);
+  }
+
+  function chooseWaypointIcon(record) {
+    if (record.crossing) return "ford";
+    if (record.pass) return "mountain_pass";
+    if (record.corridorCount >= 3) return "market";
+    return record.midpoint >= 0.65 ? "tavern" : "lodge";
+  }
+
+  function getWaypointTags(record) {
+    const tags = ["rest"];
+    if (record.corridorCount >= 2) tags.push("trade");
+    if (record.corridorCount >= 3) tags.push("crossroads");
+    else tags.push("roadside");
+    if (record.crossing) tags.push("river_crossing");
+    if (record.pass) tags.push("frontier");
+    return coerceGeneratedTags(tags);
+  }
+
+  function getWaypointNotoriety(record, settlementDistance) {
+    let value = record.corridorCount >= 3 ? 5 : 6;
+    if (record.crossing) value -= 1;
+    if (settlementDistance >= 5) value += 1;
+    return String(Math.max(4, Math.min(9, value)));
+  }
+
+  function generateWaypointName(candidate, settings) {
+    const seed = `${settings.seed}:waypoint-name:${candidate.hex.id}`;
+    const routeNames = Array.isArray(candidate.meta?.routeNames) ? candidate.meta.routeNames.filter(Boolean) : [];
+    const nearestSettlement = String(candidate.meta?.nearestSettlement || "").trim();
+    const relatedBaseName = routeNames.length
+      ? seededPick(routeNames, `${seed}:route-name`)
+      : nearestSettlement;
+
+    if (candidate.icon === "ford") {
+      if (relatedBaseName && seededUnit(`${seed}:related-roll`) < 0.58) {
+        return buildRelatedGeneratedSiteName(seed, relatedBaseName, ["Ford", "Crossing", "Bridge"], ["Old", "Upper", "Lower", "Reed", "Willow", "North", "South"], {
+          qualifierChance: 0.28
+        });
+      }
+      return buildGeneratedPatternName(seed, [
+        {
+          prefixes: ["Stone", "Grey", "Willow", "Reed", "Otter", "Low", "South", "North", "Alder", "White", "Moss", "Old", "Three", "Kings", "Bracken", "Lantern", "Bell", "Wayfarers"],
+          suffixes: ["Ford", "Crossing", "Bridge"],
+          forceSpace: true
+        },
+        {
+          prefixes: ["Stone", "Grey", "Willow", "Otter", "Moss", "Alder", "Reed", "Kings"],
+          suffixes: ["ford", "bridge", "cross"],
+          forceSpace: false
+        }
+      ]);
+    }
+
+    if (candidate.icon === "mountain_pass") {
+      if (relatedBaseName && seededUnit(`${seed}:related-roll`) < 0.46) {
+        return buildRelatedGeneratedSiteName(seed, relatedBaseName, ["Pass", "Gate", "Rest"], ["High", "Cold", "North", "South", "Old"], {
+          qualifierChance: 0.24
+        });
+      }
+      return buildGeneratedPatternName(seed, [
+        {
+          prefixes: ["High", "Wind", "Stone", "Cold", "Grey", "Wolf", "Iron", "North", "Raven", "Storm", "Cairn", "Frost", "Crag", "Sentinel", "Warden's", "Banner"],
+          suffixes: ["Pass", "Gate", "Rest", "Watch"],
+          forceSpace: true
+        },
+        {
+          prefixes: ["High", "Cold", "Wolf", "Stone", "Frost", "Crag", "North", "Iron"],
+          suffixes: ["gate", "rest", "watch"],
+          forceSpace: false
+        }
+      ]);
+    }
+
+    if (candidate.icon === "market") {
+      if (relatedBaseName && seededUnit(`${seed}:related-roll`) < 0.44) {
+        return `${relatedBaseName} ${seededPick(["Market", "Exchange", "Post", "Hall"], `${seed}:related-suffix`) || "Market"}`;
+      }
+      return buildGeneratedPatternName(seed, [
+        {
+          prefixes: ["Three Roads", "Crossways", "Wayfarers", "Old Road", "Greyroad", "Merchants", "King's Road", "South Road", "River Road", "Long Way", "Lantern", "Coin", "Guild", "Charter", "Mercers"],
+          suffixes: ["Market", "Exchange", "Post", "Hall", "Court"],
+          forceSpace: true
+        }
+      ]);
+    }
+
+    if (relatedBaseName && seededUnit(`${seed}:related-roll`) < 0.42) {
+      return `${relatedBaseName} ${seededPick(["Inn", "Lodge", "Roadhouse", "Rest", "Camp"], `${seed}:related-suffix`) || "Inn"}`;
+    }
+
+    return buildGeneratedPatternName(seed, [
+      {
+        prefixes: ["Three Pines", "Old Road", "Willow", "Moss", "Grey", "Wayfarers", "Traveler's", "South Road", "Northwatch", "Bracken", "Elm", "Reed", "Crosswind", "Lantern", "Bell", "Candle", "Gloam", "Vigil", "Pilgrim's", "Oath", "Whisper"],
+        suffixes: ["Inn", "Lodge", "Roadhouse", "Rest", "Camp", "House", "Post", "Hall"],
+        forceSpace: true
+      },
+      {
+        prefixes: ["Lantern", "Bell", "Candle", "Gloam", "Whisper", "Rune", "Banner", "Vigil", "Wayfarers", "Pilgrim's", "Marshal's", "Warden's"],
+        suffixes: ["Rest", "Post", "Watch", "Hall", "Lodge", "House"],
+        forceSpace: true
+      }
+    ]);
+  }
+
+  function buildResourceSiteFallbackName(candidate) {
+    const nearestSettlement = String(candidate?.meta?.nearestSettlement || "").trim();
+    const label = String(candidate?.meta?.label || "Works").trim() || "Works";
+    return nearestSettlement ? `${nearestSettlement} ${label}` : `Outlying ${label}`;
+  }
+
+  function buildWaypointFallbackName(candidate) {
+    if (candidate?.icon === "ford") return "Stone Ford";
+    if (candidate?.icon === "mountain_pass") return "High Pass";
+    if (candidate?.icon === "market") return "Crossroads Market";
+    return "Wayfarers Inn";
+  }
+
+  function getExistingPoiTypeCount(existingPois, typeValue) {
+    const normalizedType = window.CampaignPoiTypes?.getStoredTypeValue?.(typeValue) || typeValue;
+    const seen = new Set();
+    return (existingPois || []).reduce((count, poi) => {
+      const type = window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || "") || "";
+      if (type !== normalizedType) return count;
+      const key = poi?.POI_Group_ID ? `group:${poi.POI_Group_ID}` : `poi:${poi?.POI_ID || count}`;
+      if (seen.has(key)) return count;
+      seen.add(key);
+      return count + 1;
+    }, 0);
+  }
+
+  function findNearestSettlementAnchor(hex, settlementAnchors) {
+    let best = null;
+    settlementAnchors.forEach(anchor => {
+      if (!anchor?.hex) return;
+      const distance = hexDistance(hex, anchor.hex);
+      if (!best || distance < best.distance || (distance === best.distance && (anchor.importance || 0) > (best.anchor?.importance || 0))) {
+        best = { anchor, distance };
+      }
+    });
+    return best;
+  }
+
+  function isTooCloseToExistingPoi(hex, otherHexes, maxDistance) {
+    return (otherHexes || []).some(otherHex => hexDistance(hex, otherHex) <= maxDistance);
+  }
+
+  function isPoiLandHex(hex) {
+    return Boolean(hex && !isWaterBase(hex.baseTerrain));
+  }
+
+  function isViableSettlementHex(hex) {
+    return Boolean(hex && isPoiLandHex(hex) && !["deep_desert", "wastes"].includes(hex.baseTerrain));
+  }
+
+  function hasRiverAccess(hex, nearby, riverData) {
+    return riverData.riverHexIds.has(hex.id) || nearby.some(neighbor => riverData.riverHexIds.has(neighbor.id));
+  }
+
+  function getNearbyTerrainCount(neighborsList, terrains) {
+    const allowed = new Set(terrains || []);
+    return (neighborsList || []).filter(neighbor => allowed.has(neighbor.baseTerrain)).length;
+  }
+
+  function getTerrainFertility(baseTerrain, features = []) {
+    const profile = TERRAIN_PROFILES[baseTerrain];
+    let score = {
+      lush_grassland: 1,
+      grassland: 0.9,
+      plains: 0.84,
+      wetland: 0.62,
+      jungle_floor: 0.7,
+      beach: 0.24,
+      barrens: 0.2,
+      bleak_barrens: 0.12,
+      desert: 0.08,
+      deep_desert: 0.03,
+      snow: 0.12,
+      rock: 0.1,
+      wastes: 0.04
+    }[baseTerrain] ?? (profile?.group === "fertile" ? 0.8 : 0.25);
+    if ((features || []).includes("farmland")) score += 0.18;
+    if ((features || []).includes("forest")) score -= 0.05;
+    return Math.max(0, Math.min(1.05, score));
+  }
+
+  function getTerrainRoughness(baseTerrain, features = []) {
+    let score = {
+      beach: 0.24,
+      plains: 0.14,
+      grassland: 0.12,
+      lush_grassland: 0.16,
+      wetland: 0.58,
+      jungle_floor: 0.66,
+      desert: 0.38,
+      deep_desert: 0.54,
+      barrens: 0.42,
+      bleak_barrens: 0.48,
+      snow: 0.58,
+      rock: 0.84,
+      wastes: 0.72
+    }[baseTerrain] ?? 0.5;
+    if ((features || []).some(feature => ["mountains", "snowcapped_mountains", "lone_mountain", "volcano", "cliffs"].includes(feature))) score += 0.14;
+    if ((features || []).some(feature => ["forest", "dead_trees", "jungle", "jungle_trees"].includes(feature))) score += 0.08;
+    if ((features || []).includes("farmland")) score -= 0.06;
+    return Math.max(0.05, Math.min(1, score));
+  }
+
+  function distanceToMapEdge(hex, dimensions) {
+    return Math.min(
+      Math.abs(hex.x - dimensions.minX),
+      Math.abs(dimensions.maxX - hex.x),
+      Math.abs(hex.y - dimensions.minY),
+      Math.abs(dimensions.maxY - hex.y)
+    );
+  }
+
+  function hexDistance(left, right) {
+    if (!left || !right) return Infinity;
+    const leftCube = offsetToCube(left.x, left.y);
+    const rightCube = offsetToCube(right.x, right.y);
+    return Math.max(
+      Math.abs(leftCube.x - rightCube.x),
+      Math.abs(leftCube.y - rightCube.y),
+      Math.abs(leftCube.z - rightCube.z)
+    );
+  }
+
+  function offsetToCube(x, y) {
+    const z = y - ((x + (x & 1)) >> 1);
+    const cubeY = -x - z;
+    return { x, y: cubeY, z };
+  }
+
+  function findPoiLandPath(startHexId, goalHexId, byId, byCoord) {
+    const start = byId.get(startHexId);
+    const goal = byId.get(goalHexId);
+    if (!start || !goal) return null;
+    const open = [{ hex: start, f: 0 }];
+    const openIds = new Set([start.id]);
+    const cameFrom = new Map();
+    const gScore = new Map([[start.id, 0]]);
+
+    while (open.length) {
+      open.sort((a, b) => a.f - b.f);
+      const current = open.shift()?.hex;
+      if (!current) break;
+      openIds.delete(current.id);
+      if (current.id === goal.id) return reconstructPoiPath(cameFrom, current.id);
+
+      neighbors(current, byCoord).forEach(neighbor => {
+        if (!isPoiLandHex(neighbor)) return;
+        const tentative = (gScore.get(current.id) || 0) + 1 + getTerrainRoughness(neighbor.baseTerrain, neighbor.features) * 1.8;
+        if (tentative >= (gScore.get(neighbor.id) ?? Infinity)) return;
+        cameFrom.set(neighbor.id, current.id);
+        gScore.set(neighbor.id, tentative);
+        const f = tentative + hexDistance(neighbor, goal);
+        if (!openIds.has(neighbor.id)) {
+          open.push({ hex: neighbor, f });
+          openIds.add(neighbor.id);
+        }
+      });
+    }
+
+    return null;
+  }
+
+  function reconstructPoiPath(cameFrom, currentId) {
+    const path = [currentId];
+    let cursor = currentId;
+    while (cameFrom.has(cursor)) {
+      cursor = cameFrom.get(cursor);
+      path.unshift(cursor);
+    }
+    return path;
+  }
+
+  function lowerCaseGeneratedNamePart(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    return text.charAt(0).toLowerCase() + text.slice(1);
+  }
+
+  function buildGeneratedPatternName(seed, patterns, usedNames = null) {
+    const availablePatterns = Array.isArray(patterns) && patterns.length
+      ? patterns
+      : [{
+          prefixes: ["Grey", "Stone", "Oak", "Kings"],
+          suffixes: ["wick", "ford", "stead", "mere"],
+          forceSpace: false
+        }];
+    const pattern = seededPick(availablePatterns, `${seed}:pattern`) || availablePatterns[0];
+    return buildGeneratedCompositeName(seed, pattern.prefixes, pattern.suffixes, usedNames, { forceSpace: pattern.forceSpace === true });
+  }
+
+  function buildRelatedGeneratedSiteName(seed, anchorName, suffixes, qualifiers = [], options = {}) {
+    const baseName = String(anchorName || "").trim();
+    if (!baseName) return "";
+    const suffix = seededPick(suffixes, `${seed}:related-suffix`) || "Site";
+    const qualifier = Array.isArray(qualifiers) && qualifiers.length && seededUnit(`${seed}:related-qualifier-roll`) < (options.qualifierChance ?? 0.42)
+      ? seededPick(qualifiers, `${seed}:related-qualifier`)
+      : "";
+    if (!qualifier) return `${baseName} ${suffix}`;
+    return options.qualifierAfter
+      ? `${baseName} ${qualifier} ${suffix}`
+      : `${qualifier} ${baseName} ${suffix}`;
+  }
+
+  function buildGeneratedCompositeName(seed, prefixes, suffixes, usedNames = null, options = {}) {
+    const prefix = seededPick(prefixes, `${seed}:prefix`) || "Grey";
+    const suffix = seededPick(suffixes, `${seed}:suffix`) || "wick";
+    const separator = options.forceSpace === true
+      ? " "
+      : options.forceSpace === false
+        ? ""
+        : /^(Camp|Cut|Mine|Mill|Port|Quay|Rest|Vale|Keep|Peak|Gate|Bridge|Crossing|Fields|Farms|Docks|Fishery|Stoneworks|Market|Exchange|Post|Inn|Lodge|Roadhouse|Hall|Harbor|Pass|Watch)$/.test(suffix)
+          ? " "
+          : "";
+    const suffixText = separator ? suffix : lowerCaseGeneratedNamePart(suffix);
+    return `${prefix}${separator}${suffixText}`;
+  }
+
+  function reserveGeneratedName(preferredName, usedNames, fallbackName, options = {}) {
+    const baseName = String(preferredName || "").trim() || String(fallbackName || "").trim() || "New Place";
+    const normalizedBase = normalizeGeneratedNameKey(baseName);
+    if (!usedNames.has(normalizedBase)) {
+      usedNames.add(normalizedBase);
+      return baseName;
+    }
+
+    const fallbackLabel = String(fallbackName || baseName).trim() || baseName;
+    const seed = String(options.seed || `${baseName}|${fallbackLabel}`);
+    const baseVariants = [...new Set([baseName, fallbackLabel].map(value => String(value || "").trim()).filter(Boolean))];
+    const prefixVariants = ["North", "South", "East", "West", "Upper", "Lower", "Old", "Outer", "High", "Low", "River", "Hill", "Far", "Near", "Red", "White", "Grey", "Black"];
+    const suffixVariants = ["Watch", "Gate", "Market", "Rest", "Reach", "Cross", "Point", "End", "View", "Hold", "Landing", "Bridge"];
+
+    for (let index = 0; index < prefixVariants.length * baseVariants.length; index += 1) {
+      const base = baseVariants[index % baseVariants.length];
+      const qualifier = prefixVariants[(hashNumber(`${seed}:prefix:${index}`) + index) % prefixVariants.length];
+      const candidate = normalizeGeneratedNameKey(base).startsWith(normalizeGeneratedNameKey(qualifier))
+        ? base
+        : `${qualifier} ${base}`;
+      const key = normalizeGeneratedNameKey(candidate);
+      if (usedNames.has(key)) continue;
+      usedNames.add(key);
+      return candidate;
+    }
+
+    for (let index = 0; index < suffixVariants.length * baseVariants.length; index += 1) {
+      const base = baseVariants[index % baseVariants.length];
+      const suffix = suffixVariants[(hashNumber(`${seed}:suffix:${index}`) + index) % suffixVariants.length];
+      const candidate = normalizeGeneratedNameKey(base).endsWith(normalizeGeneratedNameKey(suffix))
+        ? base
+        : `${base} ${suffix}`;
+      const key = normalizeGeneratedNameKey(candidate);
+      if (usedNames.has(key)) continue;
+      usedNames.add(key);
+      return candidate;
+    }
+
+    for (let index = 0; index < 10; index += 1) {
+      const candidate = buildGeneratedPatternName(`${seed}:final:${index}`, [
+        {
+          prefixes: ["Grey", "Stone", "Oak", "Kings", "Queens", "Willow", "Raven", "Amber", "Deep", "Bracken", "Lantern", "Crown", "Guild", "Saint", "Gloam", "Rune", "Banner"],
+          suffixes: ["ford", "stead", "reach", "wick", "cross", "watch", "mark", "gate", "rest", "mere", "burg", "vale", "dale", "ward", "hall"],
+          forceSpace: false
+        },
+        {
+          prefixes: ["Old", "Upper", "Lower", "North", "South", "West", "East", "Crossways", "Wayfarers", "Lantern", "Guild", "Pilgrim's", "Marshal's"],
+          suffixes: ["Market", "Bridge", "Watch", "Rest", "Hall", "Gate", "Post"],
+          forceSpace: true
+        }
+      ]);
+      const key = normalizeGeneratedNameKey(candidate);
+      if (usedNames.has(key)) continue;
+      usedNames.add(key);
+      return candidate;
+    }
+
+    usedNames.add(normalizeGeneratedNameKey(fallbackLabel));
+    return fallbackLabel;
+  }
+
+  function normalizeGeneratedNameKey(value) {
+    return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  }
+
+  function randomIntegerFromSeed(seed, min, max) {
+    const low = Math.min(min, max);
+    const high = Math.max(min, max);
+    const value = seededUnit(seed);
+    return Math.round(low + value * (high - low));
+  }
+
+  function formatGeneratedPopulation(value) {
+    const numeric = Math.max(0, Math.round(Number(value) || 0));
+    return numeric ? numeric.toLocaleString("en-US") : "";
+  }
+
+  function parsePopulationNumber(value) {
+    const match = String(value || "").replace(/,/g, "").match(/\d+/);
+    return match ? Number(match[0]) : 0;
+  }
+
+  function coerceGeneratedTags(values) {
+    return window.CampaignPoiTags?.coerceTagValues?.(values) || [];
+  }
+
+  function seededUnit(seed) {
+    return (hashNumber(String(seed || "")) % 100000) / 100000;
+  }
+
+  function seededNoise(seed, min, max) {
+    return min + seededUnit(seed) * (max - min);
+  }
+
+  function seededPick(options, seed) {
+    if (!Array.isArray(options) || !options.length) return "";
+    return options[Math.floor(seededUnit(seed) * options.length)] || options[0];
+  }
+
   window.CampaignGeneratedMapGenerator = {
     generateNaturalTerrain,
+    generatePoiDrafts,
     hashNumber
   };
 })();

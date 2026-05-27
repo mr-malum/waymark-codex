@@ -1,0 +1,35 @@
+-- =========================================================
+-- Campaign Codex
+-- Optional backfill for generated POI source markers
+-- =========================================================
+--
+-- This is optional.
+-- Use it only if you want already-existing generated POIs in a campaign
+-- to count as "generated" for the new "Purge Generated POIs" action.
+--
+-- Recommended safer alternative:
+-- 1. Purge old test POIs
+-- 2. Regenerate them
+-- New generated POIs will then be marked automatically.
+--
+-- If you do use this file, narrow the WHERE clause to only the rows you know
+-- were created procedurally.
+
+-- Example campaign-scoped backfill for POIs you know are generated:
+-- update public.pois
+-- set generation_source = 'poi_generation_v1'
+-- where campaign_id = 'YOUR-CAMPAIGN-ID'::uuid
+--   and coalesce(generation_source, '') = ''
+--   and ref_code in (
+--     'POI-0001',
+--     'POI-0002'
+--   );
+
+-- Example grouped-POI backfill if you later generate grouped places:
+-- update public.poi_groups
+-- set generation_source = 'poi_generation_v1'
+-- where campaign_id = 'YOUR-CAMPAIGN-ID'::uuid
+--   and coalesce(generation_source, '') = ''
+--   and slug in (
+--     'example-generated-group'
+--   );

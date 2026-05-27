@@ -87,6 +87,52 @@ function populatePoiGroupOptions(selectedGroupId = "") {
   select.value = selectedGroupId || "";
 }
 
+const EVEN_Q_POI_GROUP_NEIGHBORS = [[1, 0], [0, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+const ODD_Q_POI_GROUP_NEIGHBORS = [[1, 1], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, 0]];
+
+function getPoiGroupHexCoordinates(hexId = "") {
+  const hex = db?.hexesById?.[hexId];
+  const coordinateValue = String(hex?.Map_XY || hex?.Hex_ID || hexId || "").trim();
+  if (!coordinateValue || typeof parseMapHexId !== "function") return null;
+  return parseMapHexId(coordinateValue);
+}
+
+function arePoiGroupHexesAdjacent(leftHexId = "", rightHexId = "") {
+  if (!leftHexId || !rightHexId || leftHexId === rightHexId) return false;
+  const left = getPoiGroupHexCoordinates(leftHexId);
+  const right = getPoiGroupHexCoordinates(rightHexId);
+  if (!left || !right) return false;
+  const offsets = left.x % 2 ? ODD_Q_POI_GROUP_NEIGHBORS : EVEN_Q_POI_GROUP_NEIGHBORS;
+  return offsets.some(([dx, dy]) => left.x + dx === right.x && left.y + dy === right.y);
+}
+
+function getPoiGroupAdjacencyChildren(groupId = "", options = {}) {
+  if (!groupId) return [];
+
+  const excludePoiId = options.excludePoiId || "";
+  const scopedChildIds = Array.isArray(options.childIds)
+    ? options.childIds
+    : null;
+  const children = scopedChildIds
+    ? scopedChildIds.map(poiId => db?.poisById?.[poiId]).filter(Boolean)
+    : (getPoisForGroup?.(groupId) || db?.poisByGroupId?.[groupId] || []);
+
+  return children.filter(poi => poi?.POI_ID && poi.POI_ID !== excludePoiId);
+}
+
+function canPoiHexJoinGroup(hexId = "", groupId = "", options = {}) {
+  if (!groupId || !hexId) return true;
+  const siblings = getPoiGroupAdjacencyChildren(groupId, options);
+  if (!siblings.length) return true;
+  return siblings.some(poi => poi?.Hex_ID_Ref && arePoiGroupHexesAdjacent(hexId, poi.Hex_ID_Ref));
+}
+
+function setPoiGroupHelpState(helpEl, message, isWarning = false) {
+  if (!helpEl) return;
+  helpEl.textContent = message || helpEl.dataset.defaultText || "";
+  helpEl.classList.toggle("codex-editor-inline-warning", isWarning);
+}
+
 function populatePoiTypeOptions(selectId, selectedValue = "", blankLabel = "Select a type...") {
   const select = document.getElementById(selectId);
   if (!select) return;
@@ -527,6 +573,88 @@ function populatePoiGroupChildAddOptions(groupId, selectedPoiId = "") {
 
   select.innerHTML = options.join("");
   select.value = selectedPoiId || "";
+  updatePoiGroupChildAddHelp();
+}
+
+function updatePoiParentGroupAdjacencyHelp() {
+  const help = document.getElementById("codex-add-poi-parent-help");
+  if (!help) return;
+
+  const defaultText = help.dataset.defaultText || "Optional. Use this for Areas inside a grouped POI.";
+  const parentGroupId = document.getElementById("codex-add-poi-parent-group")?.value || "";
+  const hexId = document.getElementById("codex-add-poi-hex")?.value || "";
+  const currentPoiId = codexEditorState.mode === "edit-poi"
+    ? codexEditorState.recordId || ""
+    : "";
+
+  if (!parentGroupId) {
+    setPoiGroupHelpState(help, defaultText, false);
+    return;
+  }
+
+  if (!hexId) {
+    setPoiGroupHelpState(help, "Choose a hex to confirm adjacency with the parent grouped POI.", false);
+    return;
+  }
+
+  const siblingOptions = { excludePoiId: currentPoiId };
+  const siblings = getPoiGroupAdjacencyChildren(parentGroupId, siblingOptions);
+  if (!siblings.length) {
+    setPoiGroupHelpState(help, "This Area will become the first child Area in the grouped POI.", false);
+    return;
+  }
+
+  if (canPoiHexJoinGroup(hexId, parentGroupId, siblingOptions)) {
+    setPoiGroupHelpState(help, "This Area is adjacent to an existing child Area in the grouped POI.", false);
+    return;
+  }
+
+  setPoiGroupHelpState(
+    help,
+    "This Area must use a hex adjacent to an existing child Area in the grouped POI. Choose a neighboring hex or a different parent group.",
+    true
+  );
+}
+
+function updatePoiGroupChildAddHelp() {
+  const help = document.getElementById("codex-edit-poi-group-add-child-help");
+  if (!help) return;
+
+  const defaultText = help.dataset.defaultText || "After the first child Area, added Areas must be adjacent to an existing child Area in the group.";
+  const groupId = codexEditorState.recordId || "";
+  const selectedPoiId = document.getElementById("codex-edit-poi-group-add-child")?.value || "";
+  if (!selectedPoiId) {
+    setPoiGroupHelpState(help, defaultText, false);
+    return;
+  }
+
+  const candidatePoi = db?.poisById?.[selectedPoiId];
+  const candidateHexId = candidatePoi?.Hex_ID_Ref || "";
+  if (!candidateHexId) {
+    setPoiGroupHelpState(help, "Selected Area needs a hex before it can join a grouped POI.", true);
+    return;
+  }
+
+  const siblingOptions = {
+    childIds: codexEditorState.workingChildIds || [],
+    excludePoiId: selectedPoiId
+  };
+  const siblings = getPoiGroupAdjacencyChildren(groupId, siblingOptions);
+  if (!siblings.length) {
+    setPoiGroupHelpState(help, "This Area will become the first child Area in the grouped POI.", false);
+    return;
+  }
+
+  if (canPoiHexJoinGroup(candidateHexId, groupId, siblingOptions)) {
+    setPoiGroupHelpState(help, "This Area is adjacent to an existing child Area in the grouped POI.", false);
+    return;
+  }
+
+  setPoiGroupHelpState(
+    help,
+    "This Area must be adjacent to an existing child Area already in the grouped POI before it can be added.",
+    true
+  );
 }
 
 function getPoiGroupUuidByLegacyId(groupId) {
@@ -537,6 +665,7 @@ function getPoiGroupUuidByLegacyId(groupId) {
 function updatePoiGroupMode() {
   const isGroup = document.getElementById("codex-add-poi-is-group")?.checked === true;
   const isPoiEdit = codexEditorState.mode === "edit-poi";
+  const groupCreationLocked = document.getElementById("codex-add-poi-is-group")?.dataset.locked === "true";
   const groupCheckboxRow = document.getElementById("codex-add-poi-is-group-row");
   const parentRow = document.getElementById("codex-add-poi-parent-row");
   const parentSelect = document.getElementById("codex-add-poi-parent-group");
@@ -552,7 +681,7 @@ function updatePoiGroupMode() {
   const notorietyRow = notorietyInput?.closest("label");
   const populationRow = populationInput?.closest("label");
 
-  if (groupCheckboxRow) groupCheckboxRow.hidden = isPoiEdit;
+  if (groupCheckboxRow) groupCheckboxRow.hidden = isPoiEdit || (groupCreationLocked && !isGroup);
   if (parentRow) parentRow.hidden = isGroup;
   if (parentSelect && isGroup) parentSelect.value = "";
   if (initialChildRow) initialChildRow.hidden = !isGroup;
@@ -568,6 +697,7 @@ function updatePoiGroupMode() {
   if (notorietyRow) notorietyRow.hidden = isGroup;
   if (populationRow) populationRow.hidden = false;
   if (typeLabel) typeLabel.textContent = isGroup ? "Group Type *" : "Type *";
+  updatePoiParentGroupAdjacencyHelp();
 }
 
 function populatePoiHexOptions(regionId = "") {
@@ -753,6 +883,7 @@ function openAddPoiEditor(options = {}) {
   if (groupCheckbox) {
     groupCheckbox.checked = options.createGroup === true;
     groupCheckbox.disabled = options.lockCreateGroup === true;
+    groupCheckbox.dataset.locked = options.lockCreateGroup === true ? "true" : "false";
   }
 
   if (parentSelect) {
@@ -807,6 +938,7 @@ function openEditPoiEditor(poiId) {
   if (groupCheckbox) {
     groupCheckbox.checked = false;
     groupCheckbox.disabled = true;
+    groupCheckbox.dataset.locked = "true";
   }
 
   const parentSelect = document.getElementById("codex-add-poi-parent-group");
@@ -1924,6 +2056,7 @@ function adaptCreatedPoiGroupRow(row) {
     Group_Type_Value: window.CampaignPoiTypes?.getStoredTypeValue?.(createdRow.group_type) || createdRow.group_type || "",
     Group_Icon: getNormalizedPoiIconValue(createdRow.group_icon, { fallback: false }),
     Group_Tags: getNormalizedPoiTagValues(createdRow.group_tags),
+    Generation_Source: createdRow.generation_source || "",
     Population: createdRow.population || "",
     Lore: createdRow.lore || "",
     Image: ""
@@ -2089,6 +2222,7 @@ function adaptCreatedPoiRow(row) {
     POI_Type_Value: window.CampaignPoiTypes?.getStoredTypeValue?.(createdRow.poi_type) || createdRow.poi_type || "",
     POI_Icon: getNormalizedPoiIconValue(createdRow.poi_icon, { fallback: false }),
     POI_Tags: getNormalizedPoiTagValues(createdRow.poi_tags),
+    Generation_Source: createdRow.generation_source || "",
     "Notoriety Tier": window.CampaignPoiTypes?.getNotorietyLabel?.(createdRow.notoriety_tier) || createdRow.notoriety_tier || "",
     "Notoriety Tier_Value": window.CampaignPoiTypes?.getStoredNotorietyValue?.(createdRow.notoriety_tier) || createdRow.notoriety_tier || "",
     Population: createdRow.population || "",
@@ -2116,6 +2250,22 @@ function addCreatedPoiToLocalDb(poi) {
   }
 }
 
+function registerCreatedPoiRowsInLocalDb(rows, options = {}) {
+  const list = Array.isArray(rows) ? rows : [rows];
+  const createdPois = list
+    .flatMap(row => Array.isArray(row) ? row : [row])
+    .filter(Boolean)
+    .map(adaptCreatedPoiRow);
+
+  createdPois.forEach(addCreatedPoiToLocalDb);
+
+  if (options.refresh !== false && createdPois.length) {
+    refreshCodexAfterCreatedRecord("poi");
+  }
+
+  return createdPois;
+}
+
 function refreshGeneratedMapPoiLayer() {
   if (window.generatedMapRenderer?.isActive?.()) {
     window.generatedMapRenderer.refreshPoiLayerFromDatabase();
@@ -2126,6 +2276,98 @@ function refreshGeneratedMapRegionLayer() {
   if (window.generatedMapRenderer?.isActive?.()) {
     window.generatedMapRenderer.refreshRegionLayerFromDatabase?.();
   }
+}
+
+function removePoiFromLocalDbByUuid(poiUuid) {
+  const poi = (db?.raw?.pois || []).find(row => row?.__uuid === poiUuid);
+  if (!poi) return;
+
+  db.raw.pois = (db.raw.pois || []).filter(row => row?.__uuid !== poiUuid);
+  if (db.poisById) {
+    delete db.poisById[poi.POI_ID];
+  }
+
+  if (poi.Hex_ID_Ref && Array.isArray(db.poisByHexId?.[poi.Hex_ID_Ref])) {
+    db.poisByHexId[poi.Hex_ID_Ref] = db.poisByHexId[poi.Hex_ID_Ref]
+      .filter(row => row.POI_ID !== poi.POI_ID);
+  }
+  if (poi.POI_Group_ID && Array.isArray(db.poisByGroupId?.[poi.POI_Group_ID])) {
+    db.poisByGroupId[poi.POI_Group_ID] = db.poisByGroupId[poi.POI_Group_ID]
+      .filter(row => row.POI_ID !== poi.POI_ID);
+  }
+
+  if (poi.POI_ID) {
+    (db.raw.npcs || []).forEach(npc => {
+      if (npc.Home_ID_Ref === poi.POI_ID) npc.Home_ID_Ref = "";
+    });
+    Object.values(db.npcsById || {}).forEach(npc => {
+      if (npc.Home_ID_Ref === poi.POI_ID) npc.Home_ID_Ref = "";
+    });
+    db.npcsByHomeId = {};
+    (db.raw.npcs || []).forEach(npc => {
+      if (!npc.Home_ID_Ref) return;
+      if (!db.npcsByHomeId[npc.Home_ID_Ref]) db.npcsByHomeId[npc.Home_ID_Ref] = [];
+      db.npcsByHomeId[npc.Home_ID_Ref].push(npc);
+    });
+  }
+
+  db.mapsByOwnerKey = groupMapsByOwner?.(db.raw.maps || []) || db.mapsByOwnerKey;
+}
+
+function removePoiGroupFromLocalDbByUuid(groupUuid) {
+  const group = (db?.raw?.poiGroups || []).find(row => row?.__uuid === groupUuid);
+  if (!group) return;
+
+  db.raw.poiGroups = (db.raw.poiGroups || []).filter(row => row?.__uuid !== groupUuid);
+  if (db.poiGroupsById) {
+    delete db.poiGroupsById[group.POI_Group_ID];
+  }
+  if (db.poisByGroupId?.[group.POI_Group_ID]) {
+    delete db.poisByGroupId[group.POI_Group_ID];
+  }
+
+  Object.values(db.poisById || {}).forEach(poi => {
+    if (poi.POI_Group_ID === group.POI_Group_ID) {
+      poi.POI_Group_ID = "";
+    }
+  });
+
+  db.mapsByOwnerKey = groupMapsByOwner?.(db.raw.maps || []) || db.mapsByOwnerKey;
+}
+
+function refreshCodexAfterPoiPurge() {
+  refreshGeneratedMapPoiLayer();
+
+  const currentPage = getCurrentCodexPage?.();
+  if (currentPage?.type === "poi") {
+    renderCodexPage?.(db?.poisById?.[currentPage.id] ? "poi" : "pois", db?.poisById?.[currentPage.id] ? currentPage.id : null);
+    fitCodexHeaderText?.();
+    updateCodexBackButton?.();
+    return;
+  }
+
+  if (currentPage?.type === "poi-group") {
+    renderCodexPage?.(db?.poiGroupsById?.[currentPage.id] ? "poi-group" : "pois", db?.poiGroupsById?.[currentPage.id] ? currentPage.id : null);
+    fitCodexHeaderText?.();
+    updateCodexBackButton?.();
+    return;
+  }
+
+  if (currentPage?.type === "pois") {
+    renderCodexPage?.("pois", null);
+    fitCodexHeaderText?.();
+    updateCodexBackButton?.();
+    return;
+  }
+
+  if (["hex", "npc"].includes(currentPage?.type)) {
+    renderCodexPage?.(currentPage.type, currentPage.id);
+    fitCodexHeaderText?.();
+    updateCodexBackButton?.();
+    return;
+  }
+
+  renderPoiListIntoContainer?.();
 }
 
 function refreshCodexAfterCreatedRecord(kind) {
@@ -2294,6 +2536,7 @@ async function handleAddPoiGroupSubmit({ campaign, name, groupType, groupIcon, i
     group_tags: tagValues,
     group_population: population || null,
     group_lore: lore || null,
+    group_generation_source: null,
     group_visibility: "shared"
   });
 
@@ -2427,6 +2670,14 @@ async function handleAddPoiSubmit(event) {
     return;
   }
 
+  if (!isGroup && parentGroupId && !canPoiHexJoinGroup(hexId, parentGroupId, {
+    excludePoiId: currentPoi?.POI_ID || ""
+  })) {
+    setCodexEditorStatus("Child Areas added to a grouped POI must use a hex adjacent to an existing child Area in that group.");
+    updatePoiParentGroupAdjacencyHelp();
+    return;
+  }
+
   setCodexEditorStatus(isGroup ? "Creating grouped POI..." : "Creating POI...");
 
   try {
@@ -2474,6 +2725,7 @@ async function handleAddPoiSubmit(event) {
       poi_notoriety_tier: notoriety || null,
       poi_population: population || null,
       poi_lore: lore || null,
+      poi_generation_source: null,
       poi_visibility: "shared",
       poi_group_id: getPoiGroupUuidByLegacyId(parentGroupId)
     });
@@ -2816,6 +3068,22 @@ async function handlePoiGroupAddChild() {
     return;
   }
 
+  const candidatePoi = db?.poisById?.[poiId];
+  if (!candidatePoi?.Hex_ID_Ref) {
+    setCodexEditorStatus("Selected Area needs a hex before it can join a grouped POI.");
+    updatePoiGroupChildAddHelp();
+    return;
+  }
+
+  if (!canPoiHexJoinGroup(candidatePoi.Hex_ID_Ref, codexEditorState.recordId, {
+    childIds: codexEditorState.workingChildIds || [],
+    excludePoiId: poiId
+  })) {
+    setCodexEditorStatus("Child Areas added after the first must be adjacent to an existing child Area in the grouped POI.");
+    updatePoiGroupChildAddHelp();
+    return;
+  }
+
   if (!codexEditorState.workingChildIds.includes(poiId)) {
     codexEditorState.workingChildIds.push(poiId);
   }
@@ -3096,6 +3364,8 @@ document.addEventListener("DOMContentLoaded", () => {
     ?.addEventListener("click", handlePoiGroupChildManagerClick);
   document.getElementById("codex-edit-poi-group-add-child-button")
     ?.addEventListener("click", handlePoiGroupAddChild);
+  document.getElementById("codex-edit-poi-group-add-child")
+    ?.addEventListener("change", updatePoiGroupChildAddHelp);
   document.getElementById("codex-edit-tags-picker")
     ?.addEventListener("click", handlePoiTagPickerClick);
   document.getElementById("codex-editor-picker-content")
@@ -3111,7 +3381,12 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("codex-editor-picker-close")
     ?.addEventListener("click", () => closeCodexEditorPicker({ commit: false }));
   document.getElementById("codex-add-poi-region")
-    ?.addEventListener("change", event => populatePoiHexOptions(event.target.value || ""));
+    ?.addEventListener("change", event => {
+      populatePoiHexOptions(event.target.value || "");
+      updatePoiParentGroupAdjacencyHelp();
+    });
+  document.getElementById("codex-add-poi-hex")
+    ?.addEventListener("change", updatePoiParentGroupAdjacencyHelp);
   document.getElementById("codex-add-poi-is-group")
     ?.addEventListener("change", () => {
       updatePoiGroupMode();
@@ -3120,7 +3395,10 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("codex-add-poi-type")
     ?.addEventListener("change", updatePoiPopulationRequirement);
   document.getElementById("codex-add-poi-parent-group")
-    ?.addEventListener("change", updatePoiPopulationRequirement);
+    ?.addEventListener("change", () => {
+      updatePoiPopulationRequirement();
+      updatePoiParentGroupAdjacencyHelp();
+    });
   document.getElementById("codex-editor-close")
     ?.addEventListener("click", closeCodexEditor);
   document.getElementById("codex-poi-editor-close")
@@ -3160,3 +3438,10 @@ window.openEditPoiEditor = openEditPoiEditor;
 window.openEditPoiGroupEditor = openEditPoiGroupEditor;
 window.openPoiTagsEditor = openPoiTagsEditor;
 window.updateCodexContextAction = updateCodexContextAction;
+window.CampaignCodexPoiMutations = Object.freeze({
+  removePoiByUuidFromLocalDb: removePoiFromLocalDbByUuid,
+  removePoiGroupByUuidFromLocalDb: removePoiGroupFromLocalDbByUuid,
+  refreshPoiViewsAfterPurge: refreshCodexAfterPoiPurge,
+  refreshPoiViews: () => refreshCodexAfterCreatedRecord("poi"),
+  registerCreatedPoiRowsInLocalDb
+});

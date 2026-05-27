@@ -92,6 +92,11 @@
   line-height: 1.25;
 }
 
+.codex-editor-form label small.codex-editor-inline-warning,
+.codex-editor-fields label small.codex-editor-inline-warning {
+  color: #8c2f19;
+}
+
 .codex-editor-check-row {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;

@@ -539,7 +539,7 @@ function renderCodexHexPage(hexId) {
 
   const addPoiAction = renderCodexDetailSectionAction(
     "Add POI",
-    `openAddPoiEditor({ regionId: '${escapeJsString(hex?.Region_ID_Ref || "")}', hexId: '${escapeJsString(hexId)}', lockRegion: true, lockHex: true })`
+    `openAddPoiEditor({ regionId: '${escapeJsString(hex?.Region_ID_Ref || "")}', hexId: '${escapeJsString(hexId)}', lockRegion: true, lockHex: true, lockCreateGroup: true })`
   );
 
   const addNpcAction = renderCodexDetailSectionAction(

@@ -111,6 +111,7 @@ function openCodexHexesFiltered(regionLabel = "all", terrain = "all") {
 
 function renderPoiListIntoContainer() {
   const listEl = document.getElementById("codex-poi-list");
+  if (!listEl) return;
 
   const [filterOne, filterTwo] = readCodexFilterState(
     poiCodexListConfig
@@ -152,6 +153,7 @@ function renderPoiListIntoContainer() {
 
 function renderNpcListIntoContainer() {
   const listEl = document.getElementById("codex-npc-list");
+  if (!listEl) return;
 
   const [filterOne, filterTwo] = readCodexFilterState(
     npcCodexListConfig

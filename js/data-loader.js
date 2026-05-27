@@ -70,7 +70,7 @@ async function fetchPoiGroupRows(campaignId) {
   try {
     return await fetchAllCampaignRows(
       "poi_groups",
-      "id, slug, name, group_type, group_icon, group_tags, population, lore, image_asset_id",
+      "id, slug, name, group_type, group_icon, group_tags, generation_source, population, lore, image_asset_id",
       campaignId
     );
   } catch (error) {
@@ -80,7 +80,7 @@ async function fetchPoiGroupRows(campaignId) {
       "id, slug, name, group_type, population, lore, image_asset_id",
       campaignId
     );
-    return legacyRows.map(row => ({ ...row, group_icon: "", group_tags: [] }));
+    return legacyRows.map(row => ({ ...row, group_icon: "", group_tags: [], generation_source: null }));
   }
 }
 
@@ -88,7 +88,7 @@ async function fetchPoiRows(campaignId) {
   try {
     return await fetchAllCampaignRows(
       "pois",
-      "id, ref_code, poi_group_id, name, hex_id, poi_type, poi_icon, poi_tags, notoriety_tier, population, lore, image_asset_id",
+      "id, ref_code, poi_group_id, name, hex_id, poi_type, poi_icon, poi_tags, generation_source, notoriety_tier, population, lore, image_asset_id",
       campaignId
     );
   } catch (error) {
@@ -98,7 +98,7 @@ async function fetchPoiRows(campaignId) {
       "id, ref_code, poi_group_id, name, hex_id, poi_type, notoriety_tier, population, lore, image_asset_id",
       campaignId
     );
-    return legacyRows.map(row => ({ ...row, poi_icon: "", poi_tags: [] }));
+    return legacyRows.map(row => ({ ...row, poi_icon: "", poi_tags: [], generation_source: null }));
   }
 }
 
@@ -506,6 +506,7 @@ function adaptCampaignRows(rows, assetsById) {
     Group_Type_Value: getLoadedPoiTypeValue(group.group_type),
     Group_Icon: getLoadedPoiIconValue(group.group_icon),
     Group_Tags: getLoadedPoiTagValues(group.group_tags),
+    Generation_Source: group.generation_source || "",
     Population: group.population || "",
     Lore: group.lore || "",
     Image: getAssetValue(assetsById[group.image_asset_id])
@@ -521,6 +522,7 @@ function adaptCampaignRows(rows, assetsById) {
     POI_Type_Value: getLoadedPoiTypeValue(poi.poi_type),
     POI_Icon: getLoadedPoiIconValue(poi.poi_icon),
     POI_Tags: getLoadedPoiTagValues(poi.poi_tags),
+    Generation_Source: poi.generation_source || "",
     "Notoriety Tier": getLoadedPoiNotorietyLabel(poi.notoriety_tier),
     "Notoriety Tier_Value": getLoadedPoiNotorietyValue(poi.notoriety_tier),
     Population: poi.population || "",
