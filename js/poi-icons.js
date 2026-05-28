@@ -36,7 +36,8 @@
         "walled_city",
         "walled_encampment",
         "border_post",
-        "bridge_gate"
+        "bridge_gate",
+        "watch_fire"
       ]
     },
     {
@@ -103,7 +104,8 @@
         "mountain_pass",
         "gate",
         "border_post",
-        "campsite"
+        "campsite",
+        "watch_fire"
       ]
     },
     {

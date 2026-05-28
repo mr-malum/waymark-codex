@@ -66,7 +66,7 @@ as $$
       'port_town', 'pyramid', 'quarry', 'reef', 'roadside_shrine', 'rowboat', 'ruins', 'sacred_grove', 'sea_fort', 'ship_stern',
       'shipwreck', 'shrine', 'skull_marker', 'sloop', 'spring', 'standing_stones', 'stone_tower', 'swamp', 'tavern', 'temple',
       'trade_goods', 'trader', 'tree', 'unknown_marker', 'village', 'volcano', 'warehouse', 'walled_city', 'walled_encampment',
-      'watchtower', 'waterfall', 'whirlpool', 'windmill', 'wizard_tower', 'ziggurat'
+      'watch_fire', 'watchtower', 'waterfall', 'whirlpool', 'windmill', 'wizard_tower', 'ziggurat'
     ) then icon_value
     else null
   end
