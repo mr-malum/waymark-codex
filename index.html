@@ -4,7 +4,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Marcellus+SC&family=Macondo&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
   <meta charset="utf-8" />
   <meta name="google" content="notranslate" />
-  <title>Campaign Codex</title>
+  <title>Waymark Codex</title>
+  <meta name="application-name" content="Waymark Codex" />
+  <meta name="description" content="Waymark Codex helps you map, archive, and manage the places, people, and routes of your world." />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/x-icon" sizes="32x32" href="assets/ico/favicon_32x32.ico">
   <link rel="icon" type="image/x-icon" sizes="64x64" href="assets/ico/favicon_64x64.ico">
@@ -240,7 +242,7 @@
 
 <div id="campaign-auth-gate" class="campaign-auth-gate" aria-live="polite">
   <div class="campaign-auth-card">
-    <h1 id="campaign-auth-title">Campaign Codex</h1>
+    <h1 id="campaign-auth-title">Waymark Codex</h1>
     <p id="campaign-auth-copy">A Collaborative Campaign Atlas for Discerning GMs</p>
 
     <div id="campaign-auth-tabs" class="campaign-auth-tabs">
@@ -288,7 +290,7 @@
 <div id="campaign-picker-gate" class="campaign-picker-gate hidden" aria-live="polite">
   <div class="campaign-picker-card">
     <div class="campaign-picker-header">
-      <p class="campaign-auth-kicker">Campaign Codex</p>
+      <p class="campaign-auth-kicker">Waymark Codex</p>
       <h1>Choose a Campaign</h1>
     </div>
 
@@ -375,16 +377,16 @@
     </div>
     <div class="map-edit-rail-main" data-map-tool-mode-panel="surveyor" hidden>
       <button id="map-surveyor-overlay-button" type="button" class="map-edit-mode-button">
-        <span class="map-edit-mode-icon" aria-hidden="true">≈</span>
-        <span class="map-edit-mode-label">Overlay</span>
+        <span class="map-edit-mode-icon" aria-hidden="true">✎</span>
+        <span class="map-edit-mode-label">Manual</span>
       </button>
       <button id="map-surveyor-pois-button" type="button" class="map-edit-mode-button">
-        <span class="map-edit-mode-icon" aria-hidden="true">⌘</span>
-        <span class="map-edit-mode-label">POIs</span>
+        <span class="map-edit-mode-icon" aria-hidden="true">⚗</span>
+        <span class="map-edit-mode-label">Generation</span>
       </button>
       <button id="map-surveyor-regions-button" type="button" class="map-edit-mode-button">
-        <span class="map-edit-mode-icon map-edit-region-icon" aria-hidden="true">⬡</span>
-        <span class="map-edit-mode-label">Regions</span>
+        <span class="map-edit-mode-icon" aria-hidden="true">⌫</span>
+        <span class="map-edit-mode-label">Purge</span>
       </button>
       <button id="map-surveyor-utilities-button" type="button" class="map-edit-mode-button">
         <span class="map-edit-mode-icon" aria-hidden="true">▣</span>
@@ -393,19 +395,19 @@
     </div>
     <div class="map-edit-rail-main" data-map-tool-mode-panel="cartographer" hidden>
       <button id="map-cartographer-terrain-button" type="button" class="map-edit-mode-button">
-        <span class="map-edit-mode-icon" aria-hidden="true">△</span>
-        <span class="map-edit-mode-label">Terrain</span>
+        <span class="map-edit-mode-icon" aria-hidden="true">✎</span>
+        <span class="map-edit-mode-label">Manual</span>
       </button>
       <button id="map-cartographer-features-button" type="button" class="map-edit-mode-button">
-        <span class="map-edit-mode-icon" aria-hidden="true">✥</span>
-        <span class="map-edit-mode-label">Features</span>
+        <span class="map-edit-mode-icon" aria-hidden="true">⚗</span>
+        <span class="map-edit-mode-label">Generation</span>
       </button>
     </div>
   </nav>
   <div id="map-cartographer-subsection-popout" class="map-generation-popout map-cartographer-subsection-popout" role="tablist" aria-label="Cartographer subsections" hidden>
-    <div id="map-cartographer-subsection-title" class="map-cartographer-subsection-title">Terrain</div>
-    <button id="map-cartographer-subsection-paint" class="active" type="button">Painting</button>
-    <button id="map-cartographer-subsection-generate" type="button">Generation</button>
+    <div id="map-cartographer-subsection-title" class="map-cartographer-subsection-title">Manual</div>
+    <button id="map-cartographer-subsection-paint" class="active" type="button">Terrain</button>
+    <button id="map-cartographer-subsection-generate" type="button">Features</button>
     <button id="map-cartographer-subsection-purge" type="button" hidden>Purge</button>
   </div>
 
@@ -616,16 +618,6 @@
           <input id="map-mist-noise" type="range" min="0" max="90" step="5" value="0">
         </label>
         <button id="map-named-routes-button" class="map-draw-secondary-button map-named-routes-anchor" data-overlay-subview-group="drawing" type="button">Named Routes</button>
-        <div class="map-draw-section-title map-draw-subsection-title" data-overlay-subview-group="purge">Purge Saved Overlays</div>
-        <p class="map-edit-empty-note map-edit-warning-note" data-overlay-subview-group="purge">These purge saved live-map overlays immediately and can be undone from this session.</p>
-        <div class="map-draw-tool-row map-draw-tool-row-compact" data-overlay-subview-group="purge" role="group" aria-label="Purge saved overlay types">
-          <button class="map-draw-clear" type="button" data-clear-overlay-type="road">Purge Roads</button>
-          <button class="map-draw-clear" type="button" data-clear-overlay-type="river">Purge Rivers</button>
-          <button class="map-draw-clear" type="button" data-clear-overlay-type="path">Purge Paths</button>
-          <button class="map-draw-clear" type="button" data-clear-overlay-type="sea_route">Purge Sea Routes</button>
-          <button class="map-draw-clear" type="button" data-clear-overlay-type="wall">Purge Walls</button>
-          <button class="map-draw-clear" type="button" data-clear-overlay-type="mist">Purge Mist</button>
-        </div>
       </section>
 
       <section class="map-draw-panel-section" data-map-edit-section="regions">
@@ -668,19 +660,38 @@
           <span>Brush Size <strong id="map-region-brush-size-value">1</strong></span>
           <input id="map-region-brush-size" type="range" min="1" max="5" step="1" value="1">
         </label>
-        <div class="map-region-purge-block">
-          <div class="map-draw-section-title map-draw-subsection-title">Purge Region Paint</div>
-          <p class="map-edit-empty-note map-nuke-region-note">These purge saved live-map region paint immediately. Region Codex entries are not deleted.</p>
-          <div class="map-draw-tool-row map-draw-tool-row-paired" role="group" aria-label="Purge region paint">
-            <button id="map-clear-geo-regions" class="map-draw-clear" type="button">Purge All Geo Regions</button>
-            <button id="map-clear-pol-regions" class="map-draw-clear" type="button">Purge All Pol Regions</button>
-          </div>
+      </section>
+
+      <section class="map-draw-panel-section" data-map-edit-section="purge">
+        <div class="map-draw-section-title">Purge</div>
+        <p class="map-edit-empty-note map-edit-warning-note">These purge saved live-map content immediately. Region Codex entries stay intact, and generated-only POI cleanup preserves your manual POIs.</p>
+
+        <div class="map-draw-section-title map-draw-subsection-title">Overlays</div>
+        <div class="map-draw-tool-row map-draw-tool-row-compact" role="group" aria-label="Purge saved overlay types">
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="road">Purge Roads</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="river">Purge Rivers</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="path">Purge Paths</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="sea_route">Purge Sea Routes</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="wall">Purge Walls</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="mist">Purge Mist</button>
+        </div>
+
+        <div class="map-draw-section-title map-draw-subsection-title">POIs</div>
+        <div class="map-draw-tool-row map-draw-tool-row-paired" role="group" aria-label="POI purge actions">
+          <button id="map-clear-generated-pois" class="map-draw-clear" type="button">Purge Generated POIs</button>
+          <button id="map-clear-pois" class="map-draw-clear" type="button">Purge All POIs</button>
+        </div>
+
+        <div class="map-draw-section-title map-draw-subsection-title">Regions</div>
+        <div class="map-draw-tool-row map-draw-tool-row-paired" role="group" aria-label="Purge region paint">
+          <button id="map-clear-geo-regions" class="map-draw-clear" type="button">Purge All Geo Regions</button>
+          <button id="map-clear-pol-regions" class="map-draw-clear" type="button">Purge All Pol Regions</button>
         </div>
       </section>
 
       <section class="map-draw-panel-section" data-map-edit-section="nuke">
         <div class="map-draw-section-title">Archive</div>
-        <p class="map-edit-empty-note">No archive tools are active right now. Overlay, region, and feature purge actions live with their matching tools.</p>
+        <p class="map-edit-empty-note">No archive tools are active right now.</p>
       </section>
 
       <section class="map-draw-panel-section" data-map-edit-section="pois">
@@ -689,15 +700,15 @@
           <span class="map-editor-help-wrap">
             <button class="map-editor-help-button" type="button" aria-describedby="map-generation-poi-help">?</button>
             <span id="map-generation-poi-help" class="map-editor-help-tooltip" role="tooltip">
-              <span>Generate a first civilization backbone with settlements, supporting resource sites, and travel waypoints.</span>
+              <span>Generate a first civilization backbone with settlements, supporting resource sites, travel waypoints, strongholds, dungeons, and world sites.</span>
               <span>Best results come after rivers exist. These POIs save directly to the live map and codex, and generated roads can build on them afterward.</span>
             </span>
           </span>
         </div>
-        <p class="map-edit-empty-note" data-poi-subview-group="generation">This first POI pass creates standalone Settlements, Resource Sites, and Waypoints. It avoids occupied hexes when possible and leaves grouped POIs for a later pass.</p>
+        <p class="map-edit-empty-note" data-poi-subview-group="generation">This POI pass creates standalone Settlements, Strongholds, Dungeons, Dungeon Complexes, Resource Sites, Waypoints, and broader world Sites. It avoids occupied hexes when possible and leaves grouped POIs for a later pass.</p>
         <label class="map-draw-range-row" data-poi-subview-group="generation">
           <span>Settlement Density <strong id="map-generation-settlement-density-value">100%</strong></span>
-          <input id="map-generation-settlement-density" type="range" min="40" max="180" step="5" value="100">
+          <input id="map-generation-settlement-density" type="range" min="0" max="200" step="5" value="100">
         </label>
         <label class="map-draw-range-row" data-poi-subview-group="generation">
           <span>Population Concentration <strong id="map-generation-population-concentration-value">100%</strong></span>
@@ -705,11 +716,27 @@
         </label>
         <label class="map-draw-range-row" data-poi-subview-group="generation">
           <span>Resource Site Amount <strong id="map-generation-resource-amount-value">100%</strong></span>
-          <input id="map-generation-resource-amount" type="range" min="50" max="150" step="5" value="100">
+          <input id="map-generation-resource-amount" type="range" min="0" max="200" step="5" value="100">
         </label>
         <label class="map-draw-range-row" data-poi-subview-group="generation">
           <span>Waypoint Amount <strong id="map-generation-waypoint-amount-value">100%</strong></span>
-          <input id="map-generation-waypoint-amount" type="range" min="50" max="150" step="5" value="100">
+          <input id="map-generation-waypoint-amount" type="range" min="0" max="200" step="5" value="100">
+        </label>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Stronghold Amount <strong id="map-generation-stronghold-amount-value">100%</strong></span>
+          <input id="map-generation-stronghold-amount" type="range" min="0" max="200" step="5" value="100">
+        </label>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Dungeon Amount <strong id="map-generation-dungeon-amount-value">100%</strong></span>
+          <input id="map-generation-dungeon-amount" type="range" min="0" max="200" step="5" value="100">
+        </label>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Dungeon Complex Amount <strong id="map-generation-dungeon-complex-amount-value">100%</strong></span>
+          <input id="map-generation-dungeon-complex-amount" type="range" min="0" max="200" step="5" value="100">
+        </label>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Site Amount <strong id="map-generation-site-amount-value">100%</strong></span>
+          <input id="map-generation-site-amount" type="range" min="0" max="200" step="5" value="100">
         </label>
         <label class="map-draw-option-row" data-poi-subview-group="generation">
           <input id="map-poi-generation-replace-generated" type="checkbox">
@@ -729,12 +756,6 @@
               <button id="map-poi-generation-random-seed" data-generation-random-seed type="button">Random Seed</button>
             </div>
           </div>
-        </div>
-        <div class="map-draw-section-title map-draw-subsection-title" data-poi-subview-group="purge">Purge Saved POIs</div>
-        <p class="map-edit-empty-note map-edit-warning-note" data-poi-subview-group="purge">These purge live-map POIs from the codex immediately. Generated-only purge keeps your manual POIs intact.</p>
-        <div class="map-draw-tool-row map-draw-tool-row-paired" data-poi-subview-group="purge" role="group" aria-label="POI purge actions">
-          <button id="map-clear-generated-pois" class="map-draw-clear" type="button">Purge Generated POIs</button>
-          <button id="map-clear-pois" class="map-draw-clear" type="button">Purge All POIs</button>
         </div>
       </section>
 

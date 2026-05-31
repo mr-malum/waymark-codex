@@ -14,7 +14,7 @@
     root.innerHTML = `
       <div class="codex-dialog-backdrop" data-codex-dialog-cancel></div>
       <section class="codex-dialog-card" role="dialog" aria-modal="true" aria-labelledby="codex-dialog-title" aria-describedby="codex-dialog-message">
-        <div class="codex-dialog-kicker">Campaign Codex</div>
+        <div class="codex-dialog-kicker">Waymark Codex</div>
         <h2 id="codex-dialog-title"></h2>
         <p id="codex-dialog-message"></p>
         <div class="codex-dialog-actions">

@@ -178,8 +178,8 @@ function hideCampaignSettings() {
 
 function setCampaignDocumentTitle(campaign = null) {
   document.title = campaign?.name
-    ? `${campaign.name} Codex`
-    : "Campaign Codex";
+    ? `${campaign.name} | Waymark Codex`
+    : "Waymark Codex";
 }
 
 function clearActiveCampaignState() {

@@ -241,6 +241,10 @@
       title: "Regions",
       copy: "Assign geographic and political regions without leaving the map."
     },
+    purge: {
+      title: "Purge",
+      copy: "Clean up saved live-map overlays, POIs, and region paint from one place."
+    },
     nuke: {
       title: "Archive",
       copy: "Placeholder for future map import and export tools."
@@ -497,11 +501,11 @@
       surveyorSection: "overlay",
       surveyorOverlaySubview: "paint",
       surveyorPoiSubview: "generate",
+      surveyorMode: "manual",
+      surveyorManualSection: "overlay",
+      surveyorGenerationSection: "overlay",
+      cartographerMode: "manual",
       cartographerSection: "terrain",
-      cartographerSubviews: {
-        terrain: "paint",
-        features: "paint"
-      },
       tool: "road",
       roadStyle: "dark_brown",
       wallStyle: "wall",
@@ -566,6 +570,10 @@
       generationPopulationConcentration: 100,
       generationResourceAmount: 100,
       generationWaypointAmount: 100,
+      generationStrongholdAmount: 100,
+      generationDungeonAmount: 100,
+      generationDungeonComplexAmount: 100,
+      generationSiteAmount: 100,
       generationReplaceGeneratedPois: true,
       generationSection: "terrain",
       stagedTerrainOriginals: new Map(),
@@ -577,6 +585,10 @@
       beforeUnloadBound: false,
       generationPreviewOriginals: new Map(),
       generationPreviewActions: [],
+      surveyorUndoStack: [],
+      surveyorRedoStack: [],
+      cartographerUndoStack: [],
+      cartographerRedoStack: [],
       undoStack: [],
       redoStack: [],
       visibleOverlays: {
@@ -918,11 +930,11 @@
     const surveyorPoisButton = document.getElementById("map-surveyor-pois-button");
     const surveyorRegionsButton = document.getElementById("map-surveyor-regions-button");
     const surveyorUtilitiesButton = document.getElementById("map-surveyor-utilities-button");
-    const cartographerTerrainButton = document.getElementById("map-cartographer-terrain-button");
-    const cartographerFeaturesButton = document.getElementById("map-cartographer-features-button");
-    const cartographerPaintButton = document.getElementById("map-cartographer-subsection-paint");
-    const cartographerGenerateButton = document.getElementById("map-cartographer-subsection-generate");
-    const cartographerPurgeButton = document.getElementById("map-cartographer-subsection-purge");
+    const cartographerManualButton = document.getElementById("map-cartographer-terrain-button");
+    const cartographerGenerationButton = document.getElementById("map-cartographer-features-button");
+    const cartographerTerrainSectionButton = document.getElementById("map-cartographer-subsection-paint");
+    const cartographerFeatureSectionButton = document.getElementById("map-cartographer-subsection-generate");
+    const cartographerSubsectionPurgeButton = document.getElementById("map-cartographer-subsection-purge");
     const closeViewButton = document.getElementById("map-view-close-button");
     const collapseEditButton = document.getElementById("map-edit-collapse-button");
     const terrainElevationInput = document.getElementById("map-terrain-elevation");
@@ -1053,66 +1065,65 @@
     surveyorRegionsButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      setMapEditSection("regions");
+      activateSurveyorMode("purge");
     });
     surveyorOverlayButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      setMapEditSection("overlay");
+      activateSurveyorMode("manual");
     });
     surveyorPoisButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      setMapEditSection("pois");
+      activateSurveyorMode("generation");
     });
     surveyorUtilitiesButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      setMapEditSection("nuke");
+      activateSurveyorMode("archive");
     });
-    cartographerTerrainButton?.addEventListener("click", event => {
+    cartographerManualButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      setMapEditSection("terrain");
+      activateCartographerMode("manual");
     });
-    cartographerFeaturesButton?.addEventListener("click", event => {
+    cartographerGenerationButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      setMapEditSection("features");
+      activateCartographerMode("generation");
     });
-    cartographerPaintButton?.addEventListener("click", event => {
+    cartographerTerrainSectionButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      if ((renderer.drawing.toolsMode || "chooser") === "surveyor" && renderer.drawing.surveyorSection === "pois") {
-        setSurveyorPoiSubview("generate");
-      } else if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
-        setSurveyorOverlaySubview("paint");
+      if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
+        if (getSurveyorMode() === "generation") {
+          setSurveyorGenerationSection("overlay");
+        } else {
+          setSurveyorManualSection("overlay");
+        }
       } else {
-        setCartographerSubview(renderer.drawing.cartographerSection, "paint");
+        setCartographerSection("terrain");
       }
       updateMapEditSurface();
     });
-    cartographerGenerateButton?.addEventListener("click", event => {
+    cartographerFeatureSectionButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      if ((renderer.drawing.toolsMode || "chooser") === "surveyor" && renderer.drawing.surveyorSection === "pois") {
-        setSurveyorPoiSubview("purge");
-      } else if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
-        setSurveyorOverlaySubview("generate");
-        setGenerationSection("overlays");
+      if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
+        if (getSurveyorMode() === "generation") {
+          setSurveyorGenerationSection("pois");
+        } else {
+          setSurveyorManualSection("regions");
+        }
       } else {
-        const section = renderer.drawing.cartographerSection || "terrain";
-        setCartographerSubview(section, "generate");
-        setGenerationSection(section);
+        setCartographerSection("features");
       }
       updateMapEditSurface();
     });
-    cartographerPurgeButton?.addEventListener("click", event => {
+    cartographerSubsectionPurgeButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      if ((renderer.drawing.toolsMode || "chooser") !== "surveyor") return;
-      setSurveyorOverlaySubview("purge");
-      updateMapEditSurface();
+      if ((renderer.drawing.toolsMode || "chooser") === "surveyor") return;
     });
 
     panel.querySelectorAll("[data-terrain-mobile-tab]").forEach(tabButton => {
@@ -1460,7 +1471,11 @@
       ["map-generation-settlement-density", "generationSettlementDensity"],
       ["map-generation-population-concentration", "generationPopulationConcentration"],
       ["map-generation-resource-amount", "generationResourceAmount"],
-      ["map-generation-waypoint-amount", "generationWaypointAmount"]
+      ["map-generation-waypoint-amount", "generationWaypointAmount"],
+      ["map-generation-stronghold-amount", "generationStrongholdAmount"],
+      ["map-generation-dungeon-amount", "generationDungeonAmount"],
+      ["map-generation-dungeon-complex-amount", "generationDungeonComplexAmount"],
+      ["map-generation-site-amount", "generationSiteAmount"]
     ].forEach(([inputId, drawingKey]) => {
       const input = document.getElementById(inputId);
       input?.addEventListener("input", () => {
@@ -1670,54 +1685,137 @@
     }
   }
 
-  function getCartographerSubview(section = renderer.drawing.cartographerSection) {
-    const normalized = ["terrain", "features"].includes(section) ? section : "terrain";
-    const saved = renderer.drawing.cartographerSubviews?.[normalized];
-    return saved === "generate" ? "generate" : "paint";
+  function getCartographerMode() {
+    return renderer.drawing.cartographerMode === "generation"
+      ? renderer.drawing.cartographerMode
+      : "manual";
   }
 
-  function setCartographerSubview(section, subview) {
-    const normalizedSection = ["terrain", "features"].includes(section) ? section : "terrain";
-    const normalizedSubview = subview === "generate" ? "generate" : "paint";
-    renderer.drawing.cartographerSubviews = {
-      ...(renderer.drawing.cartographerSubviews || {}),
-      [normalizedSection]: normalizedSubview
-    };
+  function setCartographerMode(mode) {
+    renderer.drawing.cartographerMode = mode === "generation" ? "generation" : "manual";
   }
 
-  function getSurveyorOverlaySubview() {
-    return ["generate", "purge"].includes(renderer.drawing.surveyorOverlaySubview)
-      ? renderer.drawing.surveyorOverlaySubview
-      : "paint";
+  function getCartographerSection() {
+    return ["terrain", "features"].includes(renderer.drawing.cartographerSection)
+      ? renderer.drawing.cartographerSection
+      : "terrain";
   }
 
-  function setSurveyorOverlaySubview(subview) {
-    renderer.drawing.surveyorOverlaySubview = ["generate", "purge"].includes(subview) ? subview : "paint";
+  function activateCartographerMode(mode) {
+    renderer.drawing.tool = "";
+    resetDrawingState();
+    setCartographerMode(mode);
+    if (getCartographerMode() === "generation") {
+      renderer.drawing.generationSection = getCartographerSection();
+    }
+    setMapToolsMode("cartographer");
   }
 
-  function getSurveyorPoiSubview() {
-    return renderer.drawing.surveyorPoiSubview === "purge" ? "purge" : "generate";
+  function setCartographerSection(section) {
+    renderer.drawing.tool = "";
+    resetDrawingState();
+    renderer.drawing.cartographerSection = ["terrain", "features"].includes(section) ? section : "terrain";
+    if (getCartographerMode() !== "manual") {
+      renderer.drawing.generationSection = getCartographerSection();
+    }
+    setMapToolsMode("cartographer");
   }
 
-  function setSurveyorPoiSubview(subview) {
-    renderer.drawing.surveyorPoiSubview = subview === "purge" ? "purge" : "generate";
+  function getSurveyorMode() {
+    if (["manual", "generation", "purge", "archive"].includes(renderer.drawing.surveyorMode)) {
+      return renderer.drawing.surveyorMode;
+    }
+    if (renderer.drawing.surveyorSection === "nuke") return "archive";
+    if (renderer.drawing.surveyorSection === "purge") return "purge";
+    if (renderer.drawing.surveyorSection === "pois" || renderer.drawing.surveyorOverlaySubview === "generate") {
+      return "generation";
+    }
+    return "manual";
+  }
+
+  function getSurveyorManualSection() {
+    if (["overlay", "regions"].includes(renderer.drawing.surveyorManualSection)) {
+      return renderer.drawing.surveyorManualSection;
+    }
+    return renderer.drawing.surveyorSection === "regions" ? "regions" : "overlay";
+  }
+
+  function getSurveyorGenerationSection() {
+    if (["overlay", "pois"].includes(renderer.drawing.surveyorGenerationSection)) {
+      return renderer.drawing.surveyorGenerationSection;
+    }
+    return renderer.drawing.surveyorSection === "pois" ? "pois" : "overlay";
+  }
+
+  function syncSurveyorSectionFromMode() {
+    const mode = getSurveyorMode();
+    if (mode === "generation") {
+      renderer.drawing.surveyorSection = getSurveyorGenerationSection();
+      return;
+    }
+    if (mode === "purge") {
+      renderer.drawing.surveyorSection = "purge";
+      return;
+    }
+    if (mode === "archive") {
+      renderer.drawing.surveyorSection = "nuke";
+      return;
+    }
+    renderer.drawing.surveyorSection = getSurveyorManualSection();
+  }
+
+  function setSurveyorMode(mode) {
+    renderer.drawing.surveyorMode = ["generation", "purge", "archive"].includes(mode) ? mode : "manual";
+    syncSurveyorSectionFromMode();
+  }
+
+  function activateSurveyorMode(mode) {
+    renderer.drawing.tool = "";
+    resetDrawingState();
+    setSurveyorMode(mode);
+    if (getSurveyorMode() === "generation" && getSurveyorGenerationSection() === "overlay") {
+      renderer.drawing.generationSection = "overlays";
+    }
+    setMapToolsMode("surveyor");
+  }
+
+  function setSurveyorManualSection(section) {
+    renderer.drawing.tool = "";
+    resetDrawingState();
+    renderer.drawing.surveyorManualSection = section === "regions" ? "regions" : "overlay";
+    if (getSurveyorMode() === "manual") {
+      syncSurveyorSectionFromMode();
+    }
+    setMapToolsMode("surveyor");
+  }
+
+  function setSurveyorGenerationSection(section) {
+    renderer.drawing.tool = "";
+    resetDrawingState();
+    renderer.drawing.surveyorGenerationSection = section === "pois" ? "pois" : "overlay";
+    if (renderer.drawing.surveyorGenerationSection === "overlay") {
+      renderer.drawing.generationSection = "overlays";
+    }
+    if (getSurveyorMode() === "generation") {
+      syncSurveyorSectionFromMode();
+    }
+    setMapToolsMode("surveyor");
   }
 
   function getVisibleMapEditSection() {
     const mode = renderer.drawing.toolsMode || "chooser";
     if (mode === "surveyor") {
-      if (renderer.drawing.surveyorSection === "overlay") {
-        return getSurveyorOverlaySubview() === "generate" ? "generation" : "overlay";
+      const surveyorMode = getSurveyorMode();
+      if (surveyorMode === "generation") {
+        return getSurveyorGenerationSection() === "pois" ? "pois" : "generation";
       }
-      if (renderer.drawing.surveyorSection === "pois") return "pois";
-      return renderer.drawing.surveyorSection === "nuke" ? "nuke" : "regions";
+      if (surveyorMode === "purge") return "purge";
+      if (surveyorMode === "archive") return "nuke";
+      return getSurveyorManualSection();
     }
     if (mode === "cartographer") {
-      const section = ["terrain", "features"].includes(renderer.drawing.cartographerSection)
-        ? renderer.drawing.cartographerSection
-        : "terrain";
-      if (getCartographerSubview(section) === "generate") return "generation";
-      return section;
+      if (getCartographerMode() !== "manual") return "generation";
+      return getCartographerSection();
     }
     return "";
   }
@@ -1733,23 +1831,25 @@
     });
     document.getElementById("map-tools-surveyor-button")?.classList.toggle("active", mode === "surveyor");
     document.getElementById("map-tools-cartographer-button")?.classList.toggle("active", mode === "cartographer");
-    document.getElementById("map-surveyor-overlay-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "overlay");
-    document.getElementById("map-surveyor-pois-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "pois");
-    document.getElementById("map-surveyor-regions-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "regions");
-    document.getElementById("map-surveyor-utilities-button")?.classList.toggle("active", mode === "surveyor" && renderer.drawing.surveyorSection === "nuke");
-    document.getElementById("map-cartographer-terrain-button")?.classList.toggle("active", mode === "cartographer" && renderer.drawing.cartographerSection === "terrain");
-    document.getElementById("map-cartographer-features-button")?.classList.toggle("active", mode === "cartographer" && renderer.drawing.cartographerSection === "features");
+    document.getElementById("map-surveyor-overlay-button")?.classList.toggle("active", mode === "surveyor" && getSurveyorMode() === "manual");
+    document.getElementById("map-surveyor-pois-button")?.classList.toggle("active", mode === "surveyor" && getSurveyorMode() === "generation");
+    document.getElementById("map-surveyor-regions-button")?.classList.toggle("active", mode === "surveyor" && getSurveyorMode() === "purge");
+    document.getElementById("map-surveyor-utilities-button")?.classList.toggle("active", mode === "surveyor" && getSurveyorMode() === "archive");
+    document.getElementById("map-cartographer-terrain-button")?.classList.toggle("active", mode === "cartographer" && getCartographerMode() === "manual");
+    document.getElementById("map-cartographer-features-button")?.classList.toggle("active", mode === "cartographer" && getCartographerMode() === "generation");
   }
 
   function updateGenerationPopout() {
     const popout = document.getElementById("map-cartographer-subsection-popout");
     const mode = renderer.drawing.toolsMode || "chooser";
+    const cartographerMode = getCartographerMode();
+    const surveyorMode = getSurveyorMode();
     const section = mode === "surveyor"
-      ? (renderer.drawing.surveyorSection === "pois" ? "pois" : "overlay")
-      : (renderer.drawing.cartographerSection || "terrain");
+      ? (surveyorMode === "generation" ? getSurveyorGenerationSection() : getSurveyorManualSection())
+      : getCartographerSection();
     const isVisible = (
-      mode === "surveyor" && ["overlay", "pois"].includes(renderer.drawing.surveyorSection) ||
-      mode === "cartographer" && ["terrain", "features"].includes(section)
+      mode === "surveyor" && ["manual", "generation"].includes(surveyorMode) ||
+      mode === "cartographer"
     );
     if (!popout) return;
     popout.hidden = !isVisible;
@@ -1758,37 +1858,35 @@
     const paintButton = document.getElementById("map-cartographer-subsection-paint");
     const generateButton = document.getElementById("map-cartographer-subsection-generate");
     const purgeButton = document.getElementById("map-cartographer-subsection-purge");
-    const isOverlay = section === "overlay";
-    const isPois = section === "pois";
-    const surveyorOverlaySubview = getSurveyorOverlaySubview();
-    const surveyorPoiSubview = getSurveyorPoiSubview();
-    popout.classList.toggle("map-generation-popout-three", isOverlay);
-    if (title) title.textContent = section === "terrain" ? "Terrain" : section === "features" ? "Features" : section === "pois" ? "POIs" : "Overlay";
+    popout.classList.toggle("map-generation-popout-three", false);
+    if (title) {
+      if (mode === "cartographer") {
+        title.textContent = cartographerMode === "generation" ? "Generation" : "Manual";
+      } else {
+        title.textContent = surveyorMode === "generation" ? "Generation" : "Manual";
+      }
+    }
     if (paintButton) {
       paintButton.hidden = false;
-      paintButton.textContent = isPois ? "Generation" : isOverlay ? "Drawing" : "Painting";
+      paintButton.textContent = mode === "cartographer" ? "Terrain" : "Overlays";
       paintButton.classList.toggle("active",
-        isPois
-          ? surveyorPoiSubview === "generate"
-          : isOverlay
-            ? surveyorOverlaySubview === "paint"
-            : getCartographerSubview(section) !== "generate"
+        mode === "cartographer"
+          ? section === "terrain"
+          : section === "overlay"
       );
     }
     if (generateButton) {
       generateButton.hidden = false;
-      generateButton.textContent = isPois ? "Purge" : "Generation";
+      generateButton.textContent = mode === "cartographer" ? "Features" : surveyorMode === "generation" ? "POIs" : "Regions";
       generateButton.classList.toggle("active",
-        isPois
-          ? surveyorPoiSubview === "purge"
-          : isOverlay
-            ? surveyorOverlaySubview === "generate"
-            : getCartographerSubview(section) === "generate"
+        mode === "cartographer"
+          ? section === "features"
+          : section !== "overlay"
       );
     }
     if (purgeButton) {
-      purgeButton.hidden = !isOverlay;
-      purgeButton.classList.toggle("active", isOverlay && surveyorOverlaySubview === "purge");
+      purgeButton.hidden = true;
+      purgeButton.classList.remove("active");
     }
   }
 
@@ -1828,7 +1926,7 @@
     if (visibleSection === "generation") {
       const generationSection = mode === "surveyor"
         ? "overlays"
-        : (renderer.drawing.cartographerSection || "terrain");
+        : getCartographerSection();
       renderer.drawing.generationSection = generationSection;
       syncGenerationSectionUi(generationSection);
     }
@@ -1846,33 +1944,27 @@
     updateDrawHint();
     updateOverlaySubviewGroups();
     updatePoiSubviewGroups();
+    refreshEditorActionControls();
   }
 
   function updateOverlaySubviewGroups() {
-    const isOverlayVisible = (renderer.drawing.toolsMode || "chooser") === "surveyor" && renderer.drawing.surveyorSection === "overlay";
-    const subview = isOverlayVisible ? getSurveyorOverlaySubview() : "paint";
+    const isOverlayVisible = (renderer.drawing.toolsMode || "chooser") === "surveyor" && getVisibleMapEditSection() === "overlay";
     document.querySelectorAll("[data-overlay-subview-group]").forEach(element => {
       const group = element.dataset.overlaySubviewGroup || "drawing";
-      const activeGroup = subview === "purge" ? "purge" : "drawing";
-      if (isOverlayVisible && group !== activeGroup) {
+      if (isOverlayVisible && group !== "drawing") {
         element.hidden = true;
         return;
       }
       if (isOverlayToolSpecificControl(element)) return;
       element.hidden = false;
     });
-    if (isOverlayVisible && subview === "purge" && renderer.drawing.tool) {
-      clearDrawTool();
-    }
   }
 
   function updatePoiSubviewGroups() {
-    const isPoiVisible = (renderer.drawing.toolsMode || "chooser") === "surveyor" && renderer.drawing.surveyorSection === "pois";
-    const subview = isPoiVisible ? getSurveyorPoiSubview() : "generate";
-    const activeGroup = subview === "purge" ? "purge" : "generation";
+    const isPoiVisible = (renderer.drawing.toolsMode || "chooser") === "surveyor" && getVisibleMapEditSection() === "pois";
     document.querySelectorAll("[data-poi-subview-group]").forEach(element => {
       const group = element.dataset.poiSubviewGroup || "generation";
-      element.hidden = isPoiVisible ? group !== activeGroup : false;
+      element.hidden = isPoiVisible ? group !== "generation" : false;
     });
   }
 
@@ -1897,6 +1989,9 @@
       renderer.drawing.tool = "";
       resetDrawingState();
     }
+    if (normalized === "surveyor") {
+      syncSurveyorSectionFromMode();
+    }
     if (normalized === "cartographer") showMapEditorIntroIfNeeded();
     else {
       document.getElementById("map-editor-intro")?.classList.add("hidden");
@@ -1906,38 +2001,63 @@
   }
 
   function setMapEditSection(section) {
-    const normalized = ["terrain", "features", "overlay", "pois", "regions", "nuke", "generation"].includes(section) ? section : "terrain";
+    const normalized = ["terrain", "features", "overlay", "pois", "purge", "regions", "nuke", "generation"].includes(section) ? section : "terrain";
     renderer.drawing.tool = "";
     resetDrawingState();
-    if (normalized === "regions" || normalized === "nuke" || normalized === "overlay" || normalized === "pois") {
-      if (normalized === "pois") setSurveyorPoiSubview(getSurveyorPoiSubview());
-      renderer.drawing.surveyorSection = normalized;
+    if (normalized === "overlay") {
+      renderer.drawing.surveyorManualSection = "overlay";
+      setSurveyorMode("manual");
+      setMapToolsMode("surveyor");
+      return;
+    }
+    if (normalized === "regions") {
+      renderer.drawing.surveyorManualSection = "regions";
+      setSurveyorMode("manual");
+      setMapToolsMode("surveyor");
+      return;
+    }
+    if (normalized === "pois") {
+      renderer.drawing.surveyorGenerationSection = "pois";
+      setSurveyorMode("generation");
+      setMapToolsMode("surveyor");
+      return;
+    }
+    if (normalized === "purge") {
+      setSurveyorMode("purge");
+      setMapToolsMode("surveyor");
+      return;
+    }
+    if (normalized === "nuke") {
+      setSurveyorMode("archive");
       setMapToolsMode("surveyor");
       return;
     }
     if (normalized === "generation") {
       const generationSection = renderer.drawing.generationSection || "terrain";
       if (generationSection === "overlays") {
-        renderer.drawing.surveyorSection = "overlay";
-        setSurveyorOverlaySubview("generate");
+        renderer.drawing.surveyorGenerationSection = "overlay";
+        setSurveyorMode("generation");
         setMapToolsMode("surveyor");
       } else {
-        renderer.drawing.cartographerSection = generationSection;
-        setCartographerSubview(renderer.drawing.cartographerSection, "generate");
+        renderer.drawing.cartographerSection = ["terrain", "features"].includes(generationSection) ? generationSection : "terrain";
+        setCartographerMode("generation");
         setMapToolsMode("cartographer");
       }
       return;
     }
     renderer.drawing.cartographerSection = normalized;
-    setCartographerSubview(normalized, getCartographerSubview(normalized));
+    setCartographerMode("manual");
     setMapToolsMode("cartographer");
   }
 
   function setGenerationSection(section) {
     const normalized = ["terrain", "features", "overlays"].includes(section) ? section : "terrain";
     renderer.drawing.generationSection = normalized;
+    if (normalized !== "overlays") {
+      renderer.drawing.cartographerSection = normalized;
+    }
     syncGenerationSectionUi(normalized);
-    if ((renderer.drawing.toolsMode || "chooser") === "cartographer" && getCartographerSubview(renderer.drawing.cartographerSection) === "generate") {
+    if ((renderer.drawing.toolsMode || "chooser") === "cartographer" && getCartographerMode() !== "manual") {
       updateMapEditSurface();
     } else {
       updateDrawHint();
@@ -2215,11 +2335,12 @@
     renderer.drawing.toolsMode = "chooser";
     renderer.drawing.surveyorSection = "overlay";
     renderer.drawing.surveyorOverlaySubview = "paint";
+    renderer.drawing.surveyorPoiSubview = "generate";
+    renderer.drawing.surveyorMode = "manual";
+    renderer.drawing.surveyorManualSection = "overlay";
+    renderer.drawing.surveyorGenerationSection = "overlay";
+    renderer.drawing.cartographerMode = "manual";
     renderer.drawing.cartographerSection = "terrain";
-    renderer.drawing.cartographerSubviews = {
-      terrain: "paint",
-      features: "paint"
-    };
     renderer.drawing.generationSeed = "";
     renderer.drawing.generationRegionStyle = "balanced";
     renderer.drawing.generationFeatureDensity = 100;
@@ -2239,12 +2360,20 @@
     renderer.drawing.generationPopulationConcentration = 100;
     renderer.drawing.generationResourceAmount = 100;
     renderer.drawing.generationWaypointAmount = 100;
+    renderer.drawing.generationStrongholdAmount = 100;
+    renderer.drawing.generationDungeonAmount = 100;
+    renderer.drawing.generationDungeonComplexAmount = 100;
+    renderer.drawing.generationSiteAmount = 100;
     renderer.drawing.stagedTerrainOriginals.clear();
     renderer.drawing.stagedOverlayBaseline = null;
     renderer.drawing.stagedUndoStack = [];
     renderer.drawing.stagedRedoStack = [];
     renderer.drawing.generationPreviewOriginals.clear();
     renderer.drawing.generationPreviewActions = [];
+    renderer.drawing.surveyorUndoStack = [];
+    renderer.drawing.surveyorRedoStack = [];
+    renderer.drawing.cartographerUndoStack = [];
+    renderer.drawing.cartographerRedoStack = [];
     renderer.drawing.undoStack = [];
     renderer.drawing.redoStack = [];
     renderer.drawing.visibleOverlays = getDefaultVisibleOverlays();
@@ -2469,7 +2598,14 @@
       renderer.drawing.dragActionCommitTimer = null;
     }
     if (!renderer.drawing.dragActionBatch) {
-      renderer.drawing.dragActionBatch = { type: "batch", actions: [], pending: [], committing: false, localStage: false };
+      renderer.drawing.dragActionBatch = {
+        type: "batch",
+        actions: [],
+        pending: [],
+        committing: false,
+        localStage: false,
+        historyOwner: "surveyor"
+      };
     }
   }
 
@@ -2509,7 +2645,7 @@
       pushStagedMapEditAction(action, { force: true });
       return;
     }
-    pushMapEditAction(action, { force: true });
+    pushMapEditAction(action, { force: true, owner: batch.historyOwner });
   }
 
   function updateDrawToolButtons() {
@@ -3096,7 +3232,11 @@
       ["settlement-density", "generationSettlementDensity"],
       ["population-concentration", "generationPopulationConcentration"],
       ["resource-amount", "generationResourceAmount"],
-      ["waypoint-amount", "generationWaypointAmount"]
+      ["waypoint-amount", "generationWaypointAmount"],
+      ["stronghold-amount", "generationStrongholdAmount"],
+      ["dungeon-amount", "generationDungeonAmount"],
+      ["dungeon-complex-amount", "generationDungeonComplexAmount"],
+      ["site-amount", "generationSiteAmount"]
     ].forEach(([control, drawingKey]) => {
       const input = document.getElementById(`map-generation-${control}`);
       const value = document.getElementById(`map-generation-${control}-value`);
@@ -3129,7 +3269,8 @@
       generationSettlementDensity: 100,
       generationPopulationConcentration: 100,
       generationResourceAmount: 100,
-      generationWaypointAmount: 100
+      generationWaypointAmount: 100,
+      generationStrongholdAmount: 100
     });
     updateGenerationControls();
   }
@@ -3139,7 +3280,11 @@
       generationSettlementDensity: 100,
       generationPopulationConcentration: 100,
       generationResourceAmount: 100,
-      generationWaypointAmount: 100
+      generationWaypointAmount: 100,
+      generationStrongholdAmount: 100,
+      generationDungeonAmount: 100,
+      generationDungeonComplexAmount: 100,
+      generationSiteAmount: 100
     });
     updateGenerationControls();
   }
@@ -3164,6 +3309,49 @@
     return Boolean(renderer.drawing.enabled && (renderer.drawing.toolsMode || "chooser") === "cartographer");
   }
 
+  function ensurePersistedHistoryQueues() {
+    if (!Array.isArray(renderer.drawing.surveyorUndoStack)) {
+      renderer.drawing.surveyorUndoStack = Array.isArray(renderer.drawing.undoStack) ? [...renderer.drawing.undoStack] : [];
+    }
+    if (!Array.isArray(renderer.drawing.surveyorRedoStack)) {
+      renderer.drawing.surveyorRedoStack = Array.isArray(renderer.drawing.redoStack) ? [...renderer.drawing.redoStack] : [];
+    }
+    if (!Array.isArray(renderer.drawing.cartographerUndoStack)) renderer.drawing.cartographerUndoStack = [];
+    if (!Array.isArray(renderer.drawing.cartographerRedoStack)) renderer.drawing.cartographerRedoStack = [];
+    renderer.drawing.cartographerUndoStack = renderer.drawing.cartographerUndoStack.filter(isCartographerPersistedHistoryAction);
+    renderer.drawing.cartographerRedoStack = renderer.drawing.cartographerRedoStack.filter(isCartographerPersistedHistoryAction);
+    renderer.drawing.undoStack = renderer.drawing.surveyorUndoStack;
+    renderer.drawing.redoStack = renderer.drawing.surveyorRedoStack;
+  }
+
+  function normalizePersistedHistoryOwner(owner) {
+    return owner === "cartographer" ? "cartographer" : "surveyor";
+  }
+
+  function getActivePersistedHistoryOwner() {
+    return (renderer.drawing.toolsMode || "chooser") === "cartographer"
+      ? "cartographer"
+      : "surveyor";
+  }
+
+  function isCartographerPersistedHistoryAction(action) {
+    if (!action?.type) return false;
+    if (action.type === "terrain") return true;
+    if (action.type !== "batch" || !Array.isArray(action.actions) || !action.actions.length) return false;
+    return action.actions.every(entry => entry?.type === "terrain");
+  }
+
+  function cartographerHasStagedHistory() {
+    return getStagedUndoStack().length > 0 || getStagedRedoStack().length > 0;
+  }
+
+  function getActiveHistoryTarget() {
+    if ((renderer.drawing.toolsMode || "chooser") === "cartographer" && cartographerHasStagedHistory()) {
+      return { kind: "staged", owner: "cartographer" };
+    }
+    return { kind: "persisted", owner: getActivePersistedHistoryOwner() };
+  }
+
   function getStagedUndoStack() {
     return renderer.drawing.stagedUndoStack || [];
   }
@@ -3172,20 +3360,32 @@
     return renderer.drawing.stagedRedoStack || [];
   }
 
-  function getPersistedUndoStack() {
-    return renderer.drawing.undoStack || [];
+  function getPersistedUndoStack(owner = "surveyor") {
+    ensurePersistedHistoryQueues();
+    return normalizePersistedHistoryOwner(owner) === "cartographer"
+      ? renderer.drawing.cartographerUndoStack
+      : renderer.drawing.surveyorUndoStack;
   }
 
-  function getPersistedRedoStack() {
-    return renderer.drawing.redoStack || [];
+  function getPersistedRedoStack(owner = "surveyor") {
+    ensurePersistedHistoryQueues();
+    return normalizePersistedHistoryOwner(owner) === "cartographer"
+      ? renderer.drawing.cartographerRedoStack
+      : renderer.drawing.surveyorRedoStack;
   }
 
   function clearStagedRedoStack() {
     renderer.drawing.stagedRedoStack = [];
   }
 
-  function clearPersistedRedoStack() {
-    renderer.drawing.redoStack = [];
+  function clearPersistedRedoStack(owner = "surveyor") {
+    ensurePersistedHistoryQueues();
+    if (normalizePersistedHistoryOwner(owner) === "cartographer") {
+      renderer.drawing.cartographerRedoStack = [];
+    } else {
+      renderer.drawing.surveyorRedoStack = [];
+      renderer.drawing.redoStack = [];
+    }
   }
 
   function pushStagedUndoAction(action) {
@@ -3196,12 +3396,32 @@
     renderer.drawing.stagedRedoStack.push(action);
   }
 
-  function pushPersistedUndoAction(action) {
-    renderer.drawing.undoStack.push(action);
+  function pushPersistedUndoAction(action, owner = "surveyor") {
+    const target = getPersistedUndoStack(owner);
+    if (action && typeof action === "object") action.__historyOwner = normalizePersistedHistoryOwner(owner);
+    target.push(action);
+    if (normalizePersistedHistoryOwner(owner) === "surveyor") renderer.drawing.undoStack = target;
   }
 
-  function pushPersistedRedoAction(action) {
-    renderer.drawing.redoStack.push(action);
+  function pushPersistedRedoAction(action, owner = "surveyor") {
+    const target = getPersistedRedoStack(owner);
+    if (action && typeof action === "object") action.__historyOwner = normalizePersistedHistoryOwner(owner);
+    target.push(action);
+    if (normalizePersistedHistoryOwner(owner) === "surveyor") renderer.drawing.redoStack = target;
+  }
+
+  function removePersistedHistoryAction(action, owner = "surveyor", kind = "undo") {
+    const target = kind === "redo"
+      ? getPersistedRedoStack(owner)
+      : getPersistedUndoStack(owner);
+    const index = target.lastIndexOf(action);
+    if (index >= 0) {
+      target.splice(index, 1);
+      return;
+    }
+    if (target.length && target[target.length - 1]?.type === action?.type) {
+      target.pop();
+    }
   }
 
   function hasGenerationPreview() {
@@ -3616,7 +3836,11 @@
       return;
     }
     if (activeSection === "pois") {
-      hint.textContent = "Generate settlements, resource sites, and waypoints directly into the live POI system.";
+      hint.textContent = "Generate settlements, strongholds, dungeons, sites, resource sites, and waypoints directly into the live POI system.";
+      return;
+    }
+    if (activeSection === "purge") {
+      hint.textContent = "Purge saved live-map overlays, POIs, and region paint from one place. Ctrl+Z can undo supported actions during this session.";
       return;
     }
     hint.textContent = "Right-drag or middle-drag pans. Ctrl+Z undoes, Ctrl+Y redoes.";
@@ -3625,9 +3849,10 @@
   function updateDrawUndoButton() {
     const undoButton = document.getElementById("map-draw-undo");
     if (!undoButton) return;
-    const count = editorUsesStagedHistoryOnly()
+    const historyTarget = getActiveHistoryTarget();
+    const count = historyTarget.kind === "staged"
       ? getStagedUndoStack().length
-      : getPersistedUndoStack().length;
+      : getPersistedUndoStack(historyTarget.owner).length;
     undoButton.disabled = count === 0 || renderer.drawing.saving;
     undoButton.textContent = count
       ? `Undo (${count})`
@@ -3637,9 +3862,10 @@
   function updateDrawRedoButton() {
     const redoButton = document.getElementById("map-draw-redo");
     if (!redoButton) return;
-    const count = editorUsesStagedHistoryOnly()
+    const historyTarget = getActiveHistoryTarget();
+    const count = historyTarget.kind === "staged"
       ? getStagedRedoStack().length
-      : getPersistedRedoStack().length;
+      : getPersistedRedoStack(historyTarget.owner).length;
     redoButton.disabled = count === 0 || renderer.drawing.saving;
     redoButton.textContent = count
       ? `Redo (${count})`
@@ -8580,21 +8806,18 @@
     if (!await confirmPoiGeneration()) return;
     if (!await ensurePoiGenerationRiverBackdrop()) return;
 
-    if (renderer.drawing.generationReplaceGeneratedPois) {
-      const purgeResult = await purgePois({
-        generatedOnly: true,
-        skipConfirm: true,
-        silentIfEmpty: true,
-        showSuccessAlert: false
-      });
-      if (purgeResult?.success === false) return;
-    }
-
     try {
+      const existingPois = Array.isArray(db?.raw?.pois) ? db.raw.pois : [];
+      const replaceGeneratedPois = Boolean(renderer.drawing.generationReplaceGeneratedPois);
+      const generatedPoisToReplace = replaceGeneratedPois
+        ? getPoiHistoryRecords(existingPois.filter(poi => poi?.Generation_Source))
+        : [];
       const drafts = generator.generatePoiDrafts({
         ...getPoiGeneratorOptions(campaign.id),
         hexes: renderer.hexes,
-        existingPois: db?.raw?.pois || [],
+        existingPois: replaceGeneratedPois
+          ? existingPois.filter(poi => !poi?.Generation_Source)
+          : existingPois,
         mapOverlays: renderer.mapOverlays || []
       });
 
@@ -8603,9 +8826,26 @@
         return;
       }
 
+      if (generatedPoisToReplace.length) {
+        const purgeResult = await purgePois({
+          generatedOnly: true,
+          skipConfirm: true,
+          silentIfEmpty: true,
+          showSuccessAlert: false
+        });
+        if (purgeResult?.success === false) return;
+      }
+
       const result = await persistGeneratedPois(campaign.id, drafts, { showSuccessAlert: false });
+      const historyPois = [
+        ...generatedPoisToReplace.map(poi => ({ ...poi, __undoDeleted: true })),
+        ...((result?.historyPois || []).map(poi => ({ ...poi, __undoDeleted: false })))
+      ];
+      if (historyPois.length) {
+        pushMapEditAction({ type: "poi", pois: historyPois });
+      }
       if (!result?.success) return;
-      const summary = `Generated ${result.createdCount} POIs: ${result.settlementCount} settlement${result.settlementCount === 1 ? "" : "s"}, ${result.resourceCount} resource site${result.resourceCount === 1 ? "" : "s"}, and ${result.waypointCount} waypoint${result.waypointCount === 1 ? "" : "s"}.`;
+      const summary = `Generated ${result.createdCount} POIs: ${result.settlementCount} settlement${result.settlementCount === 1 ? "" : "s"}, ${result.strongholdCount} stronghold${result.strongholdCount === 1 ? "" : "s"}, ${result.dungeonComplexCount} dungeon complex${result.dungeonComplexCount === 1 ? "" : "es"}, ${result.dungeonCount} dungeon${result.dungeonCount === 1 ? "" : "s"}, ${result.siteCount} site${result.siteCount === 1 ? "" : "s"}, ${result.resourceCount} resource site${result.resourceCount === 1 ? "" : "s"}, and ${result.waypointCount} waypoint${result.waypointCount === 1 ? "" : "s"}.`;
       await maybeGenerateRoadsAfterPoiGeneration(summary);
     } catch (error) {
       console.error("Unable to prepare generated POIs:", error);
@@ -8889,6 +9129,45 @@
     };
   }
 
+  function buildPoiHistoryRecord(poi, options = {}) {
+    if (!poi?.Hex_ID_Ref) return null;
+    const storedType = window.CampaignPoiTypes?.getStoredTypeValue?.(poi.POI_Type_Value || poi.POI_Type || "")
+      || poi.POI_Type_Value
+      || poi.POI_Type
+      || "";
+    const storedNotoriety = window.CampaignPoiTypes?.getStoredNotorietyValue?.(poi["Notoriety Tier_Value"] || poi["Notoriety Tier"] || "")
+      || poi["Notoriety Tier_Value"]
+      || poi["Notoriety Tier"]
+      || "";
+    return {
+      __uuid: poi.__uuid || "",
+      POI_ID: poi.POI_ID || "",
+      Name: poi.Name || "",
+      Hex_ID_Ref: poi.Hex_ID_Ref || "",
+      POI_Type_Value: storedType,
+      POI_Icon: poi.POI_Icon || "",
+      POI_Tags: Array.isArray(poi.POI_Tags) ? [...poi.POI_Tags] : [],
+      Generation_Source: poi.Generation_Source || "",
+      "Notoriety Tier_Value": storedNotoriety,
+      Population: poi.Population || "",
+      Lore: poi.Lore || "",
+      __undoDeleted: options.undoDeleted === true
+    };
+  }
+
+  function getPoiHistoryRecords(rows, options = {}) {
+    const list = Array.isArray(rows) ? rows : [rows];
+    return list
+      .map(poi => buildPoiHistoryRecord(poi, options))
+      .filter(Boolean);
+  }
+
+  function resolvePoiHexUuid(hexRef) {
+    return db?.hexesById?.[hexRef]?.__uuid
+      || db?.raw?.hexes?.find(hex => hex.Hex_ID === hexRef)?.__uuid
+      || "";
+  }
+
   function addGeneratedPoiToLocalDb(poi) {
     if (!poi?.POI_ID || !db?.raw) return;
     if (!Array.isArray(db.raw.pois)) db.raw.pois = [];
@@ -8926,6 +9205,31 @@
       .filter(Boolean);
     createdPois.forEach(addGeneratedPoiToLocalDb);
     return createdPois;
+  }
+
+  async function recreatePoiFromHistoryRecord(campaignId, poi, registerCreatedPois) {
+    const hexUuid = resolvePoiHexUuid(poi?.Hex_ID_Ref || "");
+    if (!hexUuid) {
+      throw new Error(`Unable to locate saved hex ${poi?.Hex_ID_Ref || ""} for POI undo/redo.`);
+    }
+
+    const { data, error } = await campaignSupabase.rpc("create_poi_with_next_ref_code", {
+      target_campaign_id: campaignId,
+      poi_name: poi?.Name || "",
+      poi_type: poi?.POI_Type_Value || "",
+      poi_icon: poi?.POI_Icon || "",
+      poi_hex_id: hexUuid,
+      poi_tags: Array.isArray(poi?.POI_Tags) ? poi.POI_Tags : [],
+      poi_notoriety_tier: poi?.["Notoriety Tier_Value"] || null,
+      poi_population: poi?.Population || null,
+      poi_lore: poi?.Lore || null,
+      poi_generation_source: poi?.Generation_Source || null,
+      poi_visibility: "shared",
+      poi_group_id: null
+    });
+    if (error) throw error;
+    const created = registerCreatedPois(data, { refresh: false });
+    return (Array.isArray(created) ? created : [created]).filter(Boolean)[0] || null;
   }
 
   function previewGeneratedOverlayRoutes({ campaignId, routes, tool, style, routeMetadata, emptyMessage }) {
@@ -9098,11 +9402,10 @@
     refreshEditorPreviewControls();
 
     let createdCount = 0;
+    const createdPois = [];
     try {
       for (const draft of drafts) {
-        const hexUuid = db?.hexesById?.[draft.hexId]?.__uuid
-          || db?.raw?.hexes?.find(hex => hex.Hex_ID === draft.hexId)?.__uuid
-          || "";
+        const hexUuid = resolvePoiHexUuid(draft.hexId);
         if (!hexUuid) throw new Error(`Unable to locate generated hex ${draft.hexId} in this campaign.`);
 
         const { data, error } = await campaignSupabase.rpc("create_poi_with_next_ref_code", {
@@ -9122,30 +9425,46 @@
 
         if (error) throw error;
 
-        registerCreatedPois(data, { refresh: false });
+        const registered = registerCreatedPois(data, { refresh: false });
+        const registeredList = (Array.isArray(registered) ? registered : [registered]).filter(Boolean);
+        createdPois.push(...registeredList);
         createdCount += 1;
       }
 
       refreshPoiViews?.();
       const settlementCount = drafts.filter(draft => draft.type === "settlement").length;
+      const strongholdCount = drafts.filter(draft => draft.type === "stronghold").length;
+      const dungeonComplexCount = drafts.filter(draft => draft.type === "dungeon_complex").length;
+      const dungeonCount = drafts.filter(draft => draft.type === "dungeon").length;
+      const siteCount = drafts.filter(draft => ["ruin", "holy_site", "arcane_site", "wilderness_site", "hazard", "landmark"].includes(draft.type)).length;
       const resourceCount = drafts.filter(draft => draft.type === "resource_site").length;
       const waypointCount = drafts.filter(draft => draft.type === "waypoint").length;
       if (showSuccessAlert) {
-        window.alert?.(`Generated ${createdCount} POIs: ${settlementCount} settlement${settlementCount === 1 ? "" : "s"}, ${resourceCount} resource site${resourceCount === 1 ? "" : "s"}, and ${waypointCount} waypoint${waypointCount === 1 ? "" : "s"}.`);
+        window.alert?.(`Generated ${createdCount} POIs: ${settlementCount} settlement${settlementCount === 1 ? "" : "s"}, ${strongholdCount} stronghold${strongholdCount === 1 ? "" : "s"}, ${dungeonComplexCount} dungeon complex${dungeonComplexCount === 1 ? "" : "es"}, ${dungeonCount} dungeon${dungeonCount === 1 ? "" : "s"}, ${siteCount} site${siteCount === 1 ? "" : "s"}, ${resourceCount} resource site${resourceCount === 1 ? "" : "s"}, and ${waypointCount} waypoint${waypointCount === 1 ? "" : "s"}.`);
       }
       return {
         success: true,
         createdCount,
         settlementCount,
+        strongholdCount,
+        dungeonComplexCount,
+        dungeonCount,
+        siteCount,
         resourceCount,
-        waypointCount
+        waypointCount,
+        historyPois: getPoiHistoryRecords(createdPois)
       };
     } catch (error) {
       console.error("Unable to generate POIs:", error);
       refreshPoiViews?.();
       const createdText = createdCount ? ` ${createdCount} POI${createdCount === 1 ? "" : "s"} were created before the error.` : "";
       window.alert?.(`${error.message || "Unable to generate POIs."}${createdText}`);
-      return { success: false, createdCount, error };
+      return {
+        success: false,
+        createdCount,
+        error,
+        historyPois: getPoiHistoryRecords(createdPois)
+      };
     } finally {
       renderer.drawing.saving = false;
       if (showBulkLoading) setLoading(false);
@@ -9243,6 +9562,8 @@
   function getGeneratedRoadAnchors(campaignId) {
     const seedBase = getGenerationSeedBase(campaignId);
     const pois = db?.raw?.pois || [];
+    renderer.generatedRoadPoiBiasCache = new Map();
+    renderer.generatedRoadSettlementAdjacencyCache = new Map();
     const hexById = new Map();
     renderer.hexes.forEach(hex => {
       hexById.set(hex.id, hex);
@@ -9271,12 +9592,101 @@
       .filter((anchor, index, list) => anchor?.hex && list.findIndex(candidate => candidate.hex.id === anchor.hex.id) === index);
   }
 
+  function getPoiIconMetaForRoads(poi) {
+    return window.CampaignPoiIcons?.getIconMeta?.(poi?.POI_Icon || "") || null;
+  }
+
+  function getPoisAtRoadHex(hex) {
+    if (!hex?.id) return [];
+    if (renderer.poisByHexId instanceof Map) {
+      return renderer.poisByHexId.get(hex.id) || renderer.poisByHexId.get(hex.label) || [];
+    }
+    if (db?.poisByHexId) {
+      return db.poisByHexId[hex.id] || db.poisByHexId[hex.label] || [];
+    }
+    return [];
+  }
+
+  function isSettlementPoiForRoads(poi) {
+    const normalizedType = window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || "")
+      || String(poi?.POI_Type_Value || poi?.POI_Type || "").trim().toLowerCase();
+    return normalizedType === "settlement";
+  }
+
+  function hasSettlementPoiNearRoadHex(hex, radius = 1) {
+    if (!hex?.id) return false;
+    const cacheKey = `${hex.id}:${radius}`;
+    if (renderer.generatedRoadSettlementAdjacencyCache?.has(cacheKey)) {
+      return renderer.generatedRoadSettlementAdjacencyCache.get(cacheKey);
+    }
+    const nearbyHexes = [hex, ...nearbyHexesWithin(hex, radius)];
+    const result = nearbyHexes.some(candidate => getPoisAtRoadHex(candidate).some(isSettlementPoiForRoads));
+    if (renderer.generatedRoadSettlementAdjacencyCache) renderer.generatedRoadSettlementAdjacencyCache.set(cacheKey, result);
+    return result;
+  }
+
   function getGeneratedRoadAnchorProfile(poi, hex, seedBase) {
-    const text = `${poi?.POI_Type || ""} ${poi?.Name || ""}`.toLowerCase();
+    const text = `${poi?.POI_Type || ""} ${poi?.Name || ""} ${poi?.POI_Icon || ""} ${(Array.isArray(poi?.POI_Tags) ? poi.POI_Tags.join(" ") : poi?.POI_Tags || "")}`.toLowerCase();
     const name = String(poi?.Name || "").trim();
+    const icon = String(poi?.POI_Icon || "").toLowerCase();
+    const iconMeta = getPoiIconMetaForRoads(poi);
+    const traitSet = new Set(iconMeta?.traits || []);
+    const family = iconMeta?.family || "";
+    const tagSet = new Set(Array.isArray(poi?.POI_Tags) ? poi.POI_Tags.map(tag => String(tag || "").toLowerCase()) : []);
+    const nearSettlement = hasSettlementPoiNearRoadHex(hex, 1);
     let priority = 10;
     let tier = "minor";
-    if (/(capital|metropolis|city|harbor|harbour|port|market|crossroads)/.test(text)) {
+    if (traitSet.has("river_crossing_anchor")) {
+      if (icon === "bridge_gate") {
+        priority = 84;
+        tier = "major";
+      } else if (icon === "ford") {
+        priority = 66;
+        tier = "minor";
+      } else if (icon === "ferry") {
+        priority = nearSettlement ? 46 : 62;
+        tier = nearSettlement ? "minor" : "major";
+      } else {
+        priority = 58;
+        tier = "minor";
+      }
+    } else if (traitSet.has("pass_anchor")) {
+      priority = nearSettlement ? 52 : 74;
+      tier = "major";
+    } else if (traitSet.has("frontier_anchor")) {
+      priority = nearSettlement ? 48 : 70;
+      tier = "major";
+    } else if (tagSet.has("crossroads") || traitSet.has("crossroads")) {
+      priority = 82;
+      tier = "major";
+    } else if (family === "settlement") {
+      priority = traitSet.has("major") || traitSet.has("urban") ? 100 : 78;
+      tier = "major";
+    } else if (family === "stronghold") {
+      priority = 76;
+      tier = "major";
+    } else if (family === "resource_site" && (traitSet.has("trade") || traitSet.has("settlement_adjacent"))) {
+      priority = 72;
+      tier = "major";
+    } else if (family === "resource_site") {
+      priority = 48;
+      tier = "minor";
+    } else if (family === "waypoint" && (traitSet.has("trade") || traitSet.has("roadside"))) {
+      priority = 46;
+      tier = "minor";
+    } else if (family === "holy_site" || family === "arcane_site") {
+      priority = 42;
+      tier = "minor";
+    } else if (family === "ruin" || family === "dungeon" || family === "hazard") {
+      priority = 18;
+      tier = "minor";
+    } else if (icon === "bridge_gate") {
+      priority = 84;
+      tier = "major";
+    } else if (icon === "ford" || tagSet.has("river_crossing")) {
+      priority = 66;
+      tier = "minor";
+    } else if (/(capital|metropolis|city|harbor|harbour|port|market|crossroads)/.test(text)) {
       priority = 100;
       tier = "major";
     } else if (/(town|village|settlement|district|docks|fort|castle|keep|hold|abbey|farm|inn)/.test(text)) {
@@ -9294,6 +9704,32 @@
     priority -= getRoadLandAnchorScore(hex) * 1.5;
     priority += seededUnit(`${seedBase}:road-anchor:${poi.POI_ID || name || hex.id}`) * 6;
     return { hex, name, priority, tier };
+  }
+
+  function getRoadCrossingPoiBias(hex) {
+    if (!hex?.id) return 0;
+    if (renderer.generatedRoadPoiBiasCache?.has(hex.id)) return renderer.generatedRoadPoiBiasCache.get(hex.id);
+    const nearSettlement = hasSettlementPoiNearRoadHex(hex, 1);
+    const bias = getPoisAtRoadHex(hex).reduce((best, poi) => {
+      const icon = String(poi?.POI_Icon || "").toLowerCase();
+      const iconMeta = getPoiIconMetaForRoads(poi);
+      const traitSet = new Set(iconMeta?.traits || []);
+      const tags = Array.isArray(poi?.POI_Tags) ? poi.POI_Tags.map(tag => String(tag || "").toLowerCase()) : [];
+      if (traitSet.has("river_crossing_anchor")) {
+        if (icon === "bridge_gate") return Math.max(best, 3.2);
+        if (icon === "ford") return Math.max(best, 2.5);
+        if (icon === "ferry") return Math.max(best, nearSettlement ? 1.1 : 2.2);
+        return Math.max(best, nearSettlement ? 1 : 1.8);
+      }
+      if (traitSet.has("pass_anchor")) return Math.max(best, nearSettlement ? 1.1 : 2.1);
+      if (traitSet.has("frontier_anchor")) return Math.max(best, nearSettlement ? 0.9 : 1.8);
+      if (icon === "bridge_gate") return Math.max(best, 3.2);
+      if (icon === "ford") return Math.max(best, 2.5);
+      if (tags.includes("river_crossing")) return Math.max(best, 1.4);
+      return best;
+    }, 0);
+    if (renderer.generatedRoadPoiBiasCache) renderer.generatedRoadPoiBiasCache.set(hex.id, bias);
+    return bias;
   }
 
   function getFallbackRoadAnchors(campaignId, existingAnchorIds = new Set()) {
@@ -9785,7 +10221,13 @@
     visibleRoutes.push(...getManualRiverTributaryRoutes(
       sequence,
       salt,
-      getGeneratedRiverTributaryOptions(options)
+      {
+        ...getGeneratedRiverTributaryOptions(options),
+        avoidHexIds: new Set([
+          ...((options.blockedHexIds instanceof Set) ? [...options.blockedHexIds] : []),
+          ...sequence
+        ])
+      }
     ));
     return { routes: visibleRoutes, sequence };
   }
@@ -9796,18 +10238,19 @@
     const siblingIndex = Math.max(0, Number(options.siblingIndex || 0));
     const joinPressure = Math.max(0, Math.min(1, Number(options.joinPressure || 0)));
     const suppression = Math.max(0, Math.min(0.94,
-      Math.max(0, amountScale - 1) * 0.42
-      + Math.max(0, localDensity - 2) * 0.12
-      + siblingIndex * 0.18
-      + joinPressure * 0.34
+      Math.max(0, amountScale - 0.95) * 0.58
+      + Math.max(0, localDensity - 1.8) * 0.17
+      + siblingIndex * 0.22
+      + joinPressure * 0.4
       + (options.wildcardSource ? 0.08 : 0)
     ));
     return {
-      disable: suppression >= 0.92,
-      branchChanceMultiplier: Math.max(0.18, 1 - suppression * 0.82),
-      maxBranchChanceMultiplier: Math.max(0.22, 1 - suppression * 0.68),
-      chanceGrowthMultiplier: Math.max(0.28, 1 - suppression * 0.58),
-      branchGapBonus: Math.round(suppression * 7)
+      disable: suppression >= 0.8,
+      branchChanceMultiplier: Math.max(0.12, 1 - suppression * 0.9),
+      maxBranchChanceMultiplier: Math.max(0.16, 1 - suppression * 0.78),
+      chanceGrowthMultiplier: Math.max(0.22, 1 - suppression * 0.66),
+      branchGapBonus: Math.round(suppression * 10),
+      maxAvoidAdjacency: suppression >= 0.66 ? 0 : suppression >= 0.38 ? 1 : 2
     };
   }
 
@@ -9932,6 +10375,10 @@
             sequence: nextSequence,
             cost: nextCost
           };
+          const commitBlockedJoin = shouldGeneratedRiverCommitToBlockedJoin(candidate.state?.hex, stepCount, {
+            ...options,
+            lengthBand
+          });
           const terminationScore = getGeneratedRiverTerminationScore(candidate, stepCount, {
             ...options,
             lengthBand
@@ -9942,6 +10389,7 @@
               bestFinished = { ...candidate, finishedScore };
             }
           }
+          if (commitBlockedJoin) return;
           nextByKey.set(nextKey, candidate);
         });
       });
@@ -10110,8 +10558,15 @@
     ), 0);
   }
 
+  function shouldGeneratedRiverCommitToBlockedJoin(hex, stepCount, options = {}) {
+    if (!hex?.id || !(options.blockedHexIds instanceof Set) || !options.blockedHexIds.has(hex.id)) return false;
+    const minSteps = Math.max(4, Number(options.lengthBand?.minSteps || 0));
+    return stepCount >= Math.max(4, Math.round(minSteps * 0.78));
+  }
+
   function getGeneratedRiverNaturalTransitionBias(node, toHex, stepCount, options = {}) {
     const sequence = Array.isArray(node?.sequence) ? node.sequence : [];
+    const currentHex = node?.state?.hex || null;
     const lengthBand = options.lengthBand || {};
     const minSteps = Math.max(4, lengthBand.minSteps || 0);
     const targetSteps = Math.max(minSteps + 1, lengthBand.targetSteps || minSteps + 1);
@@ -10128,9 +10583,14 @@
 
     if (options.blockedHexIds instanceof Set && options.blockedHexIds.has(toHex.id)) {
       const earlyJoinThreshold = Math.max(4, Math.round(minSteps * (0.8 - joinPressure * 0.24)));
-      cost += stepCount < earlyJoinThreshold
-        ? (9 + Math.max(0, minSteps - stepCount) * 0.45) * Math.max(0.34, 1 - joinPressure * 0.68)
-        : Math.max(-0.7, 1.8 - joinPressure * 2.6);
+      if (stepCount < earlyJoinThreshold) {
+        cost += (9 + Math.max(0, minSteps - stepCount) * 0.45) * Math.max(0.34, 1 - joinPressure * 0.68);
+      } else {
+        const currentAdjacentBlocked = currentHex
+          ? getGeneratedRiverBlockedAdjacencyCount(currentHex, options.blockedHexIds, 1)
+          : 0;
+        cost -= (currentAdjacentBlocked > 0 ? 2.8 : 1.9) + joinPressure * 1.4;
+      }
     }
     if (
       options.blockedHexIds instanceof Set
@@ -10139,9 +10599,15 @@
     ) {
       const adjacentBlocked = getGeneratedRiverBlockedAdjacencyCount(toHex, options.blockedHexIds, 1);
       if (adjacentBlocked > 0) {
+        const currentAdjacentBlocked = currentHex
+          ? getGeneratedRiverBlockedAdjacencyCount(currentHex, options.blockedHexIds, 1)
+          : 0;
         const crowdingPressure = Math.max(0, amountScale - 1) * 0.9 + joinPressure * 0.45;
         const earlyPhaseMultiplier = stepCount < Math.round(targetSteps * 0.72) ? 1.12 : 0.74;
         cost += adjacentBlocked * (0.5 + crowdingPressure) * earlyPhaseMultiplier;
+        if (stepCount >= Math.max(4, Math.round(minSteps * 0.72)) && currentAdjacentBlocked > 0) {
+          cost += adjacentBlocked * (1.3 + joinPressure * 0.9);
+        }
       }
     }
 
@@ -10588,10 +11054,14 @@
     const seedBase = getGenerationSeedBase(campaignId);
     return {
       seed: seedBase.replace(":feature-pass", ":poi-pass"),
-      settlementDensity: Math.max(0.4, Math.min(1.8, Number(renderer.drawing.generationSettlementDensity || 100) / 100)),
-      populationConcentration: Math.max(0.5, Math.min(1.5, Number(renderer.drawing.generationPopulationConcentration || 100) / 100)),
-      resourceAmount: Math.max(0.5, Math.min(1.5, Number(renderer.drawing.generationResourceAmount || 100) / 100)),
-      waypointAmount: Math.max(0.5, Math.min(1.5, Number(renderer.drawing.generationWaypointAmount || 100) / 100))
+      settlementDensity: Math.max(0, Math.min(1, Number(renderer.drawing.generationSettlementDensity ?? 100) / 200)),
+      populationConcentration: Math.max(0.5, Math.min(1.5, Number(renderer.drawing.generationPopulationConcentration ?? 100) / 100)),
+      resourceAmount: Math.max(0, Math.min(1, Number(renderer.drawing.generationResourceAmount ?? 100) / 200)),
+      waypointAmount: Math.max(0, Math.min(1, Number(renderer.drawing.generationWaypointAmount ?? 100) / 200)),
+      strongholdAmount: Math.max(0, Math.min(1, Number(renderer.drawing.generationStrongholdAmount ?? 100) / 200)),
+      dungeonAmount: Math.max(0, Math.min(1, Number(renderer.drawing.generationDungeonAmount ?? 100) / 200)),
+      dungeonComplexAmount: Math.max(0, Math.min(1, Number(renderer.drawing.generationDungeonComplexAmount ?? 100) / 200)),
+      siteAmount: Math.max(0, Math.min(1, Number(renderer.drawing.generationSiteAmount ?? 100) / 200))
     };
   }
 
@@ -10662,7 +11132,7 @@
 
     try {
       await persistStagedMapEditAction(campaign.id, historyAction);
-      pushMapEditAction(historyAction, { force: true });
+      pushMapEditAction(historyAction, { force: true, owner: "cartographer" });
       clearStagedMapEditState();
       markAllMapCachesDirty();
       render();
@@ -11254,22 +11724,24 @@
 
   function pushMapEditAction(action, options = {}) {
     if (!action?.type) return;
+    const historyOwner = normalizePersistedHistoryOwner(options.owner || "surveyor");
     if (renderer.drawing.dragActionBatch && !options.force) {
+      renderer.drawing.dragActionBatch.historyOwner = historyOwner;
       renderer.drawing.dragActionBatch.actions.push(action);
       return;
     }
-    pushPersistedUndoAction(action);
-    clearPersistedRedoStack();
+    pushPersistedUndoAction(action, historyOwner);
+    clearPersistedRedoStack(historyOwner);
     refreshEditorActionControls();
   }
 
   async function undoLastDrawAction() {
-    const useStagedHistory = editorUsesStagedHistoryOnly();
-    if (useStagedHistory && !getStagedUndoStack().length) {
+    const historyTarget = getActiveHistoryTarget();
+    if (historyTarget.kind === "staged" && !getStagedUndoStack().length) {
       updateDrawUndoButton();
       return;
     }
-    if (useStagedHistory && getStagedUndoStack().length) {
+    if (historyTarget.kind === "staged" && getStagedUndoStack().length) {
       const action = renderer.drawing.stagedUndoStack.pop();
       if (!action?.type) {
         updateDrawUndoButton();
@@ -11284,7 +11756,7 @@
     }
 
     const campaign = getActiveCampaign?.();
-    const action = getPersistedUndoStack().pop();
+    const action = getPersistedUndoStack(historyTarget.owner).slice(-1)[0];
     if (!campaign || !action?.type) {
       updateDrawUndoButton();
       return;
@@ -11297,7 +11769,8 @@
 
     try {
       await applyMapEditAction(campaign.id, action, "undo");
-      pushPersistedRedoAction(action);
+      removePersistedHistoryAction(action, historyTarget.owner, "undo");
+      pushPersistedRedoAction(action, historyTarget.owner);
       markAllMapCachesDirty();
       render();
     } catch (error) {
@@ -11315,12 +11788,12 @@
   }
 
   async function redoLastDrawAction() {
-    const useStagedHistory = editorUsesStagedHistoryOnly();
-    if (useStagedHistory && !getStagedRedoStack().length) {
+    const historyTarget = getActiveHistoryTarget();
+    if (historyTarget.kind === "staged" && !getStagedRedoStack().length) {
       updateDrawRedoButton();
       return;
     }
-    if (useStagedHistory && getStagedRedoStack().length) {
+    if (historyTarget.kind === "staged" && getStagedRedoStack().length) {
       const action = renderer.drawing.stagedRedoStack.pop();
       if (!action?.type) {
         updateDrawRedoButton();
@@ -11335,7 +11808,7 @@
     }
 
     const campaign = getActiveCampaign?.();
-    const action = getPersistedRedoStack().pop();
+    const action = getPersistedRedoStack(historyTarget.owner).slice(-1)[0];
     if (!campaign || !action?.type) {
       updateDrawRedoButton();
       return;
@@ -11348,7 +11821,8 @@
 
     try {
       await applyMapEditAction(campaign.id, action, "redo");
-      pushPersistedUndoAction(action);
+      removePersistedHistoryAction(action, historyTarget.owner, "redo");
+      pushPersistedUndoAction(action, historyTarget.owner);
       markAllMapCachesDirty();
       render();
     } catch (error) {
@@ -11368,6 +11842,7 @@
     if (action?.type === "nuke-overlays") return action.overlays?.length || 0;
     if (action?.type === "nuke-regions" || action?.type === "nuke-features") return action.actions?.length || 0;
     if (action?.type === "overlay") return action.overlays?.length || 0;
+    if (action?.type === "poi") return action.pois?.length || 0;
     return 1;
   }
 
@@ -11388,6 +11863,11 @@
 
     if (action.type === "overlay") {
       await applyOverlayHistoryAction(campaignId, action.overlays || [], direction);
+      return;
+    }
+
+    if (action.type === "poi") {
+      await applyPoiHistoryAction(campaignId, action, direction);
       return;
     }
 
@@ -11439,6 +11919,42 @@
       });
       upsertLocalOverlays(restoredOverlays.filter(Boolean));
     }
+  }
+
+  async function applyPoiHistoryAction(campaignId, action, direction) {
+    const removeLocalPoi = window.CampaignCodexPoiMutations?.removePoiByUuidFromLocalDb || removePoiFromLocalDbFallback;
+    const registerCreatedPois = window.CampaignCodexPoiMutations?.registerCreatedPoiRowsInLocalDb || registerGeneratedPoiRowsInLocalDb;
+    const refreshPoiViews = window.CampaignCodexPoiMutations?.refreshPoiViewsAfterPurge || refreshPoiViewsAfterPurgeFallback;
+    const deletePois = [];
+    const restorePois = [];
+
+    (action?.pois || []).forEach((poi, index) => {
+      const shouldDelete = direction === "redo" ? poi.__undoDeleted : !poi.__undoDeleted;
+      if (shouldDelete) deletePois.push(poi);
+      else restorePois.push({ poi, index });
+    });
+
+    for (const poi of deletePois) {
+      if (!poi?.__uuid) continue;
+      const { error } = await campaignSupabase.rpc("delete_campaign_record", {
+        target_campaign_id: campaignId,
+        target_record_type: "poi",
+        target_record_id: poi.__uuid
+      });
+      if (error) throw error;
+      removeLocalPoi?.(poi.__uuid);
+    }
+
+    for (const entry of restorePois) {
+      const restored = await recreatePoiFromHistoryRecord(campaignId, entry.poi, registerCreatedPois);
+      if (!restored) continue;
+      action.pois[entry.index] = {
+        ...buildPoiHistoryRecord(restored, { undoDeleted: Boolean(entry.poi.__undoDeleted) }),
+        __undoDeleted: Boolean(entry.poi.__undoDeleted)
+      };
+    }
+
+    refreshPoiViews?.();
   }
 
   async function applyTerrainBatchAction(campaignId, actions, direction) {
@@ -13025,10 +13541,14 @@
     if (canRoadCrossWaterHex(toHex)) {
       if (!canRoadUseOneHexWaterCrossing(fromHex, toHex, goalHex)) return Infinity;
       cost += isMajorRoute ? MAJOR_ROAD_WATER_PATH_COST : ROAD_WATER_PATH_COST;
+      cost -= getRoadCrossingPoiBias(fromHex) * 0.65;
     }
 
     cost += getRoadFeaturePathCost(toHex);
     cost += getRoadElevationPathCost(fromHex, toHex);
+    if (!canRoadCrossWaterHex(toHex)) {
+      cost -= getRoadCrossingPoiBias(toHex);
+    }
     if (hasExistingRoadSegment(fromHex.id, toHex.id)) cost *= 0.42;
     return Math.max(0.2, cost);
   }
@@ -13083,6 +13603,10 @@
     if (renderer.drawing.riverTributaries === false) return [];
     if (options.disable) return [];
     const sequenceSet = new Set(sequence || []);
+    const avoidHexIds = options.avoidHexIds instanceof Set ? options.avoidHexIds : null;
+    const maxAvoidAdjacency = Number.isFinite(Number(options.maxAvoidAdjacency))
+      ? Math.max(0, Number(options.maxAvoidAdjacency))
+      : Infinity;
     const usedWaterHexIds = new Set();
     const tributaries = [];
     const branchChanceMultiplier = Math.max(0.1, Number(options.branchChanceMultiplier || 1));
@@ -13119,7 +13643,8 @@
         .filter(candidate => (
           candidate.sequence.length >= 3 &&
           candidate.sequence.length <= 4 &&
-          candidate.sequence.slice(1).every(candidateHexId => !sequenceSet.has(candidateHexId))
+          candidate.sequence.slice(1).every(candidateHexId => !sequenceSet.has(candidateHexId)) &&
+          isManualRiverTributaryCandidateOpen(candidate.sequence, avoidHexIds, maxAvoidAdjacency)
         ))
         .sort((a, b) => (
           a.sequence.length - b.sequence.length ||
@@ -13142,6 +13667,20 @@
     });
 
     return tributaries;
+  }
+
+  function isManualRiverTributaryCandidateOpen(sequence, avoidHexIds, maxAvoidAdjacency = Infinity) {
+    if (!(avoidHexIds instanceof Set) || !avoidHexIds.size || !Array.isArray(sequence) || sequence.length < 3) return true;
+    const attachmentHexId = sequence[0];
+    return sequence.slice(1, -1).every(hexId => {
+      const hex = hexForPathPoint(hexId);
+      if (!hex) return false;
+      const adjacentAvoidCount = nearbyHexesWithin(hex, 1).reduce((count, neighbor) => {
+        if (!neighbor?.id || neighbor.id === attachmentHexId) return count;
+        return avoidHexIds.has(neighbor.id) ? count + 1 : count;
+      }, 0);
+      return adjacentAvoidCount <= maxAvoidAdjacency;
+    });
   }
 
   function getManualRiverVisibleRoutes(sequence, salt = "", routeMetadata = {}) {
