@@ -97,9 +97,9 @@
     coastal_water: ["waves", "kelp", "water_rocks", "whirlpool", "ice"],
     inland_water: ["waves", "shoals", "water_rocks", "rapids", "falls", "marsh", "ice"],
     beach: ["sand", "ridges", "cliffs", "water_rocks"],
-    plains: ["woods", "shrub", "ridges", "farmland", "lone_mountain"],
-    grassland: ["woods", "forest", "shrub", "ridges", "farmland", "lone_mountain"],
-    lush_grassland: ["woods", "forest", "shrub", "ridges", "farmland", "marsh"],
+    plains: ["woods", "shrub", "ridges", "lone_mountain"],
+    grassland: ["woods", "forest", "shrub", "ridges", "lone_mountain"],
+    lush_grassland: ["woods", "forest", "shrub", "ridges", "marsh"],
     wetland: ["woods", "forest", "marsh"],
     jungle_floor: ["jungle", "ridges"],
     desert: ["sand", "ridges", "cactus_scrub", "cliffs", "lone_mountain"],
@@ -155,7 +155,6 @@
     { id: "vegetation", label: "Vegetation", features: ["woods", "forest", "jungle", "shrub", "kelp", "marsh", "cactus_scrub"] },
     { id: "highlands", label: "Highlands", features: ["ridges", "mountains", "snowcapped_mountains", "lone_mountain", "volcano", "cliffs"] },
     { id: "water", label: "Water Detail", features: ["waves", "shoals", "reef", "kelp", "water_rocks", "whirlpool", "rapids", "falls", "marsh", "ice"] },
-    { id: "farmland", label: "Farmland", features: ["farmland"] },
     { id: "sand", label: "Sand", features: ["sand"] },
     { id: "chaos", label: "Chaos", features: Object.keys(FEATURE_LABELS), ignoreCompatibility: true }
   ];
@@ -166,18 +165,18 @@
     coastal_water: { chance: 0.32, weights: { waves: 7, reef: 4, shoals: 3, kelp: 3, water_rocks: 0.8, whirlpool: 0.2, ice: 1 } },
     inland_water: { chance: 0.28, weights: { waves: 5, shoals: 2, water_rocks: 0.8, marsh: 3, rapids: 0.8, ice: 1 } },
     beach: { chance: 0.86, weights: { sand: 12, ridges: 2.5, cliffs: 0.45, water_rocks: 1.5 } },
-    plains: { chance: 0.35, weights: { woods: 3, shrub: 2, ridges: 2, farmland: 0.25, lone_mountain: 1 } },
-    grassland: { chance: 0.45, weights: { woods: 4, forest: 2, shrub: 2, ridges: 3, farmland: 0.35, lone_mountain: 1 } },
-    lush_grassland: { chance: 0.60, weights: { woods: 4, forest: 4, shrub: 1, ridges: 2, farmland: 0.35, marsh: 1, jungle: 1 } },
+    plains: { chance: 0.35, weights: { woods: 3, shrub: 2, ridges: 2, lone_mountain: 1 } },
+    grassland: { chance: 0.45, weights: { woods: 4, forest: 2, shrub: 2, ridges: 3, lone_mountain: 1 } },
+    lush_grassland: { chance: 0.60, weights: { woods: 4, forest: 4, shrub: 1, ridges: 2, marsh: 1, jungle: 1 } },
     wetland: { chance: 0.75, weights: { marsh: 5, woods: 3, forest: 3, jungle: 2 } },
     jungle_floor: { chance: 0.90, weights: { jungle: 7, ridges: 2, marsh: 1 } },
-    desert: { chance: 0.45, weights: { sand: 2, ridges: 5, cactus_scrub: 4, cliffs: 2, lone_mountain: 1, shrub: 1 } },
-    deep_desert: { chance: 0.50, weights: { sand: 2, ridges: 5, cactus_scrub: 2, cliffs: 3, lone_mountain: 2, shrub: 1 } },
-    barrens: { chance: 0.45, weights: { shrub: 3, ridges: 4, cliffs: 3, lone_mountain: 1, cactus_scrub: 1, woods: 0.28, forest: 0.06 } },
-    bleak_barrens: { chance: 0.50, weights: { shrub: 2, ridges: 4, cliffs: 4, lone_mountain: 2, volcano: 1, woods: 0.20, forest: 0.04 } },
-    snow: { chance: 0.55, weights: { ridges: 3, snowcapped_mountains: 4, woods: 2, forest: 2, ice: 2 } },
-    rock: { chance: 0.75, weights: { mountains: 5, ridges: 4, cliffs: 3, lone_mountain: 2, woods: 2, forest: 1, volcano: 1 } },
-    wastes: { chance: 0.50, weights: { ridges: 4, cliffs: 3, lone_mountain: 2, volcano: 2, woods: 0.12, forest: 0.02 } }
+    desert: { chance: 0.42, weights: { sand: 2, ridges: 5.2, cactus_scrub: 4, cliffs: 0.95, lone_mountain: 1, shrub: 1 } },
+    deep_desert: { chance: 0.46, weights: { sand: 2, ridges: 5.4, cactus_scrub: 2, cliffs: 1.35, lone_mountain: 2, shrub: 1 } },
+    barrens: { chance: 0.48, weights: { shrub: 3, ridges: 5.2, cliffs: 2.05, lone_mountain: 1, cactus_scrub: 1, woods: 0.34, forest: 0.08 } },
+    bleak_barrens: { chance: 0.52, weights: { shrub: 2, ridges: 5.4, cliffs: 2.35, lone_mountain: 2, volcano: 0.3, woods: 0.26, forest: 0.06 } },
+    snow: { chance: 0.48, weights: { ridges: 3.8, snowcapped_mountains: 2.3, woods: 2.1, forest: 1.9, ice: 2.6 } },
+    rock: { chance: 0.74, weights: { mountains: 5.2, ridges: 4.4, cliffs: 3.1, lone_mountain: 1.8, woods: 2, forest: 1, volcano: 0.3 } },
+    wastes: { chance: 0.46, weights: { ridges: 4.8, cliffs: 2.1, lone_mountain: 1.7, volcano: 0.22, woods: 0.95, forest: 0.16 } }
   };
 
   const SECONDARY_FEATURE_RULES = [
@@ -834,19 +833,44 @@
     }
 
     if (featureId === "mountains") {
-      result *= context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains"], 2) ? 2.4 : 0.65;
+      const nearbyRange = context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains"], 2);
+      const nearbyRuggedBase = context?.hasNearbyBase?.(hex, ["rock", "barrens", "bleak_barrens", "wastes"], 1);
+      result *= nearbyRange ? 2.55 : nearbyRuggedBase ? 1.45 : 0.42;
     }
 
     if (featureId === "snowcapped_mountains") {
-      result *= context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains"], 2) ? 2.1 : 0.85;
+      const nearbyRange = context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains"], 2);
+      const nearbyRuggedBase = context?.hasNearbyBase?.(hex, ["rock", "barrens", "bleak_barrens", "wastes"], 1);
+      result *= nearbyRange ? 2.4 : nearbyRuggedBase ? 1.65 : 0.38;
     }
 
     if (featureId === "lone_mountain") {
       result *= context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains"], 2) ? 1.8 : 0.2;
     }
 
-    if (featureId === "ridges" && context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains", "lone_mountain"], 2)) {
-      result *= 1.8;
+    if (featureId === "ridges") {
+      if (context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains", "lone_mountain"], 2)) {
+        result *= 1.8;
+      }
+      if (["barrens", "bleak_barrens", "wastes"].includes(hex?.baseTerrain || "")
+        && context?.hasNearbyAnyFeature?.(hex, ["ridges", "cliffs"], 2)) {
+        result *= 1.34;
+      }
+    }
+
+    if (featureId === "cliffs") {
+      if (["desert", "deep_desert"].includes(hex?.baseTerrain || "")) {
+        result *= context?.hasNearbyAnyFeature?.(hex, ["cliffs", "ridges", "mountains", "snowcapped_mountains"], 2) ? 1.08 : 0.58;
+      } else if (["barrens", "bleak_barrens", "wastes"].includes(hex?.baseTerrain || "")) {
+        result *= context?.hasNearbyAnyFeature?.(hex, ["cliffs", "ridges", "mountains", "snowcapped_mountains"], 2) ? 1.48 : 0.68;
+      }
+    }
+
+    if (featureId === "ice" && hex?.baseTerrain === "snow") {
+      if (context?.hasNearbyFeature?.(hex, "ice", 1)) result *= 2.2;
+      else if (context?.hasNearbyBase?.(hex, ["inland_water", "coastal_water", "sea"], 1)) result *= 1.85;
+      else if (Number(hex?.elevation || 0) <= 1) result *= 1.45;
+      else result *= 0.72;
     }
 
     if (featureId === "waves" && context?.hasNearbyFeature?.(hex, "whirlpool", 1)) {
@@ -874,9 +898,9 @@
     if (["barrens", "bleak_barrens", "wastes"].includes(base) && ["woods", "forest"].includes(featureId)) {
       if (manualBrush) return true;
       const chanceByBase = {
-        barrens: { woods: 24, forest: 6 },
-        bleak_barrens: { woods: 16, forest: 4 },
-        wastes: { woods: 10, forest: 2 }
+        barrens: { woods: 26, forest: 8 },
+        bleak_barrens: { woods: 18, forest: 5 },
+        wastes: { woods: 58, forest: 14 }
       };
       return hashPercent(`${seed}:dead-tree:${base}:${featureId}`, hashNumber) < (chanceByBase[base]?.[featureId] || 0);
     }
@@ -904,15 +928,17 @@
     if (featureId === "shoals") return ["coastal_water", "inland_water"].includes(base) || (base === "sea" && context?.hasNearbyBase?.(hex, ["coastal_water", "beach"], 1));
     if (featureId === "water_rocks") return ["deep_sea", "sea", "coastal_water", "inland_water"].includes(base) || context?.hasNearbyBase?.(hex, ["beach", "rock"], 1) || context?.hasNearbyAnyFeature?.(hex, ["ridges", "cliffs", "mountains"], 1);
     if (featureId === "whirlpool") return ["deep_sea", "sea", "coastal_water"].includes(base) && (manualBrush || hashPercent(`${seed}:whirlpool`, hashNumber) < 35);
-    if (featureId === "snowcapped_mountains") return base === "snow";
+    if (featureId === "snowcapped_mountains") {
+      return base === "snow" && (
+        manualBrush
+        || context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains", "cliffs", "ridges"], 2)
+        || context?.hasNearbyBase?.(hex, ["rock", "barrens", "bleak_barrens", "wastes"], 1)
+        || hashPercent(`${seed}:snow-range:${hex?.id || ""}`, hashNumber) < 22
+      );
+    }
     if (featureId === "jungle") return ["jungle_floor", "wetland", "lush_grassland"].includes(base);
 
-    if (featureId === "farmland") {
-      if (!["plains", "grassland", "lush_grassland"].includes(base)) return false;
-      if (context?.hasNearbyBase?.(hex, ["wastes", "bleak_barrens", "deep_desert"], 1)) return false;
-      if (context?.hasNearbyPoiType?.(hex, ["farm", "settlement", "city"], 2)) return true;
-      return manualBrush || hashPercent(`${seed}:farmland`, hashNumber) < 6;
-    }
+    if (featureId === "farmland") return false;
 
     if (featureId === "marsh") {
       if (base === "wetland") return true;
@@ -926,8 +952,21 @@
     }
 
     if (featureId === "lone_mountain") return ["plains", "grassland", "desert", "deep_desert", "barrens", "rock", "wastes"].includes(base) && context?.hasNearbyAnyFeature?.(hex, ["mountains"], 2);
-    if (featureId === "mountains") return ["rock", "snow"].includes(base) && (manualBrush || context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains"], 2) || hashPercent(`${seed}:mountains`, hashNumber) < 45);
-    if (featureId === "volcano") return ["rock", "wastes", "bleak_barrens"].includes(base);
+    if (featureId === "mountains") {
+      return ["rock", "snow"].includes(base) && (
+        manualBrush
+        || context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains"], 2)
+        || context?.hasNearbyBase?.(hex, ["rock", "barrens", "bleak_barrens", "wastes"], 1)
+        || hashPercent(`${seed}:mountains`, hashNumber) < (base === "snow" ? 18 : 36)
+      );
+    }
+    if (featureId === "volcano") {
+      if (!["rock", "wastes", "bleak_barrens"].includes(base)) return false;
+      if (manualBrush) return true;
+      const ruggedSupport = context?.hasNearbyAnyFeature?.(hex, ["mountains", "snowcapped_mountains", "cliffs", "ridges", "lone_mountain"], 2);
+      const chance = base === "rock" ? 14 : base === "bleak_barrens" ? 9 : 6;
+      return hashPercent(`${seed}:volcano:${base}:${hex?.id || ""}`, hashNumber) < (ruggedSupport ? chance + 8 : chance);
+    }
 
     return true;
   }

@@ -2901,9 +2901,14 @@
 }
 
 .generated-map-coord-label {
-  fill: rgba(0, 0, 0, 0.58);
+  fill: rgba(244, 238, 222, 0.96);
+  stroke: rgba(17, 12, 9, 0.9);
+  stroke-width: 1.9px;
+  paint-order: stroke fill;
+  stroke-linejoin: round;
 
   font-family: 'Spectral', Georgia, serif;
+  font-weight: 600;
   text-anchor: middle;
   dominant-baseline: middle;
 
@@ -2919,7 +2924,13 @@
   fill: rgba(255, 255, 255, 0.8);
   stroke: rgba(16, 11, 7, 0.96);
   stroke-width: 2.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+}
+
+.generated-map-poi-bg-dungeon-complex {
+  stroke-width: 2.5;
 }
 
 .generated-map-poi-symbol {

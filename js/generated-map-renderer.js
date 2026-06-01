@@ -70,9 +70,9 @@
     coastal_water: ["waves", "kelp", "water_rocks", "whirlpool", "ice"],
     inland_water: ["waves", "shoals", "water_rocks", "rapids", "falls", "marsh", "ice"],
     beach: ["sand", "ridges", "cliffs", "water_rocks"],
-    plains: ["woods", "shrub", "ridges", "farmland", "lone_mountain"],
-    grassland: ["woods", "forest", "shrub", "ridges", "farmland", "lone_mountain"],
-    lush_grassland: ["woods", "forest", "shrub", "ridges", "farmland", "marsh"],
+    plains: ["woods", "shrub", "ridges", "lone_mountain"],
+    grassland: ["woods", "forest", "shrub", "ridges", "lone_mountain"],
+    lush_grassland: ["woods", "forest", "shrub", "ridges", "marsh"],
     wetland: ["woods", "forest", "marsh"],
     jungle_floor: ["jungle", "ridges"],
     desert: ["sand", "ridges", "cactus_scrub", "cliffs", "lone_mountain"],
@@ -160,7 +160,8 @@
   }));
   const EDGE_NAMES = ["E", "SE", "SW", "W", "NW", "NE"];
   const UNCLAIMED_REGION_REF = "REG-0000";
-  const DRAWABLE_OVERLAY_TYPES = new Set(["road", "river", "sea_route", "path", "wall", "mist", "region", "unregion", "political-region", "clear-political-region", "erase", "terrain", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper"]);
+  const DRAWABLE_OVERLAY_TYPES = new Set(["road", "river", "sea_route", "path", "wall", "mist", "farmland", "region", "unregion", "political-region", "clear-political-region", "erase", "terrain", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper"]);
+  const HEX_STYLE_OVERLAY_TYPES = new Set(["wall", "mist", "farmland"]);
   const REGION_PAINT_TYPES = new Set(["region", "unregion", "political-region", "clear-political-region"]);
   const PATH_OVERLAY_TYPES = new Set(["road", "river", "sea_route", "path"]);
   const OVERLAY_TYPE_LABELS = {
@@ -169,8 +170,23 @@
     path: "paths",
     sea_route: "sea routes",
     wall: "walls",
-    mist: "mist"
+    mist: "mist",
+    farmland: "farmland"
   };
+  const POI_GENERATION_GLOBAL_CONTROL_KEYS = Object.freeze([
+    "generationSettlementDensity",
+    "generationResourceAmount",
+    "generationWaypointAmount",
+    "generationStrongholdAmount",
+    "generationDungeonAmount",
+    "generationDungeonComplexAmount",
+    "generationSiteAmount"
+  ]);
+  const FARMLAND_OVERLAY_BASES = new Set(["plains", "grassland", "lush_grassland"]);
+  const FARMLAND_RESOURCE_ICONS = new Set(["farmstead", "windmill"]);
+  const FARMLAND_WAYPOINT_ICONS = new Set(["inn", "tavern", "lodge", "campsite"]);
+  const FARMLAND_ALLOWED_FEATURES = new Set(["ridges", "woods", "forest"]);
+  const FARMLAND_BLOCKING_FEATURES = new Set(["marsh", "jungle", "cactus_scrub", "mountains", "snowcapped_mountains", "lone_mountain", "volcano", "cliffs", "ice"]);
   const ALL_TERRAIN_FEATURES = Object.keys(TERRAIN_FEATURE_LABELS);
   const CHAOS_BASE_TERRAIN_OPTIONS = BASE_TERRAIN_OPTIONS
     .map(([base]) => base)
@@ -180,12 +196,10 @@
     { id: "vegetation", label: "Vegetation", features: ["woods", "forest", "jungle", "shrub", "kelp", "marsh", "cactus_scrub"] },
     { id: "highlands", label: "Highlands", features: ["ridges", "mountains", "snowcapped_mountains", "lone_mountain", "volcano", "cliffs"] },
     { id: "water", label: "Water Detail", features: ["waves", "shoals", "reef", "kelp", "water_rocks", "whirlpool", "rapids", "falls", "marsh", "ice"] },
-    { id: "farmland", label: "Farmland", features: ["farmland"] },
     { id: "sand", label: "Sand", features: ["sand"] },
     { id: "chaos", label: "Chaos", features: ALL_TERRAIN_FEATURES, ignoreCompatibility: true }
   ];
   const FEATURE_BRUSH_NOTES = {
-    farmland: "Farmland only paints on plains, grassland, and lush grassland.",
     sand: "Sand only paints on beaches, desert, and deep desert."
   };
   const EXCLUSIVE_TERRAIN_FEATURE_GROUPS = [
@@ -231,7 +245,7 @@
     },
     overlay: {
       title: "Overlay",
-      copy: "Draw roads, rivers, paths, walls, and mist directly onto the saved map."
+      copy: "Draw roads, rivers, paths, walls, mist, and farmland directly onto the saved map."
     },
     pois: {
       title: "POIs",
@@ -379,7 +393,7 @@
     bleak_barrens: { vegetation: "#514b34", relief: "#56352f", surface: "#664039" },
     snow: { vegetation: "#203f35", relief: "#68777c", surface: "#d8eef2" },
     rock: { vegetation: "#203f35", relief: "#4d463d", surface: "#5b5147" },
-    wastes: { vegetation: "#40382f", relief: "#2b2020", surface: "#4b3030" }
+    wastes: { vegetation: "#5f4b41", relief: "#7f5f54", surface: "#74554a" }
   };
   const FEATURE_ART_ASSET_FILES = [...new Set([
     ...Object.values(FEATURE_ART_FILES),
@@ -566,6 +580,7 @@
       generationRiverAmount: 100,
       generationRiverLength: 100,
       generationRiverWildcards: 100,
+      generationPoiGlobalAmount: 100,
       generationSettlementDensity: 100,
       generationPopulationConcentration: 100,
       generationResourceAmount: 100,
@@ -602,6 +617,7 @@
         political: true,
         geographicLabels: true,
         politicalLabels: true,
+        coords: true,
         features: true,
         pois: true
       },
@@ -687,8 +703,22 @@
   function setLoading(isLoading) {
     const veil = renderer.loadingVeil;
     if (!veil) return;
+    const loadingLockCount = Number(renderer?.drawing?.loadingVeilLockCount || 0);
+    if (!isLoading && loadingLockCount > 0) return;
     veil.hidden = !isLoading;
     renderer.root?.classList.toggle("generated-map-is-loading", Boolean(isLoading));
+  }
+
+  function lockLoadingVeil() {
+    if (!renderer?.drawing) return;
+    renderer.drawing.loadingVeilLockCount = Number(renderer.drawing.loadingVeilLockCount || 0) + 1;
+    setLoading(true);
+  }
+
+  function unlockLoadingVeil() {
+    if (!renderer?.drawing) return;
+    renderer.drawing.loadingVeilLockCount = Math.max(0, Number(renderer.drawing.loadingVeilLockCount || 0) - 1);
+    if (!renderer.drawing.loadingVeilLockCount) setLoading(false);
   }
 
   function beginLoading() {
@@ -955,6 +985,8 @@
     const generationRunRoads = document.getElementById("map-generation-run-roads");
     const generationRunRivers = document.getElementById("map-generation-run-rivers");
     const generationRunPois = document.getElementById("map-generation-run-pois");
+    const poiGenerationGlobalAmount = document.getElementById("map-generation-poi-global-amount");
+    const clearAllOverlaysButton = document.getElementById("map-clear-all-overlays");
     const clearGeneratedPoisButton = document.getElementById("map-clear-generated-pois");
     const clearPoisButton = document.getElementById("map-clear-pois");
     const poiGenerationResetSliders = document.getElementById("map-poi-generation-reset-sliders");
@@ -1409,6 +1441,11 @@
       runGenerationPoiPass();
     });
 
+    poiGenerationGlobalAmount?.addEventListener("input", () => {
+      applyPoiGenerationGlobalAmountShift(clampNumber(Number(poiGenerationGlobalAmount.value), 0, 200, 100));
+      updateGenerationControls();
+    });
+
     clearPoisButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -1419,6 +1456,12 @@
       event.preventDefault();
       event.stopPropagation();
       purgePois({ generatedOnly: true });
+    });
+
+    clearAllOverlaysButton?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      purgeAllSavedOverlays();
     });
 
     generationResetSliders?.addEventListener("click", event => {
@@ -1482,6 +1525,9 @@
         const inputMin = Number(input.min || 0);
         const inputMax = Number(input.max || 200);
         renderer.drawing[drawingKey] = clampNumber(Number(input.value), inputMin, inputMax, 100);
+        if (POI_GENERATION_GLOBAL_CONTROL_KEYS.includes(drawingKey)) {
+          syncPoiGenerationGlobalAmountFromSliders();
+        }
         updateGenerationControls();
       });
     });
@@ -2356,6 +2402,7 @@
     renderer.drawing.generationMountains = 100;
     renderer.drawing.generationCompression = 100;
     renderer.drawing.generationContinuity = 100;
+    renderer.drawing.generationPoiGlobalAmount = 100;
     renderer.drawing.generationSettlementDensity = 100;
     renderer.drawing.generationPopulationConcentration = 100;
     renderer.drawing.generationResourceAmount = 100;
@@ -2464,6 +2511,7 @@
       political: true,
       geographicLabels: true,
       politicalLabels: true,
+      coords: true,
       features: true,
       pois: true
     };
@@ -2885,10 +2933,10 @@
     if (routeMajorInput) routeMajorInput.checked = Boolean(currentRouteMajor);
     if (routeNameRow) routeNameRow.hidden = !isNamedRouteTool || (hasMajorToggle && !currentRouteMajor);
     if (routeNameInput && routeNameInput.value !== currentRouteName) routeNameInput.value = currentRouteName || "";
-    if (mistBrushRow) mistBrushRow.hidden = renderer.drawing.tool !== "mist";
+    if (mistBrushRow) mistBrushRow.hidden = !["mist", "farmland"].includes(renderer.drawing.tool);
     if (mistBrushInput) mistBrushInput.value = String(renderer.drawing.mistBrushSize || 1);
     if (mistBrushValue) mistBrushValue.textContent = String(renderer.drawing.mistBrushSize || 1);
-    if (mistNoiseRow) mistNoiseRow.hidden = renderer.drawing.tool !== "mist";
+    if (mistNoiseRow) mistNoiseRow.hidden = !["mist", "farmland"].includes(renderer.drawing.tool);
     if (mistNoiseInput) mistNoiseInput.value = String(renderer.drawing.mistNoise || 0);
     if (mistNoiseValue) mistNoiseValue.textContent = `${renderer.drawing.mistNoise || 0}%`;
   }
@@ -2943,9 +2991,9 @@
   }
 
   function refreshMistBrushPreview() {
-    if (renderer.drawing.tool !== "mist" || !renderer.drawing.hoverMistHexIds?.length) return;
+    if (!["mist", "farmland"].includes(renderer.drawing.tool) || !renderer.drawing.hoverMistHexIds?.length) return;
     const centerHex = hexForPathPoint(renderer.drawing.hoverMistHexIds[0]);
-    renderer.drawing.hoverMistHexIds = centerHex ? getMistBrushHexIds(centerHex) : [];
+    renderer.drawing.hoverMistHexIds = centerHex ? getMistBrushHexIds(centerHex, renderer.drawing.tool) : [];
   }
 
   function refreshEditorBrushPreview() {
@@ -3170,6 +3218,9 @@
     const generationRunRoads = document.getElementById("map-generation-run-roads");
     const generationRunRivers = document.getElementById("map-generation-run-rivers");
     const generationRunPois = document.getElementById("map-generation-run-pois");
+    const poiGenerationGlobalAmount = document.getElementById("map-generation-poi-global-amount");
+    const poiGenerationGlobalAmountValue = document.getElementById("map-generation-poi-global-amount-value");
+    const clearAllOverlaysButton = document.getElementById("map-clear-all-overlays");
     const clearGeneratedPoisButton = document.getElementById("map-clear-generated-pois");
     const clearPoisButton = document.getElementById("map-clear-pois");
     const poiGenerationResetSliders = document.getElementById("map-poi-generation-reset-sliders");
@@ -3178,8 +3229,16 @@
     const generationPreviewTerrain = document.getElementById("map-generation-preview-terrain");
     const sharedApplyButton = document.getElementById("map-editor-apply-staged");
     const sharedDiscardButton = document.getElementById("map-editor-discard-staged");
+    const overlayTypeCounts = getCurrentMapOverlays().reduce((counts, overlay) => {
+      const type = String(overlay?.Overlay_Type || "").trim();
+      if (!type) return counts;
+      counts[type] = (counts[type] || 0) + 1;
+      return counts;
+    }, {});
+    const hasSavedOverlays = Object.values(overlayTypeCounts).some(count => count > 0);
     const hasSavedPois = ((db?.raw?.pois?.length || 0) + (db?.raw?.poiGroups?.length || 0)) > 0;
     const hasGeneratedPois = ((db?.raw?.pois || []).filter(poi => poi?.Generation_Source).length + (db?.raw?.poiGroups || []).filter(group => group?.Generation_Source).length) > 0;
+    const globalPoiAmount = syncPoiGenerationGlobalAmountFromSliders();
 
     document.querySelectorAll("[data-generation-seed-input]").forEach(seedInput => {
       if (seedInput.value !== (renderer.drawing.generationSeed || "")) {
@@ -3203,6 +3262,12 @@
     if (generationRunRoads) generationRunRoads.disabled = Boolean(renderer.drawing.saving);
     if (generationRunRivers) generationRunRivers.disabled = Boolean(renderer.drawing.saving);
     if (generationRunPois) generationRunPois.disabled = Boolean(renderer.drawing.saving);
+    if (poiGenerationGlobalAmount) {
+      poiGenerationGlobalAmount.value = String(globalPoiAmount);
+      poiGenerationGlobalAmount.disabled = Boolean(renderer.drawing.saving);
+    }
+    if (poiGenerationGlobalAmountValue) poiGenerationGlobalAmountValue.textContent = `${globalPoiAmount}%`;
+    if (clearAllOverlaysButton) clearAllOverlaysButton.disabled = Boolean(renderer.drawing.saving || hasStagedMapEdits() || !hasSavedOverlays);
     if (clearGeneratedPoisButton) clearGeneratedPoisButton.disabled = Boolean(renderer.drawing.saving || !hasGeneratedPois);
     if (clearPoisButton) clearPoisButton.disabled = Boolean(renderer.drawing.saving || !hasSavedPois);
     if (poiGenerationResetSliders) poiGenerationResetSliders.disabled = Boolean(renderer.drawing.saving);
@@ -3266,6 +3331,7 @@
       generationRiverAmount: 100,
       generationRiverLength: 100,
       generationRiverWildcards: 100,
+      generationPoiGlobalAmount: 100,
       generationSettlementDensity: 100,
       generationPopulationConcentration: 100,
       generationResourceAmount: 100,
@@ -3277,6 +3343,7 @@
 
   function resetPoiGenerationSliders() {
     Object.assign(renderer.drawing, {
+      generationPoiGlobalAmount: 100,
       generationSettlementDensity: 100,
       generationPopulationConcentration: 100,
       generationResourceAmount: 100,
@@ -3467,9 +3534,13 @@
     }));
   }
 
+  function isHexStyleOverlayType(type) {
+    return HEX_STYLE_OVERLAY_TYPES.has(String(type || "").toLowerCase());
+  }
+
   function createLocalOverlayRecord(segment, prefix = "staged") {
     renderer.localOverlayNonce = (renderer.localOverlayNonce || 0) + 1;
-    const isHexOverlay = segment.tool === "wall" || segment.tool === "mist";
+    const isHexOverlay = isHexStyleOverlayType(segment.tool);
     return {
       __uuid: `${prefix}-${renderer.localOverlayNonce}`,
       __preview: prefix === "preview",
@@ -3815,6 +3886,10 @@
       hint.textContent = "Paint mist with the brush. Higher Noise makes the brush patchier.";
       return;
     }
+    if (tool === "farmland") {
+      hint.textContent = "Paint farmland with the brush. Higher Noise makes the brush patchier.";
+      return;
+    }
     if (tool === "erase") {
       hint.textContent = "Click a hex to erase connected overlay segments from that location.";
       return;
@@ -3836,7 +3911,7 @@
       return;
     }
     if (activeSection === "pois") {
-      hint.textContent = "Generate settlements, strongholds, dungeons, sites, resource sites, and waypoints directly into the live POI system.";
+      hint.textContent = "Generate settlements, strongholds, dungeons, places of note, resource sites, and waypoints directly into the live POI system.";
       return;
     }
     if (activeSection === "purge") {
@@ -3885,6 +3960,12 @@
 
   function updateDrawClearButton() {
     const hasStagedEdits = hasStagedMapEdits();
+    const overlayTypeCounts = getCurrentMapOverlays().reduce((counts, overlay) => {
+      const type = String(overlay?.Overlay_Type || "").trim();
+      if (!type) return counts;
+      counts[type] = (counts[type] || 0) + 1;
+      return counts;
+    }, {});
     [
       "map-generation-run-features",
       "map-generation-run-roads",
@@ -3905,8 +3986,12 @@
       if (button) button.disabled = renderer.drawing.saving || hasStagedEdits;
     });
     document.querySelectorAll("[data-clear-overlay-type]").forEach(button => {
-      button.disabled = renderer.drawing.saving || hasStagedEdits;
+      button.disabled = renderer.drawing.saving || hasStagedEdits || !overlayTypeCounts[button.dataset.clearOverlayType || ""];
     });
+    const clearAllOverlaysButton = document.getElementById("map-clear-all-overlays");
+    if (clearAllOverlaysButton) {
+      clearAllOverlaysButton.disabled = renderer.drawing.saving || hasStagedEdits || !Object.values(overlayTypeCounts).some(count => count > 0);
+    }
     updateGenerationControls();
   }
 
@@ -4090,6 +4175,9 @@
     const ctx = renderer.routeCacheCtx;
     ctx.setTransform(TERRAIN_CACHE_SCALE, 0, 0, TERRAIN_CACHE_SCALE, 0, 0);
     ctx.clearRect(0, 0, renderer.view.width, renderer.view.height);
+    if (renderer.drawing.visibleOverlays.features && shouldRenderFeatureArt()) {
+      renderer.hexes.forEach(hex => renderFarmlandOverlayForHex(ctx, hex));
+    }
     renderCanvasDrawablePaths(ctx);
     renderer.routeCacheDirty = false;
   }
@@ -4299,7 +4387,7 @@
       const type = overlay?.Overlay_Type;
       if (type && groups[type]) groups[type].push(overlay);
       return groups;
-    }, { road: [], river: [], path: [], sea_route: [], wall: [], mist: [] });
+    }, { road: [], river: [], path: [], sea_route: [], wall: [], mist: [], farmland: [] });
   }
 
   function drawCanvasOverlayPath(ctx, pathData, options) {
@@ -4442,6 +4530,7 @@
       renderer.featureAssetsLoaded = true;
       renderer.featureSourceImages.clear();
       renderer.featureImages.clear();
+      markRouteCacheDirty();
       markFeatureCacheDirty();
       queueMapRender(true);
     });
@@ -4594,6 +4683,7 @@
     if (!renderer.initialMapLoadingActive || !renderer.featureImageStartupBatchDirty) return;
     if (renderer.featureImageQueue.length || renderer.featureImageActiveLoads > 0) return;
     renderer.featureImageStartupBatchDirty = false;
+    markRouteCacheDirty();
     markFeatureCacheDirty();
     markOverlayCacheDirty();
     queueMapRender(true);
@@ -4613,6 +4703,7 @@
     }
     if (usage.overlayTypes.size) {
       markOverlayCacheDirty();
+      if (usage.overlayTypes.has("farmland")) markRouteCacheDirty();
     }
     queueMapRender(true);
   }
@@ -4690,6 +4781,31 @@
       if (!image) return;
       drawFeatureArtImage(ctx, image, applyFeatureArtSizeMultiplier(featureArtDrawBox(hex, index), item.featureId), getFeatureArtOpacity(hex, item, zoomOpacity));
     });
+  }
+
+  function renderFarmlandOverlayForHex(ctx, hex) {
+    if (!hex?.id || (hex.features || []).includes("farmland") || !getFarmlandOverlayHexIds().has(hex.id)) return;
+    const image = getFeatureArtImage(
+      FEATURE_ART_FILES.farmland,
+      getFeatureArtTint(hex, { featureId: "farmland", file: FEATURE_ART_FILES.farmland }),
+      { type: "overlay", overlayType: "farmland", hexId: hex.id }
+    );
+    if (!image) return;
+    drawFeatureArtImage(
+      ctx,
+      image,
+      applyFeatureArtSizeMultiplier(featureArtDrawBox(hex, 0), "farmland"),
+      getFeatureArtOpacity(hex, { featureId: "farmland", opacity: FEATURE_ART_OPACITY.farmland || 0.64 }, getFeatureArtZoomOpacity())
+    );
+  }
+
+  function getFarmlandOverlayHexIds() {
+    if (renderer.farmlandOverlayHexIdsCache?.revision === renderer.overlayRevision && renderer.farmlandOverlayHexIdsCache.hexIds) {
+      return renderer.farmlandOverlayHexIdsCache.hexIds;
+    }
+    const hexIds = new Set((getOverlaysByType().farmland || []).map(overlay => overlay?.Hex_ID_Ref).filter(Boolean));
+    renderer.farmlandOverlayHexIdsCache = { revision: renderer.overlayRevision, hexIds };
+    return hexIds;
   }
 
   function drawFeatureArtImage(ctx, image, box, opacity) {
@@ -4940,7 +5056,7 @@
     if (featureId === "marsh") return "#8b6f3d";
     if (["barrens", "bleak_barrens"].includes(base) && isRelief) return "#b88a62";
     if (["barrens", "bleak_barrens"].includes(base) && ["shrub", "cactus_scrub"].includes(featureId)) return "#958a57";
-    if (base === "wastes" && isRelief) return "#8f6a5f";
+    if (base === "wastes" && isRelief) return "#8a675b";
     if (featureId === "jungle") return "#519942";
     if (["wetland", "jungle_floor"].includes(base) && isVegetation) return base === "jungle_floor" ? "#63a56d" : "#5d9380";
     if (featureId === "volcano") return "#2b2020";
@@ -4949,7 +5065,12 @@
     if (featureId === "falls") return isRiverFallsHex(hex) ? getReliefFeatureTint(hex) : "#d8eef2";
     if (file.includes("jungle_trop")) return "#155c38";
     if (file.includes("jungle_temp")) return "#244a35";
-    if (file.includes("_dead")) return ["barrens", "bleak_barrens", "wastes"].includes(base) ? "#8f6f68" : "#746852";
+    if (file.includes("_dead")) {
+      if (base === "wastes") return "#8e9294";
+      if (base === "lush_grassland") return "#8a5f4f";
+      if (["barrens", "bleak_barrens"].includes(base)) return "#8f6f68";
+      return "#746852";
+    }
     if (file.includes("_con")) return base === "wetland" ? "#234d43" : "#203f35";
     if (file.includes("_dec")) return tints.vegetation;
     if (isVegetation) return tints.vegetation;
@@ -4964,7 +5085,7 @@
     const base = hex?.baseTerrain || "plains";
     const tints = BASE_FEATURE_TINTS[base] || BASE_FEATURE_TINTS.plains;
     if (["barrens", "bleak_barrens"].includes(base)) return "#b88a62";
-    if (base === "wastes") return "#8f6a5f";
+    if (base === "wastes") return "#8a675b";
     return tints.relief || tints.surface || "#5d5638";
   }
 
@@ -5039,25 +5160,13 @@
     renderGeographicRegionOverlay(fragment, visibleHexes);
     renderDrawableOverlays(fragment, visibleHexes);
     renderPoliticalRegionBorders(fragment, visibleHexes);
-    renderRegionLabels(fragment, visibleHexes);
-    if (shouldRenderRouteLabels()) {
-      renderRouteLabels(fragment);
-    }
     if (renderer.drawing.visibleOverlays.pois) {
       renderPoiMarkers(fragment, visibleHexes);
     }
-
-    if (renderer.view.zoom >= COORD_LABEL_MIN_ZOOM) {
-      visibleHexes.forEach(hex => {
-        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        const dimensions = getGeneratedMapDimensions();
-        text.setAttribute("class", "generated-map-coord-label");
-        text.setAttribute("x", hex.center.x);
-        text.setAttribute("y", hex.center.y - dimensions.hexHeight * 0.28);
-        text.setAttribute("font-size", String(dimensions.radius * 0.20));
-        text.textContent = hex.label;
-        fragment.appendChild(text);
-      });
+    renderCoordinateLabels(fragment, visibleHexes);
+    renderRegionLabels(fragment, visibleHexes);
+    if (shouldRenderRouteLabels()) {
+      renderRouteLabels(fragment);
     }
 
     const activeHex = hexForPathPoint(renderer.hoveredHexId) || hexForPathPoint(renderer.selectedHexId);
@@ -5072,6 +5181,20 @@
     renderDrawingGuides(fragment, visibleHexes);
 
     renderer.svg.appendChild(fragment);
+  }
+
+  function renderCoordinateLabels(fragment, visibleHexes) {
+    if (renderer.view.zoom < COORD_LABEL_MIN_ZOOM || !renderer.drawing.visibleOverlays.coords) return;
+    const dimensions = getGeneratedMapDimensions();
+    visibleHexes.forEach(hex => {
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("class", "generated-map-coord-label");
+      text.setAttribute("x", String(hex.center.x));
+      text.setAttribute("y", String(hex.center.y - dimensions.hexHeight * 0.37));
+      text.setAttribute("font-size", String(dimensions.radius * 0.2));
+      text.textContent = hex.label;
+      fragment.appendChild(text);
+    });
   }
 
   function renderDrawableOverlays(fragment, visibleHexes) {
@@ -5269,7 +5392,7 @@
       renderEraseOverlayPreview(fragment, renderer.drawing.hoverEraseHexId);
     }
 
-    if (renderer.drawing.tool === "mist" && renderer.drawing.hoverMistHexIds?.length) {
+    if (["mist", "farmland"].includes(renderer.drawing.tool) && renderer.drawing.hoverMistHexIds?.length) {
       renderMistBrushPreview(fragment, visibleHexes);
     }
 
@@ -5317,7 +5440,7 @@
     const dimensions = getGeneratedMapDimensions();
     const markerDiameter = Math.min(70, Math.max(56, (dimensions.radius * 2) - 6));
     const markerRadius = markerDiameter / 2;
-    const iconSize = Math.min(markerDiameter - 12, 54);
+    const baseIconSize = Math.min(markerDiameter - 12, 54);
     const badgeRadius = Math.max(10, Math.round(markerRadius * 0.34));
 
     visibleHexes.forEach(hex => {
@@ -5325,19 +5448,28 @@
       if (!pois?.length) return;
 
       const markerPoi = getPrimaryPoiMarkerRecord(pois);
+      const markerProfile = getPoiMarkerShapeProfile(markerPoi, markerRadius, baseIconSize);
       const markerX = hex.center.x;
       const markerY = hex.center.y;
       const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      const clipId = `generated-map-poi-clip-${String(hex.id || hex.label || "hex").replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
+      const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+      const iconGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      const backgroundNode = createPoiMarkerBackgroundNode(markerProfile, markerX, markerY);
+      const clipNode = createPoiMarkerBackgroundNode(markerProfile, markerX, markerY);
 
-      group.setAttribute("class", "generated-map-poi-marker");
-      circle.setAttribute("class", "generated-map-poi-bg");
-      circle.setAttribute("cx", markerX);
-      circle.setAttribute("cy", markerY);
-      circle.setAttribute("r", String(markerRadius));
+      group.setAttribute("class", `generated-map-poi-marker generated-map-poi-marker-${markerProfile.classKey}`);
+      clipPath.setAttribute("id", clipId);
+      clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
+      clipPath.appendChild(clipNode);
+      defs.appendChild(clipPath);
+      iconGroup.setAttribute("clip-path", `url(#${clipId})`);
+      iconGroup.appendChild(createPoiMarkerSymbolNode(markerPoi, markerX, markerY, markerProfile.iconSize));
 
-      group.appendChild(circle);
-      group.appendChild(createPoiMarkerSymbolNode(markerPoi, markerX, markerY, iconSize));
+      group.appendChild(defs);
+      group.appendChild(backgroundNode);
+      group.appendChild(iconGroup);
       if (pois.length > 1) {
         group.appendChild(createPoiMarkerCountNode(pois.length, markerX, markerY, markerRadius, badgeRadius));
       }
@@ -5370,6 +5502,265 @@
     return renderer.poiIconAssets.get(iconValue)
       || renderer.poiIconAssets.get(POI_ICON_FALLBACK)
       || null;
+  }
+
+  function getPoiMarkerTypeValue(poi) {
+    return window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || poi?.type || "")
+      || String(poi?.POI_Type_Value || poi?.POI_Type || poi?.type || "").trim().toLowerCase();
+  }
+
+  function getPoiMarkerShapeKind(poi) {
+    const type = getPoiMarkerTypeValue(poi);
+    if (type === "settlement") return "settlement";
+    if (type === "stronghold") return "stronghold";
+    if (type === "resource_site") return "resource";
+    if (type === "waypoint") return "waypoint";
+    if (type === "dungeon_complex") return "dungeon_complex";
+    if (type === "dungeon") return "dungeon";
+
+    const family = window.CampaignPoiIcons?.getIconFamily?.(poi?.POI_Icon || poi?.poi_icon || "") || "";
+    if (family === "settlement") return "settlement";
+    if (family === "stronghold") return "stronghold";
+    if (family === "resource_site") return "resource";
+    if (family === "waypoint") return "waypoint";
+    if (family === "dungeon") return "dungeon";
+    return "site";
+  }
+
+  function getPoiMarkerShapeProfile(poi, markerRadius, baseIconSize) {
+    const kind = getPoiMarkerShapeKind(poi);
+    switch (kind) {
+      case "settlement":
+        return {
+          kind,
+          classKey: "settlement",
+          iconSize: Math.max(24, Math.round(baseIconSize)),
+          radius: markerRadius
+        };
+      case "waypoint":
+        return {
+          kind,
+          classKey: "waypoint",
+          iconSize: Math.max(24, Math.round(baseIconSize * 0.8)),
+          radius: markerRadius * 0.84
+        };
+      case "resource":
+        return {
+          kind,
+          classKey: "resource",
+          iconSize: Math.max(24, Math.round(baseIconSize * 0.72)),
+          size: markerRadius * 1.4,
+          cornerRadius: markerRadius * 0.24
+        };
+      case "stronghold":
+        return {
+          kind,
+          classKey: "stronghold",
+          iconSize: Math.max(24, Math.round(baseIconSize * 0.72)),
+          radius: markerRadius * 0.96,
+          cornerRadius: markerRadius * 0.18
+        };
+      case "dungeon_complex":
+        return {
+          kind,
+          classKey: "dungeon-complex",
+          iconSize: Math.max(24, Math.round(baseIconSize * 0.78)),
+          outerRadius: markerRadius * 0.98,
+          innerRadius: markerRadius * 0.82
+        };
+      case "dungeon":
+        return {
+          kind,
+          classKey: "dungeon",
+          iconSize: Math.max(24, Math.round(baseIconSize * 0.72)),
+          widthRadius: markerRadius * 0.86,
+          heightRadius: markerRadius * 0.92,
+          faceBulge: 0.16
+        };
+      default:
+        return {
+          kind: "site",
+          classKey: "site",
+          iconSize: Math.max(24, Math.round(baseIconSize * 0.72)),
+          widthRadius: markerRadius * 0.88,
+          heightRadius: markerRadius * 0.8,
+          shoulderInset: markerRadius * 0.38,
+          sideShoulder: markerRadius * 0.34,
+          notchInset: markerRadius * 0.2,
+          notchDepth: markerRadius * 0.18,
+          cornerRadius: markerRadius * 0.18
+        };
+    }
+  }
+
+  function createPoiMarkerBackgroundNode(profile, centerX, centerY) {
+    const className = `generated-map-poi-bg generated-map-poi-bg-${profile.classKey}`;
+    if (profile.kind === "settlement" || profile.kind === "waypoint") {
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("class", className);
+      circle.setAttribute("cx", String(centerX));
+      circle.setAttribute("cy", String(centerY));
+      circle.setAttribute("r", String(profile.radius));
+      return circle;
+    }
+
+    if (profile.kind === "resource") {
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("class", className);
+      rect.setAttribute("x", String(centerX - (profile.size / 2)));
+      rect.setAttribute("y", String(centerY - (profile.size / 2)));
+      rect.setAttribute("width", String(profile.size));
+      rect.setAttribute("height", String(profile.size));
+      rect.setAttribute("rx", String(profile.cornerRadius));
+      rect.setAttribute("ry", String(profile.cornerRadius));
+      return rect;
+    }
+
+    if (profile.kind === "stronghold") {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const vertices = buildRegularPolygonVertices(centerX, centerY, 6, profile.radius, 0);
+      path.setAttribute("class", className);
+      path.setAttribute("d", buildRoundedPolygonPath(vertices, profile.cornerRadius));
+      return path;
+    }
+
+    if (profile.kind === "site") {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const vertices = buildNotchedHexagonVertices(
+        centerX,
+        centerY,
+        profile.widthRadius,
+        profile.heightRadius,
+        profile.shoulderInset,
+        profile.sideShoulder,
+        profile.notchInset,
+        profile.notchDepth
+      );
+      path.setAttribute("class", className);
+      path.setAttribute("d", buildRoundedPolygonPath(vertices, profile.cornerRadius));
+      return path;
+    }
+
+    if (profile.kind === "dungeon") {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("class", className);
+      path.setAttribute("d", buildPointedCurvedDiamondPath(centerX, centerY, profile.widthRadius, profile.heightRadius, profile.faceBulge));
+      return path;
+    }
+
+    const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    polygon.setAttribute("class", className);
+    polygon.setAttribute("points", buildStarPolygonPoints(centerX, centerY, 8, profile.outerRadius, profile.innerRadius, -Math.PI / 2));
+    return polygon;
+  }
+
+  function buildRegularPolygonVertices(centerX, centerY, sides, radius, rotation = 0) {
+    return Array.from({ length: Math.max(3, sides) }, (_, index) => {
+      const angle = rotation + (Math.PI * 2 * index / sides);
+      return {
+        x: centerX + Math.cos(angle) * radius,
+        y: centerY + Math.sin(angle) * radius
+      };
+    });
+  }
+
+  function buildNotchedHexagonVertices(centerX, centerY, widthRadius, heightRadius, shoulderInset, sideShoulder, notchInset, notchDepth) {
+    const width = Math.max(8, Number(widthRadius) || 0);
+    const height = Math.max(8, Number(heightRadius) || 0);
+    const shoulder = Math.max(3, Math.min(width * 0.76, Number(shoulderInset) || width * 0.38));
+    const side = Math.max(3, Math.min(height * 0.82, Number(sideShoulder) || height * 0.34));
+    const inset = Math.max(2, Math.min(width * 0.34, Number(notchInset) || width * 0.2));
+    const depth = Math.max(2, Math.min(height * 0.34, Number(notchDepth) || height * 0.18));
+    const topNotchHalf = Math.max(3, shoulder * 0.18);
+    return [
+      { x: centerX - shoulder, y: centerY - height },
+      { x: centerX - topNotchHalf, y: centerY - height },
+      { x: centerX, y: centerY - height + depth },
+      { x: centerX + topNotchHalf, y: centerY - height },
+      { x: centerX + shoulder, y: centerY - height },
+      { x: centerX + width, y: centerY - side },
+      { x: centerX + width - inset, y: centerY },
+      { x: centerX + width, y: centerY + side },
+      { x: centerX + shoulder, y: centerY + height },
+      { x: centerX + topNotchHalf, y: centerY + height },
+      { x: centerX, y: centerY + height - depth },
+      { x: centerX - topNotchHalf, y: centerY + height },
+      { x: centerX - shoulder, y: centerY + height },
+      { x: centerX - width, y: centerY + side },
+      { x: centerX - width + inset, y: centerY },
+      { x: centerX - width, y: centerY - side }
+    ];
+  }
+
+  function buildPointedCurvedDiamondPath(centerX, centerY, widthRadius, heightRadius, faceBulge = 0.16) {
+    const width = Math.max(8, Number(widthRadius) || 0);
+    const height = Math.max(8, Number(heightRadius) || 0);
+    const bulge = Math.max(0, Math.min(0.32, Number(faceBulge) || 0.16));
+    const top = `${centerX} ${centerY - height}`;
+    const right = `${centerX + width} ${centerY}`;
+    const bottom = `${centerX} ${centerY + height}`;
+    const left = `${centerX - width} ${centerY}`;
+    const topRightControl = `${centerX + width * (0.5 + bulge)} ${centerY - height * (0.5 + bulge)}`;
+    const bottomRightControl = `${centerX + width * (0.5 + bulge)} ${centerY + height * (0.5 + bulge)}`;
+    const bottomLeftControl = `${centerX - width * (0.5 + bulge)} ${centerY + height * (0.5 + bulge)}`;
+    const topLeftControl = `${centerX - width * (0.5 + bulge)} ${centerY - height * (0.5 + bulge)}`;
+    return `M ${top} Q ${topRightControl} ${right} Q ${bottomRightControl} ${bottom} Q ${bottomLeftControl} ${left} Q ${topLeftControl} ${top} Z`;
+  }
+
+  function buildRoundedPolygonPath(points, cornerRadius = 0) {
+    if (!Array.isArray(points) || points.length < 3) return "";
+    if (!(cornerRadius > 0)) {
+      return `M ${points.map(point => `${point.x} ${point.y}`).join(" L ")} Z`;
+    }
+
+    const rounded = points.map((point, index) => {
+      const previous = points[(index - 1 + points.length) % points.length];
+      const next = points[(index + 1) % points.length];
+      const previousLength = Math.hypot(previous.x - point.x, previous.y - point.y);
+      const nextLength = Math.hypot(next.x - point.x, next.y - point.y);
+      const previousUnit = {
+        x: (previous.x - point.x) / Math.max(previousLength, 0.001),
+        y: (previous.y - point.y) / Math.max(previousLength, 0.001)
+      };
+      const nextUnit = {
+        x: (next.x - point.x) / Math.max(nextLength, 0.001),
+        y: (next.y - point.y) / Math.max(nextLength, 0.001)
+      };
+      const angleCosine = Math.max(-1, Math.min(1, (previousUnit.x * nextUnit.x) + (previousUnit.y * nextUnit.y)));
+      const angle = Math.acos(angleCosine);
+      const maxOffset = Math.max(0, Math.min(previousLength, nextLength) / 2 - 0.01);
+      const offset = Math.min(cornerRadius / Math.max(Math.tan(angle / 2), 0.001), maxOffset);
+      return {
+        start: {
+          x: point.x + previousUnit.x * offset,
+          y: point.y + previousUnit.y * offset
+        },
+        corner: point,
+        end: {
+          x: point.x + nextUnit.x * offset,
+          y: point.y + nextUnit.y * offset
+        }
+      };
+    });
+
+    return rounded.map((entry, index) => {
+      if (index === 0) {
+        return `M ${entry.end.x} ${entry.end.y}`;
+      }
+      return `L ${entry.start.x} ${entry.start.y} Q ${entry.corner.x} ${entry.corner.y} ${entry.end.x} ${entry.end.y}`;
+    }).join(" ")
+      + ` L ${rounded[0].start.x} ${rounded[0].start.y} Q ${rounded[0].corner.x} ${rounded[0].corner.y} ${rounded[0].end.x} ${rounded[0].end.y} Z`;
+  }
+
+  function buildStarPolygonPoints(centerX, centerY, points, outerRadius, innerRadius, rotation = 0) {
+    const totalPoints = Math.max(4, points) * 2;
+    return Array.from({ length: totalPoints }, (_, index) => {
+      const angle = rotation + (Math.PI * index / points);
+      const radius = index % 2 === 0 ? outerRadius : innerRadius;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius;
+      return `${x},${y}`;
+    }).join(" ");
   }
 
   function createPoiMarkerSymbolNode(poi, centerX, centerY, iconSize = 24) {
@@ -5736,7 +6127,7 @@
         return;
       }
 
-      if (overlay.Overlay_Type === "mist") {
+      if (overlay.Overlay_Type === "mist" || overlay.Overlay_Type === "farmland") {
         renderMistErasePreview(fragment, overlay);
         return;
       }
@@ -6606,14 +6997,14 @@
     ));
   }
 
-  function getMistBrushHexIds(centerHex) {
+  function getMistBrushHexIds(centerHex, tool = "mist") {
     if (!centerHex) return [];
     const radius = Math.max(0, (renderer.drawing.mistBrushSize || 1) - 1);
     const noise = Math.max(0, Math.min(90, renderer.drawing.mistNoise || 0)) / 100;
     return getHexesInRange(centerHex, radius)
       .filter(hex => {
         if (hex.id === centerHex.id || noise <= 0) return true;
-        const roll = seededPathFloat(`mist:${centerHex.id}:${hex.id}:${renderer.drawing.mistBrushSize}:${renderer.drawing.mistNoise}`);
+        const roll = seededPathFloat(`${tool}:${centerHex.id}:${hex.id}:${renderer.drawing.mistBrushSize}:${renderer.drawing.mistNoise}`);
         return roll >= noise;
       })
       .map(hex => hex.id);
@@ -7949,8 +8340,8 @@
       const hoverPoint = clientToWorld(event);
       const nextHoverEdge = getDrawingHoverEdge(renderer.drawing.tool, hoverPoint, hex);
       const nextEraseHexId = renderer.drawing.tool === "erase" && hexHasEraseableOverlays(hex?.id) ? hex.id : null;
-      const nextMistHexIds = renderer.drawing.tool === "mist" && hex
-        ? getMistBrushHexIds(hex)
+      const nextMistHexIds = ["mist", "farmland"].includes(renderer.drawing.tool) && hex
+        ? getMistBrushHexIds(hex, renderer.drawing.tool)
         : [];
       const nextBrushHexIds = getEditorBrushHexIds(hex);
 
@@ -7970,7 +8361,7 @@
         return;
       }
 
-      if (event.pointerType !== "touch" && (PATH_OVERLAY_TYPES.has(renderer.drawing.tool) || REGION_PAINT_TYPES.has(renderer.drawing.tool) || renderer.drawing.tool === "terrain" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase" || renderer.drawing.tool === "mist") && (event.buttons & 1) === 1) {
+      if (event.pointerType !== "touch" && (PATH_OVERLAY_TYPES.has(renderer.drawing.tool) || REGION_PAINT_TYPES.has(renderer.drawing.tool) || renderer.drawing.tool === "terrain" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase" || renderer.drawing.tool === "mist" || renderer.drawing.tool === "farmland") && (event.buttons & 1) === 1) {
         applyDrawingAtEvent(event, true);
         return;
       }
@@ -8138,6 +8529,12 @@
 
     if (tool === "mist") {
       persistMistBrush(hex);
+      return;
+    }
+
+    if (tool === "farmland") {
+      if (isWaterHex(hex)) return;
+      persistFarmlandBrush(hex);
       return;
     }
 
@@ -8804,9 +9201,12 @@
     const generator = window.CampaignGeneratedMapGenerator;
     if (!campaign || renderer.drawing.saving || !generator?.generatePoiDrafts) return;
     if (!await confirmPoiGeneration()) return;
-    if (!await ensurePoiGenerationRiverBackdrop()) return;
+    let loadingLocked = false;
 
     try {
+      lockLoadingVeil();
+      loadingLocked = true;
+      if (!await ensurePoiGenerationRiverBackdrop()) return;
       const existingPois = Array.isArray(db?.raw?.pois) ? db.raw.pois : [];
       const replaceGeneratedPois = Boolean(renderer.drawing.generationReplaceGeneratedPois);
       const generatedPoisToReplace = replaceGeneratedPois
@@ -8841,15 +9241,35 @@
         ...generatedPoisToReplace.map(poi => ({ ...poi, __undoDeleted: true })),
         ...((result?.historyPois || []).map(poi => ({ ...poi, __undoDeleted: false })))
       ];
-      if (historyPois.length) {
-        pushMapEditAction({ type: "poi", pois: historyPois });
+      const poiHistoryAction = historyPois.length ? { type: "poi", pois: historyPois } : null;
+      let farmlandHistoryAction = null;
+      if (result?.success) {
+        try {
+          const farmlandResult = await regenerateGeneratedFarmlandOverlays(campaign.id, {
+            pois: Array.isArray(db?.raw?.pois) ? db.raw.pois : []
+          });
+          if (Array.isArray(farmlandResult?.historyOverlays) && farmlandResult.historyOverlays.length) {
+            farmlandHistoryAction = {
+              type: "overlay",
+              overlays: farmlandResult.historyOverlays
+            };
+          }
+        } catch (error) {
+          if (poiHistoryAction) pushMapEditAction(poiHistoryAction);
+          throw error;
+        }
       }
+      const historyActions = [poiHistoryAction, farmlandHistoryAction].filter(Boolean);
+      if (historyActions.length === 1) pushMapEditAction(historyActions[0]);
+      else if (historyActions.length > 1) pushMapEditAction({ type: "batch", actions: historyActions });
       if (!result?.success) return;
-      const summary = `Generated ${result.createdCount} POIs: ${result.settlementCount} settlement${result.settlementCount === 1 ? "" : "s"}, ${result.strongholdCount} stronghold${result.strongholdCount === 1 ? "" : "s"}, ${result.dungeonComplexCount} dungeon complex${result.dungeonComplexCount === 1 ? "" : "es"}, ${result.dungeonCount} dungeon${result.dungeonCount === 1 ? "" : "s"}, ${result.siteCount} site${result.siteCount === 1 ? "" : "s"}, ${result.resourceCount} resource site${result.resourceCount === 1 ? "" : "s"}, and ${result.waypointCount} waypoint${result.waypointCount === 1 ? "" : "s"}.`;
+      const summary = `Generated ${result.createdCount} POIs: ${result.settlementCount} settlement${result.settlementCount === 1 ? "" : "s"}, ${result.strongholdCount} stronghold${result.strongholdCount === 1 ? "" : "s"}, ${result.dungeonComplexCount} dungeon complex${result.dungeonComplexCount === 1 ? "" : "es"}, ${result.dungeonCount} dungeon${result.dungeonCount === 1 ? "" : "s"}, ${result.siteCount} place${result.siteCount === 1 ? "" : "s"} of note, ${result.resourceCount} resource site${result.resourceCount === 1 ? "" : "s"}, and ${result.waypointCount} waypoint${result.waypointCount === 1 ? "" : "s"}.`;
       await maybeGenerateRoadsAfterPoiGeneration(summary);
     } catch (error) {
       console.error("Unable to prepare generated POIs:", error);
       window.alert?.(error?.message || "Unable to generate POIs.");
+    } finally {
+      if (loadingLocked) unlockLoadingVeil();
     }
   }
 
@@ -8951,7 +9371,7 @@
     const groupLabel = groupRows.length ? ` and ${groupRows.length} ${generatedOnly ? "generated " : ""}grouped POI${groupRows.length === 1 ? "" : "s"}` : "";
     const message = generatedOnly
       ? `Purge all saved ${poiLabel}${groupLabel} from the live map and codex immediately? Manually created POIs will be kept.`
-      : `Purge all saved ${poiLabel}${groupLabel} from the live map and codex immediately? This cannot be undone.`;
+      : `Purge all saved ${poiLabel}${groupLabel} from the live map and codex immediately? You can undo this from the editor.`;
     if (!skipConfirm && !await confirmNukeAction(message)) return { success: false, cancelled: true };
 
     const removeLocalPoi = window.CampaignCodexPoiMutations?.removePoiByUuidFromLocalDb || removePoiFromLocalDbFallback;
@@ -8991,6 +9411,16 @@
       }
 
       refreshPoiViews?.();
+      const poiHistory = getPoiHistoryRecords(poiRows, { undoDeleted: true });
+      const groupHistory = getPoiGroupHistoryRecords(groupRows, { undoDeleted: true });
+      if (poiHistory.length || groupHistory.length) {
+        pushMapEditAction({
+          type: "poi",
+          purgeAction: true,
+          pois: poiHistory,
+          groups: groupHistory
+        });
+      }
       const successSummary = deletedGroupCount
         ? `${deletedPoiCount} ${generatedOnly ? "generated " : ""}POI${deletedPoiCount === 1 ? "" : "s"} and ${deletedGroupCount} ${generatedOnly ? "generated " : ""}grouped POI${deletedGroupCount === 1 ? "" : "s"}`
         : `${deletedPoiCount} ${generatedOnly ? "generated " : ""}POI${deletedPoiCount === 1 ? "" : "s"}`;
@@ -9029,9 +9459,13 @@
   async function confirmPoiGeneration() {
     const existing = (db?.raw?.pois || []).length;
     if (!existing) return true;
-    return showMapConfirm(`Generate new POIs on top of ${existing} existing saved POI${existing === 1 ? "" : "s"}? This saves directly to the live map and avoids occupied hexes when possible.`, {
-      title: "Generate POIs?",
-      confirmLabel: "Generate"
+    const replaceGeneratedPois = Boolean(renderer.drawing.generationReplaceGeneratedPois);
+    const message = replaceGeneratedPois
+      ? "Replace existing generated POIs before creating new ones? Manually created POIs will be kept, and new POIs still save directly to the live map."
+      : `Generate new POIs on top of ${existing} existing saved POI${existing === 1 ? "" : "s"}? This saves directly to the live map and avoids occupied hexes when possible.`;
+    return showMapConfirm(message, {
+      title: replaceGeneratedPois ? "Replace POIs?" : "Generate POIs?",
+      confirmLabel: replaceGeneratedPois ? "Replace POIs" : "Generate"
     });
   }
 
@@ -9142,6 +9576,7 @@
     return {
       __uuid: poi.__uuid || "",
       POI_ID: poi.POI_ID || "",
+      POI_Group_ID: poi.POI_Group_ID || "",
       Name: poi.Name || "",
       Hex_ID_Ref: poi.Hex_ID_Ref || "",
       POI_Type_Value: storedType,
@@ -9162,10 +9597,79 @@
       .filter(Boolean);
   }
 
+  function buildPoiGroupHistoryRecord(group, options = {}) {
+    if (!group?.POI_Group_ID) return null;
+    const storedType = window.CampaignPoiTypes?.getStoredTypeValue?.(group.Group_Type_Value || group.Group_Type || "")
+      || group.Group_Type_Value
+      || group.Group_Type
+      || "";
+    return {
+      __uuid: group.__uuid || "",
+      POI_Group_ID: group.POI_Group_ID || "",
+      POI_Group_Name: group.POI_Group_Name || "",
+      Group_Type_Value: storedType,
+      Group_Icon: group.Group_Icon || "",
+      Group_Tags: Array.isArray(group.Group_Tags) ? [...group.Group_Tags] : [],
+      Generation_Source: group.Generation_Source || "",
+      Population: group.Population || "",
+      Lore: group.Lore || "",
+      __undoDeleted: options.undoDeleted === true
+    };
+  }
+
+  function getPoiGroupHistoryRecords(rows, options = {}) {
+    const list = Array.isArray(rows) ? rows : [rows];
+    return list
+      .map(group => buildPoiGroupHistoryRecord(group, options))
+      .filter(Boolean);
+  }
+
+  function serializePoiSnapshot(rows) {
+    const list = Array.isArray(rows) ? rows : [rows];
+    return list
+      .filter(poi => poi?.Hex_ID_Ref)
+      .map((poi, index) => ({
+        snapshot_order: index + 1,
+        name: poi.Name || "",
+        hex_ref: poi.Hex_ID_Ref || "",
+        group_ref: poi.POI_Group_ID || "",
+        poi_type: poi.POI_Type_Value || poi.POI_Type || "",
+        poi_icon: poi.POI_Icon || "",
+        poi_tags: Array.isArray(poi.POI_Tags) ? [...poi.POI_Tags] : [],
+        notoriety_tier: poi["Notoriety Tier_Value"] || poi["Notoriety Tier"] || "",
+        population: poi.Population || "",
+        lore: poi.Lore || "",
+        generation_source: poi.Generation_Source || ""
+      }));
+  }
+
+  function serializePoiGroupSnapshot(rows) {
+    const list = Array.isArray(rows) ? rows : [rows];
+    return list
+      .filter(group => group?.POI_Group_ID)
+      .map((group, index) => ({
+        snapshot_order: index + 1,
+        group_ref: group.POI_Group_ID || "",
+        name: group.POI_Group_Name || "",
+        group_type: group.Group_Type_Value || group.Group_Type || "",
+        group_icon: group.Group_Icon || "",
+        group_tags: Array.isArray(group.Group_Tags) ? [...group.Group_Tags] : [],
+        generation_source: group.Generation_Source || "",
+        population: group.Population || "",
+        lore: group.Lore || ""
+      }));
+  }
+
   function resolvePoiHexUuid(hexRef) {
     return db?.hexesById?.[hexRef]?.__uuid
       || db?.raw?.hexes?.find(hex => hex.Hex_ID === hexRef)?.__uuid
       || "";
+  }
+
+  function resolvePoiGroupUuid(groupRef) {
+    return db?.poiGroupsById?.[groupRef]?.__uuid
+      || db?.raw?.poiGroups?.find(group => group.POI_Group_ID === groupRef)?.__uuid
+      || null;
   }
 
   function addGeneratedPoiToLocalDb(poi) {
@@ -9207,11 +9711,55 @@
     return createdPois;
   }
 
+  function adaptPoiGroupRpcRow(row) {
+    const record = Array.isArray(row) ? row[0] : row;
+    if (!record?.id || !record?.slug) return null;
+    return {
+      __uuid: record.id,
+      POI_Group_ID: record.slug,
+      POI_Group_Name: record.name || "",
+      Group_Type: window.CampaignPoiTypes?.getTypeLabel?.(record.group_type) || record.group_type || "",
+      Group_Type_Value: window.CampaignPoiTypes?.getStoredTypeValue?.(record.group_type) || record.group_type || "",
+      Group_Icon: record.group_icon || "",
+      Group_Tags: Array.isArray(record.group_tags) ? record.group_tags.filter(Boolean) : [],
+      Generation_Source: record.generation_source || "",
+      Population: record.population || "",
+      Lore: record.lore || "",
+      Image: ""
+    };
+  }
+
+  function addPoiGroupToLocalDb(group) {
+    if (!group?.POI_Group_ID || !db?.raw) return;
+    if (!Array.isArray(db.raw.poiGroups)) db.raw.poiGroups = [];
+    if (!db.poiGroupsById) db.poiGroupsById = {};
+    if (!db.poisByGroupId) db.poisByGroupId = {};
+
+    const existingIndex = db.raw.poiGroups.findIndex(candidate => (
+      candidate.POI_Group_ID === group.POI_Group_ID || candidate.__uuid === group.__uuid
+    ));
+    if (existingIndex >= 0) db.raw.poiGroups.splice(existingIndex, 1, group);
+    else db.raw.poiGroups.push(group);
+
+    db.poiGroupsById[group.POI_Group_ID] = group;
+    if (!Array.isArray(db.poisByGroupId[group.POI_Group_ID])) db.poisByGroupId[group.POI_Group_ID] = [];
+  }
+
+  function registerPoiGroupRowsInLocalDb(rows) {
+    const list = Array.isArray(rows) ? rows : [rows];
+    const createdGroups = list
+      .map(adaptPoiGroupRpcRow)
+      .filter(Boolean);
+    createdGroups.forEach(addPoiGroupToLocalDb);
+    return createdGroups;
+  }
+
   async function recreatePoiFromHistoryRecord(campaignId, poi, registerCreatedPois) {
     const hexUuid = resolvePoiHexUuid(poi?.Hex_ID_Ref || "");
     if (!hexUuid) {
       throw new Error(`Unable to locate saved hex ${poi?.Hex_ID_Ref || ""} for POI undo/redo.`);
     }
+    const groupUuid = poi?.POI_Group_ID ? resolvePoiGroupUuid(poi.POI_Group_ID) : null;
 
     const { data, error } = await campaignSupabase.rpc("create_poi_with_next_ref_code", {
       target_campaign_id: campaignId,
@@ -9225,7 +9773,7 @@
       poi_lore: poi?.Lore || null,
       poi_generation_source: poi?.Generation_Source || null,
       poi_visibility: "shared",
-      poi_group_id: null
+      poi_group_id: groupUuid
     });
     if (error) throw error;
     const created = registerCreatedPois(data, { refresh: false });
@@ -9440,7 +9988,7 @@
       const resourceCount = drafts.filter(draft => draft.type === "resource_site").length;
       const waypointCount = drafts.filter(draft => draft.type === "waypoint").length;
       if (showSuccessAlert) {
-        window.alert?.(`Generated ${createdCount} POIs: ${settlementCount} settlement${settlementCount === 1 ? "" : "s"}, ${strongholdCount} stronghold${strongholdCount === 1 ? "" : "s"}, ${dungeonComplexCount} dungeon complex${dungeonComplexCount === 1 ? "" : "es"}, ${dungeonCount} dungeon${dungeonCount === 1 ? "" : "s"}, ${siteCount} site${siteCount === 1 ? "" : "s"}, ${resourceCount} resource site${resourceCount === 1 ? "" : "s"}, and ${waypointCount} waypoint${waypointCount === 1 ? "" : "s"}.`);
+        window.alert?.(`Generated ${createdCount} POIs: ${settlementCount} settlement${settlementCount === 1 ? "" : "s"}, ${strongholdCount} stronghold${strongholdCount === 1 ? "" : "s"}, ${dungeonComplexCount} dungeon complex${dungeonComplexCount === 1 ? "" : "es"}, ${dungeonCount} dungeon${dungeonCount === 1 ? "" : "s"}, ${siteCount} place${siteCount === 1 ? "" : "s"} of note, ${resourceCount} resource site${resourceCount === 1 ? "" : "s"}, and ${waypointCount} waypoint${waypointCount === 1 ? "" : "s"}.`);
       }
       return {
         success: true,
@@ -9469,6 +10017,202 @@
       renderer.drawing.saving = false;
       if (showBulkLoading) setLoading(false);
       refreshEditorPreviewControls();
+    }
+  }
+
+  function getStoredPoiTypeValue(poi) {
+    return window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || "") || poi?.POI_Type_Value || poi?.POI_Type || "";
+  }
+
+  function getStoredPoiIconValue(poi) {
+    return window.CampaignPoiIcons?.getStoredIconValue?.(poi?.POI_Icon || "") || poi?.POI_Icon || "";
+  }
+
+  function getPoiTagSet(poi) {
+    return new Set((Array.isArray(poi?.POI_Tags) ? poi.POI_Tags : [])
+      .map(tag => String(tag || "").trim().toLowerCase())
+      .filter(Boolean));
+  }
+
+  function isEligibleFarmlandHex(hex) {
+    if (!hex?.id || !FARMLAND_OVERLAY_BASES.has(hex.baseTerrain)) return false;
+    const features = Array.isArray(hex.features) ? hex.features : [];
+    if (features.some(feature => FARMLAND_BLOCKING_FEATURES.has(feature))) return false;
+    return features.every(feature => FARMLAND_ALLOWED_FEATURES.has(feature));
+  }
+
+  function getFarmlandFeaturePreference(hex) {
+    const features = Array.isArray(hex?.features) ? hex.features : [];
+    if (!features.length) return 4;
+    if (features.length === 1 && features[0] === "ridges") return 3;
+    if (features.length === 1 && features[0] === "woods") return 2;
+    if (features.length === 2 && features.includes("ridges") && features.includes("woods")) return 1.5;
+    if (features.every(feature => feature === "forest" || feature === "ridges")) return 1;
+    return 0;
+  }
+
+  function getFarmlandSettlementFieldCount(poi) {
+    const icon = getStoredPoiIconValue(poi);
+    if (["city", "walled_city", "port_town", "mountain_city"].includes(icon)) return 4;
+    if (["hilltop_town", "mountain_hold"].includes(icon)) return 2;
+    if (icon === "village") return 2;
+    return 3;
+  }
+
+  function buildFarmlandSeedSignature(poi, hex, role) {
+    return `${role}:${poi?.POI_ID || poi?.__uuid || hex?.id || ""}:${hex?.id || ""}`;
+  }
+
+  function collectFarmlandCandidateHexIds(centerHex, options = {}) {
+    if (!centerHex?.id) return [];
+    const radius = Math.max(0, Math.min(3, Number(options.radius || 1)));
+    const includeCenter = options.includeCenter === true;
+    const maxCount = Math.max(0, Math.round(Number(options.maxCount || 0)));
+    const excludeHexIds = options.excludeHexIds instanceof Set ? options.excludeHexIds : new Set();
+    const seed = String(options.seed || centerHex.id);
+    const ranked = getHexesWithinRadius(centerHex, radius)
+      .filter(hex => (includeCenter || hex.id !== centerHex.id) && !excludeHexIds.has(hex.id))
+      .filter(isEligibleFarmlandHex)
+      .map(hex => {
+        const preference = getFarmlandFeaturePreference(hex);
+        if (preference <= 0) return null;
+        const distance = Math.max(0, getHexLineSequence(centerHex.id, hex.id).length - 1);
+        return {
+          hex,
+          score: preference * 1.8
+            - distance * 0.42
+            + (hex.baseTerrain === "lush_grassland" ? 0.28 : hex.baseTerrain === "grassland" ? 0.16 : 0)
+            + ((stableHash(`${seed}:${hex.id}`) % 1000) / 100000)
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => right.score - left.score || left.hex.id.localeCompare(right.hex.id));
+    return ranked.slice(0, maxCount).map(entry => entry.hex.id);
+  }
+
+  function buildGeneratedFarmlandSegments(pois = []) {
+    const allPois = Array.isArray(pois) ? pois : [];
+    const farmlandHexIds = new Set();
+    const farmingAnchorHexIds = new Set();
+    const settlementSeeds = [];
+    const resourceSeeds = [];
+    const waypointSeeds = [];
+
+    allPois.forEach(poi => {
+      const hex = renderer.hexesById.get(poi?.Hex_ID_Ref || "");
+      if (!hex) return;
+      const type = getStoredPoiTypeValue(poi);
+      const icon = getStoredPoiIconValue(poi);
+      const tags = getPoiTagSet(poi);
+      if (type === "resource_site" && (tags.has("farming") || FARMLAND_RESOURCE_ICONS.has(icon))) {
+        resourceSeeds.push({ poi, hex, icon });
+        farmingAnchorHexIds.add(hex.id);
+        return;
+      }
+      if (type === "settlement" && tags.has("farming")) {
+        settlementSeeds.push({ poi, hex, icon });
+        farmingAnchorHexIds.add(hex.id);
+        return;
+      }
+      if (type === "waypoint" && FARMLAND_WAYPOINT_ICONS.has(icon)) {
+        waypointSeeds.push({ poi, hex, icon });
+      }
+    });
+
+    resourceSeeds.forEach(seed => {
+      if (isEligibleFarmlandHex(seed.hex)) farmlandHexIds.add(seed.hex.id);
+      collectFarmlandCandidateHexIds(seed.hex, {
+        radius: 2,
+        includeCenter: false,
+        maxCount: seed.icon === "windmill" ? 4 : 3,
+        excludeHexIds: farmlandHexIds,
+        seed: buildFarmlandSeedSignature(seed.poi, seed.hex, "resource")
+      }).forEach(hexId => farmlandHexIds.add(hexId));
+    });
+
+    settlementSeeds.forEach(seed => {
+      collectFarmlandCandidateHexIds(seed.hex, {
+        radius: 2,
+        includeCenter: false,
+        maxCount: getFarmlandSettlementFieldCount(seed.poi),
+        excludeHexIds: farmlandHexIds,
+        seed: buildFarmlandSeedSignature(seed.poi, seed.hex, "settlement")
+      }).forEach(hexId => farmlandHexIds.add(hexId));
+    });
+
+    waypointSeeds.forEach(seed => {
+      const closeToFarming = getHexesWithinRadius(seed.hex, 3).some(hex => farmingAnchorHexIds.has(hex.id));
+      if (!closeToFarming) return;
+      const seedRoll = (stableHash(buildFarmlandSeedSignature(seed.poi, seed.hex, "waypoint")) % 1000) / 1000;
+      if (seedRoll > 0.48) return;
+      collectFarmlandCandidateHexIds(seed.hex, {
+        radius: 1,
+        includeCenter: true,
+        maxCount: 1,
+        excludeHexIds: farmlandHexIds,
+        seed: buildFarmlandSeedSignature(seed.poi, seed.hex, "waypoint-spur")
+      }).forEach(hexId => farmlandHexIds.add(hexId));
+    });
+
+    return [...farmlandHexIds].map(hexId => ({
+      tool: "farmland",
+      fromHexId: hexId,
+      toHexId: "",
+      edge: null,
+      style: "farmland",
+      routeMetadata: {}
+    }));
+  }
+
+  function normalizeFarmlandOverlaySaveError(error) {
+    const message = String(error?.message || "");
+    if (/unsupported overlay type|schema cache|generated_map_overlays_type_check|generated_map_overlays_shape_check/i.test(message)) {
+      return new Error("Farmland overlays need the latest generated map overlay SQL. Run sql/generated_map_overlay_management.sql in Supabase, then generate POIs again.");
+    }
+    return error instanceof Error ? error : new Error(message || "Unable to generate farmland overlays.");
+  }
+
+  async function regenerateGeneratedFarmlandOverlays(campaignId, options = {}) {
+    const farmlandSnapshot = (renderer.mapOverlays || [])
+      .filter(overlay => overlay?.Overlay_Type === "farmland")
+      .map(overlay => ({ ...cloneOverlayRecord(overlay), __undoDeleted: true }));
+    const createdOverlays = [];
+
+    try {
+      if (farmlandSnapshot.length) {
+        await Promise.all(farmlandSnapshot.map(overlay => deleteOverlayById(campaignId, overlay.__uuid, { allowMissing: true })));
+        removeLocalOverlaysById(farmlandSnapshot.map(overlay => overlay.__uuid));
+      }
+
+      const segments = buildGeneratedFarmlandSegments(options.pois || []);
+      if (!segments.length) {
+        return {
+          historyOverlays: farmlandSnapshot,
+          createdCount: 0
+        };
+      }
+
+      const savedOverlays = (await Promise.all(segments.map(segment => (
+        savePathOverlaySegment(campaignId, segment.tool, segment.fromHexId, null, segment.style, null, segment.routeMetadata)
+      )))).filter(Boolean);
+      if (savedOverlays.length) {
+        upsertLocalOverlays(savedOverlays);
+        createdOverlays.push(...savedOverlays);
+      }
+
+      return {
+        historyOverlays: [
+          ...farmlandSnapshot,
+          ...createdOverlays.map(overlay => ({ ...cloneOverlayRecord(overlay), __undoDeleted: false }))
+        ],
+        createdCount: createdOverlays.length
+      };
+    } catch (error) {
+      if (farmlandSnapshot.length) {
+        const restored = (await Promise.all(farmlandSnapshot.map(overlay => restoreDeletedOverlay(campaignId, overlay).catch(() => null)))).filter(Boolean);
+        if (restored.length) upsertLocalOverlays(restored);
+      }
+      throw normalizeFarmlandOverlaySaveError(error);
     }
   }
 
@@ -11031,6 +11775,31 @@
     return Math.min(2, 1 + Math.pow(percent - 1, 0.72));
   }
 
+  function syncPoiGenerationGlobalAmountFromSliders() {
+    const values = POI_GENERATION_GLOBAL_CONTROL_KEYS
+      .map(key => clampNumber(Number(renderer.drawing[key] ?? 100), 0, 200, 100));
+    if (!values.length) {
+      renderer.drawing.generationPoiGlobalAmount = 100;
+      return 100;
+    }
+    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const snapped = clampNumber(Math.round(average / 5) * 5, 0, 200, 100);
+    renderer.drawing.generationPoiGlobalAmount = snapped;
+    return snapped;
+  }
+
+  function applyPoiGenerationGlobalAmountShift(nextValue) {
+    const normalizedNext = clampNumber(Number(nextValue), 0, 200, 100);
+    const previous = clampNumber(Number(renderer.drawing.generationPoiGlobalAmount ?? 100), 0, 200, 100);
+    const delta = normalizedNext - previous;
+    renderer.drawing.generationPoiGlobalAmount = normalizedNext;
+    if (!delta) return;
+    POI_GENERATION_GLOBAL_CONTROL_KEYS.forEach(key => {
+      renderer.drawing[key] = clampNumber(Number(renderer.drawing[key] ?? 100) + delta, 0, 200, 100);
+    });
+    syncPoiGenerationGlobalAmountFromSliders();
+  }
+
   function getGeneratorOptions(campaignId) {
     return {
       seed: getGenerationSeedBase(campaignId).replace(":feature-pass", ":terrain-preview"),
@@ -11648,42 +12417,87 @@
   }
 
   async function persistMistOverlay(hexId) {
-    const overlays = await persistMistOverlays([hexId]);
-    if (!overlays.length) return;
-    pushOverlayUndoAction(overlays);
-    markOverlayCacheDirty();
-    queueMapRender(true);
+    await persistHexStyleOverlays("mist", [hexId], "mist");
   }
 
   async function persistMistBrush(centerHex) {
-    const hexIds = getMistBrushHexIds(centerHex);
+    const hexIds = getMistBrushHexIds(centerHex, "mist");
     if (!hexIds.length) return;
-    const overlays = await persistMistOverlays(hexIds);
-    if (!overlays.length) return;
-    pushOverlayUndoAction(overlays);
-    markOverlayCacheDirty();
-    queueMapRender(true);
+    await persistHexStyleOverlays("mist", hexIds, "mist");
   }
 
   async function persistMistOverlays(hexIds) {
+    return persistHexStyleOverlays("mist", hexIds, "mist");
+  }
+
+  async function persistFarmlandBrush(centerHex) {
+    const hexIds = getMistBrushHexIds(centerHex, "farmland");
+    if (!hexIds.length) return;
+    await persistHexStyleOverlays("farmland", hexIds, "farmland");
+  }
+
+  async function persistHexStyleOverlays(overlayType, hexIds, style) {
     const campaign = getActiveCampaign?.();
     if (!campaign) return [];
-    const existingMistHexIds = new Set((renderer.mapOverlays || [])
-      .filter(overlay => overlay.Overlay_Type === "mist")
+    const existingHexIds = new Set((renderer.mapOverlays || [])
+      .filter(overlay => overlay.Overlay_Type === overlayType)
       .map(overlay => overlay.Hex_ID_Ref));
     const targetHexIds = [...new Set(hexIds || [])]
-      .filter(hexId => hexId && !existingMistHexIds.has(hexId));
+      .filter(hexId => hexId && !existingHexIds.has(hexId));
     if (!targetHexIds.length) return [];
 
-    const overlays = [];
-    for (const hexId of targetHexIds) {
-      const overlay = await savePathOverlaySegment(campaign.id, "mist", hexId, null, "mist", null, {});
-      if (overlay) {
-        upsertLocalOverlay(overlay);
-        overlays.push(overlay);
-      }
+    renderer.drawing.saving = true;
+    refreshEditorActionControls();
+    const pendingOverlays = targetHexIds.map(hexId => createLocalOverlayRecord({
+      tool: overlayType,
+      fromHexId: hexId,
+      toHexId: "",
+      edge: null,
+      style,
+      routeMetadata: {}
+    }, "saving"));
+    pendingOverlays.forEach(overlay => {
+      overlay.__saving = true;
+    });
+    if (pendingOverlays.length) {
+      upsertLocalOverlays(pendingOverlays);
+      render();
     }
-    return overlays;
+
+    const overlays = [];
+    try {
+      const results = await Promise.allSettled(targetHexIds.map(hexId => (
+        savePathOverlaySegment(campaign.id, overlayType, hexId, null, style, null, {})
+      )));
+      const failed = results.find(result => result.status === "rejected");
+      const saved = results
+        .filter(result => result.status === "fulfilled" && result.value)
+        .map(result => result.value);
+
+      removeLocalOverlaysById(pendingOverlays.map(overlay => overlay.__uuid));
+      if (saved.length) {
+        upsertLocalOverlays(saved);
+        overlays.push(...saved);
+      }
+
+      if (failed) throw failed.reason;
+      if (overlays.length) pushOverlayUndoAction(overlays);
+      render();
+      return overlays;
+    } catch (error) {
+      removeLocalOverlaysById(pendingOverlays.map(overlay => overlay.__uuid));
+      if (overlays.length) {
+        pushOverlayUndoAction(overlays);
+        upsertLocalOverlays(overlays);
+      }
+      render();
+      console.error(`Unable to save generated map ${overlayType}:`, error);
+      window.alert?.(error?.message || `Unable to save ${overlayType}.`);
+      return overlays;
+    } finally {
+      renderer.drawing.saving = false;
+      refreshEditorActionControls();
+    }
   }
 
   async function eraseOverlaysAtHex(hexId) {
@@ -11842,7 +12656,7 @@
     if (action?.type === "nuke-overlays") return action.overlays?.length || 0;
     if (action?.type === "nuke-regions" || action?.type === "nuke-features") return action.actions?.length || 0;
     if (action?.type === "overlay") return action.overlays?.length || 0;
-    if (action?.type === "poi") return action.pois?.length || 0;
+    if (action?.type === "poi") return (action.pois?.length || 0) + (action.groups?.length || 0);
     return 1;
   }
 
@@ -11908,7 +12722,7 @@
     });
 
     if (deleteOverlays.length) {
-      await Promise.all(deleteOverlays.map(overlay => deleteOverlayById(campaignId, overlay.__uuid)));
+      await Promise.all(deleteOverlays.map(overlay => deleteOverlayById(campaignId, overlay.__uuid, { allowMissing: true })));
       removeLocalOverlaysById(deleteOverlays.map(overlay => overlay.__uuid));
     }
 
@@ -11924,15 +12738,88 @@
   async function applyPoiHistoryAction(campaignId, action, direction) {
     const removeLocalPoi = window.CampaignCodexPoiMutations?.removePoiByUuidFromLocalDb || removePoiFromLocalDbFallback;
     const registerCreatedPois = window.CampaignCodexPoiMutations?.registerCreatedPoiRowsInLocalDb || registerGeneratedPoiRowsInLocalDb;
+    const removeLocalPoiGroup = window.CampaignCodexPoiMutations?.removePoiGroupByUuidFromLocalDb || removePoiGroupFromLocalDbFallback;
     const refreshPoiViews = window.CampaignCodexPoiMutations?.refreshPoiViewsAfterPurge || refreshPoiViewsAfterPurgeFallback;
     const deletePois = [];
     const restorePois = [];
+    const deleteGroups = [];
+    const restoreGroups = [];
 
     (action?.pois || []).forEach((poi, index) => {
       const shouldDelete = direction === "redo" ? poi.__undoDeleted : !poi.__undoDeleted;
       if (shouldDelete) deletePois.push(poi);
       else restorePois.push({ poi, index });
     });
+    (action?.groups || []).forEach((group, index) => {
+      const shouldDelete = direction === "redo" ? group.__undoDeleted : !group.__undoDeleted;
+      if (shouldDelete) deleteGroups.push(group);
+      else restoreGroups.push({ group, index });
+    });
+
+    const purgeSnapshotAction = Boolean(action?.purgeAction);
+    const hasGroupSnapshots = restoreGroups.length > 0 || deleteGroups.length > 0;
+    const generatedSnapshotAction = (action?.pois || []).length > 0
+      && (action.pois || []).every(poi => poi?.Generation_Source);
+
+    if (purgeSnapshotAction || hasGroupSnapshots || generatedSnapshotAction) {
+      if (restoreGroups.length || deleteGroups.length) {
+        const { data: groupData, error: groupError } = await campaignSupabase.rpc("restore_poi_group_snapshots", {
+          target_campaign_id: campaignId,
+          delete_group_ids: deleteGroups.map(group => group?.__uuid).filter(Boolean),
+          group_snapshot: serializePoiGroupSnapshot(restoreGroups.map(entry => entry.group))
+        });
+        if (groupError) throw groupError;
+
+        deleteGroups.forEach(group => {
+          if (group?.__uuid) removeLocalPoiGroup?.(group.__uuid);
+        });
+
+        const restoredGroupRows = (Array.isArray(groupData) ? groupData : [groupData])
+          .filter(Boolean)
+          .sort((left, right) => Number(left?.snapshot_order || 0) - Number(right?.snapshot_order || 0));
+        const restoredGroups = registerPoiGroupRowsInLocalDb(restoredGroupRows);
+        restoredGroups.forEach((restored, restoredIndex) => {
+          const entry = restoreGroups[restoredIndex];
+          if (!entry) return;
+          action.groups[entry.index] = {
+            ...buildPoiGroupHistoryRecord(restored, { undoDeleted: Boolean(entry.group.__undoDeleted) }),
+            __undoDeleted: Boolean(entry.group.__undoDeleted)
+          };
+        });
+      }
+
+      const { data, error } = await campaignSupabase.rpc("restore_generated_poi_snapshots", {
+        target_campaign_id: campaignId,
+        delete_poi_ids: deletePois.map(poi => poi?.__uuid).filter(Boolean),
+        poi_snapshot: serializePoiSnapshot(restorePois.map(entry => entry.poi))
+      });
+      if (error) throw error;
+
+      deletePois.forEach(poi => {
+        if (poi?.__uuid) removeLocalPoi?.(poi.__uuid);
+      });
+
+      const restoredRows = (Array.isArray(data) ? data : [data])
+        .filter(Boolean)
+        .sort((left, right) => Number(left?.snapshot_order || 0) - Number(right?.snapshot_order || 0));
+      const registeredRestoredPois = registerCreatedPois(restoredRows, { refresh: false });
+      const restoredPois = (Array.isArray(registeredRestoredPois)
+        ? registeredRestoredPois
+        : [registeredRestoredPois])
+        .filter(Boolean);
+
+      restoredPois.forEach((restored, restoredIndex) => {
+        const entry = restorePois[restoredIndex];
+        if (!entry) return;
+        action.pois[entry.index] = {
+          ...buildPoiHistoryRecord(restored, { undoDeleted: Boolean(entry.poi.__undoDeleted) }),
+          __undoDeleted: Boolean(entry.poi.__undoDeleted)
+        };
+      });
+
+      refreshPoiViews?.();
+      return;
+    }
 
     for (const poi of deletePois) {
       if (!poi?.__uuid) continue;
@@ -11941,7 +12828,7 @@
         target_record_type: "poi",
         target_record_id: poi.__uuid
       });
-      if (error) throw error;
+      if (error && !isMissingPersistedDeleteError(error)) throw error;
       removeLocalPoi?.(poi.__uuid);
     }
 
@@ -12153,6 +13040,46 @@
     } catch (error) {
       console.error(`Unable to purge generated map ${label}:`, error);
       window.alert?.(error.message || `Unable to purge ${label}.`);
+      return false;
+    } finally {
+      renderer.drawing.saving = false;
+      if (showBulkLoading) setLoading(false);
+      refreshEditorActionControls();
+    }
+  }
+
+  async function purgeAllSavedOverlays(options = {}) {
+    const campaign = getActiveCampaign?.();
+    const skipConfirm = Boolean(options.skipConfirm);
+    const showSuccessAlert = options.showSuccessAlert !== false;
+    if (!campaign) return false;
+
+    if (!skipConfirm && !await confirmNukeAction("Purge all saved live-map overlays immediately? This does not affect staged preview edits.")) return false;
+
+    renderer.drawing.saving = true;
+    let showBulkLoading = false;
+    refreshEditorActionControls();
+
+    try {
+      const persistedOverlays = await fetchCurrentPersistedOverlays(campaign.id);
+      const removed = persistedOverlays.map(overlay => ({ ...cloneOverlayRecord(overlay), __undoDeleted: true }));
+      if (!removed.length) return true;
+
+      showBulkLoading = removed.length >= BULK_OVERLAY_LOADING_THRESHOLD;
+      if (showBulkLoading) setLoading(true);
+
+      await Promise.all(removed.map(overlay => deleteOverlayById(campaign.id, overlay.__uuid)));
+      removeLocalOverlaysById(removed.map(overlay => overlay.__uuid));
+      pushOverlayUndoAction(removed);
+      renderer.routeLabelCache = { key: "", labels: [] };
+      markRouteCacheDirty();
+      markOverlayCacheDirty();
+      render();
+      if (showSuccessAlert) window.alert?.(`Purged ${removed.length} saved overlay segment${removed.length === 1 ? "" : "s"}.`);
+      return true;
+    } catch (error) {
+      console.error("Unable to purge generated map overlays:", error);
+      window.alert?.(error.message || "Unable to purge all overlays.");
       return false;
     } finally {
       renderer.drawing.saving = false;
@@ -12474,22 +13401,35 @@
     return (data || []).map(adaptOverlayRpcRow).filter(Boolean);
   }
 
-  async function deleteOverlayById(campaignId, overlayId) {
+  function isMissingPersistedDeleteError(error) {
+    const message = String(error?.message || "").toLowerCase();
+    return (
+      message.includes("no longer exists")
+      || message.includes("does not exist")
+      || message.includes("not found")
+    );
+  }
+
+  async function deleteOverlayById(campaignId, overlayId, options = {}) {
     const { error } = await campaignSupabase.rpc("delete_generated_map_overlay", {
       target_campaign_id: campaignId,
       target_overlay_id: overlayId
     });
-    if (error) throw error;
+    if (error) {
+      if (options.allowMissing && isMissingPersistedDeleteError(error)) return false;
+      throw error;
+    }
+    return true;
   }
 
   async function restoreDeletedOverlay(campaignId, overlay) {
-    const isHexOverlay = overlay.Overlay_Type === "wall" || overlay.Overlay_Type === "mist";
+    const isHexOverlay = isHexStyleOverlayType(overlay.Overlay_Type);
     const { data, error } = await campaignSupabase.rpc("add_generated_map_overlay", {
       target_campaign_id: campaignId,
       target_overlay_type: overlay.Overlay_Type,
       from_hex_ref: isHexOverlay ? overlay.Hex_ID_Ref : overlay.From_Hex_ID_Ref,
       to_hex_ref: isHexOverlay ? null : overlay.To_Hex_ID_Ref,
-      target_edge: overlay.Overlay_Type === "wall" || (!isHexOverlay && !overlay.To_Hex_ID_Ref) ? overlay.Edge : null,
+      target_edge: overlay.Overlay_Type === "wall" ? overlay.Edge : null,
       target_style: overlay.Style,
       target_is_major_route: Boolean(overlay.Is_Major_Route),
       target_route_name: overlay.Route_Name || null
@@ -12587,6 +13527,7 @@
   function removeLocalOverlaysById(overlayIds) {
     const targetIds = new Set((overlayIds || []).filter(Boolean));
     if (!targetIds.size) return;
+    const removedOverlays = renderer.mapOverlays.filter(overlay => targetIds.has(overlay.__uuid));
     const originalLength = renderer.mapOverlays.length;
     renderer.mapOverlays = renderer.mapOverlays.filter(overlay => !targetIds.has(overlay.__uuid));
     if (renderer.mapOverlays.length === originalLength) return;

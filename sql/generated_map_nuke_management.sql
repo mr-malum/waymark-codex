@@ -99,6 +99,309 @@ begin
 end;
 $$;
 
+create or replace function public.restore_poi_group_snapshots(
+  target_campaign_id uuid,
+  delete_group_ids uuid[] default '{}'::uuid[],
+  group_snapshot jsonb default '[]'::jsonb
+)
+returns table(
+  snapshot_order integer,
+  id uuid,
+  slug text,
+  name text,
+  group_type text,
+  group_icon text,
+  group_tags text[],
+  generation_source text,
+  population text,
+  lore text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authorized';
+  end if;
+
+  if not public.can_edit_campaign(target_campaign_id) then
+    raise exception 'not authorized';
+  end if;
+
+  if coalesce(array_length(delete_group_ids, 1), 0) > 0 then
+    delete from public.poi_groups as existing_group
+    where existing_group.campaign_id = target_campaign_id
+      and existing_group.id = any(delete_group_ids);
+  end if;
+
+  return query
+  with snapshot as (
+    select
+      coalesce(item.snapshot_order, row_number() over ())::integer as snapshot_order,
+      nullif(trim(coalesce(item.group_ref, '')), '') as group_ref,
+      nullif(trim(coalesce(item.name, '')), '') as name,
+      public.normalize_poi_category_type(item.group_type) as group_type,
+      public.normalize_poi_icon_value(item.group_icon) as group_icon,
+      public.normalize_poi_tag_list(coalesce(item.group_tags, '{}'::text[])) as group_tags,
+      nullif(trim(coalesce(item.population, '')), '') as population,
+      nullif(trim(coalesce(item.lore, '')), '') as lore,
+      nullif(trim(coalesce(item.generation_source, '')), '') as generation_source
+    from jsonb_to_recordset(coalesce(group_snapshot, '[]'::jsonb)) as item(
+      snapshot_order integer,
+      group_ref text,
+      name text,
+      group_type text,
+      group_icon text,
+      group_tags text[],
+      population text,
+      lore text,
+      generation_source text
+    )
+  ),
+  resolved as (
+    select *
+    from snapshot
+    where group_ref is not null
+      and name is not null
+      and group_type is not null
+      and group_icon is not null
+  ),
+  inserted as (
+    insert into public.poi_groups as restored_group (
+      campaign_id,
+      slug,
+      name,
+      group_type,
+      group_icon,
+      group_tags,
+      generation_source,
+      population,
+      lore,
+      visibility,
+      created_by
+    )
+    select
+      target_campaign_id,
+      resolved.group_ref,
+      resolved.name,
+      resolved.group_type,
+      resolved.group_icon,
+      resolved.group_tags,
+      resolved.generation_source,
+      resolved.population,
+      resolved.lore,
+      'shared'::public.content_visibility,
+      auth.uid()
+    from resolved
+    returning
+      restored_group.id,
+      restored_group.slug,
+      restored_group.name,
+      restored_group.group_type,
+      restored_group.group_icon,
+      restored_group.group_tags,
+      restored_group.generation_source,
+      restored_group.population,
+      restored_group.lore
+  )
+  select
+    resolved.snapshot_order,
+    inserted.id,
+    inserted.slug,
+    inserted.name,
+    inserted.group_type,
+    inserted.group_icon,
+    inserted.group_tags,
+    inserted.generation_source,
+    inserted.population,
+    inserted.lore
+  from inserted
+  join resolved
+    on inserted.slug = resolved.group_ref
+  order by resolved.snapshot_order;
+end;
+$$;
+
+create or replace function public.restore_generated_poi_snapshots(
+  target_campaign_id uuid,
+  delete_poi_ids uuid[] default '{}'::uuid[],
+  poi_snapshot jsonb default '[]'::jsonb
+)
+returns table(
+  snapshot_order integer,
+  id uuid,
+  ref_code text,
+  poi_group_id uuid,
+  name text,
+  hex_id uuid,
+  poi_type text,
+  poi_icon text,
+  poi_tags text[],
+  generation_source text,
+  notoriety_tier text,
+  population text,
+  lore text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  next_base_number integer := 0;
+begin
+  if auth.uid() is null then
+    raise exception 'not authorized';
+  end if;
+
+  if not public.can_edit_campaign(target_campaign_id) then
+    raise exception 'not authorized';
+  end if;
+
+  if coalesce(array_length(delete_poi_ids, 1), 0) > 0 then
+    delete from public.pois as existing_poi
+    where existing_poi.campaign_id = target_campaign_id
+      and existing_poi.id = any(delete_poi_ids);
+  end if;
+
+  select coalesce(max(substring(existing_poi.ref_code from '^POI-([0-9]+)$')::integer), 0)
+    into next_base_number
+  from public.pois as existing_poi
+  where existing_poi.campaign_id = target_campaign_id
+    and existing_poi.ref_code ~ '^POI-[0-9]+$';
+
+  return query
+  with snapshot as (
+    select
+      coalesce(item.snapshot_order, row_number() over ())::integer as snapshot_order,
+      nullif(trim(coalesce(item.name, '')), '') as name,
+      nullif(trim(coalesce(item.hex_ref, '')), '') as hex_ref,
+      nullif(trim(coalesce(item.group_ref, '')), '') as group_ref,
+      public.normalize_poi_category_type(item.poi_type) as poi_type,
+      public.normalize_poi_icon_value(item.poi_icon) as poi_icon,
+      public.normalize_poi_tag_list(coalesce(item.poi_tags, '{}'::text[])) as poi_tags,
+      public.normalize_poi_notoriety_tier(item.notoriety_tier) as notoriety_tier,
+      nullif(trim(coalesce(item.population, '')), '') as population,
+      nullif(trim(coalesce(item.lore, '')), '') as lore,
+      nullif(trim(coalesce(item.generation_source, '')), '') as generation_source
+    from jsonb_to_recordset(coalesce(poi_snapshot, '[]'::jsonb)) as item(
+      snapshot_order integer,
+      name text,
+      hex_ref text,
+      group_ref text,
+      poi_type text,
+      poi_icon text,
+      poi_tags text[],
+      notoriety_tier text,
+      population text,
+      lore text,
+      generation_source text
+    )
+  ),
+  resolved as (
+    select
+      snapshot.snapshot_order,
+      snapshot.name,
+      target_hex.id as hex_id,
+      target_group.id as poi_group_id,
+      snapshot.poi_type,
+      snapshot.poi_icon,
+      snapshot.poi_tags,
+      snapshot.notoriety_tier,
+      snapshot.population,
+      snapshot.lore,
+      snapshot.generation_source
+    from snapshot
+    join public.hexes target_hex
+      on target_hex.campaign_id = target_campaign_id
+      and target_hex.ref_code = snapshot.hex_ref
+    left join public.poi_groups target_group
+      on target_group.campaign_id = target_campaign_id
+      and target_group.slug = snapshot.group_ref
+    where snapshot.name is not null
+      and snapshot.poi_type is not null
+      and snapshot.poi_icon is not null
+      and snapshot.notoriety_tier is not null
+      and (snapshot.group_ref is null or target_group.id is not null)
+      and not (
+        snapshot.poi_type = 'settlement'
+        and snapshot.population is null
+      )
+  ),
+  numbered as (
+    select
+      resolved.*,
+      next_base_number + row_number() over (order by resolved.snapshot_order) as next_number
+    from resolved
+  ),
+  inserted as (
+    insert into public.pois as restored_poi (
+      campaign_id,
+      ref_code,
+      name,
+      hex_id,
+      poi_group_id,
+      poi_type,
+      poi_icon,
+      poi_tags,
+      generation_source,
+      notoriety_tier,
+      population,
+      lore,
+      visibility,
+      created_by
+    )
+    select
+      target_campaign_id,
+      'POI-' || lpad(numbered.next_number::text, 4, '0'),
+      numbered.name,
+      numbered.hex_id,
+      numbered.poi_group_id,
+      numbered.poi_type,
+      numbered.poi_icon,
+      numbered.poi_tags,
+      numbered.generation_source,
+      numbered.notoriety_tier,
+      numbered.population,
+      numbered.lore,
+      'shared'::public.content_visibility,
+      auth.uid()
+    from numbered
+    returning
+      restored_poi.id,
+      restored_poi.ref_code,
+      restored_poi.poi_group_id,
+      restored_poi.name,
+      restored_poi.hex_id,
+      restored_poi.poi_type,
+      restored_poi.poi_icon,
+      restored_poi.poi_tags,
+      restored_poi.generation_source,
+      restored_poi.notoriety_tier,
+      restored_poi.population,
+      restored_poi.lore
+  )
+  select
+    numbered.snapshot_order,
+    inserted.id,
+    inserted.ref_code,
+    inserted.poi_group_id,
+    inserted.name,
+    inserted.hex_id,
+    inserted.poi_type,
+    inserted.poi_icon,
+    inserted.poi_tags,
+    inserted.generation_source,
+    inserted.notoriety_tier,
+    inserted.population,
+    inserted.lore
+  from inserted
+  join numbered
+    on inserted.ref_code = 'POI-' || lpad(numbered.next_number::text, 4, '0')
+  order by numbered.snapshot_order;
+end;
+$$;
+
 create or replace function public.restore_generated_map_overlays(
   target_campaign_id uuid,
   overlay_snapshot jsonb
@@ -438,6 +741,8 @@ $$;
 
 grant execute on function public.clear_generated_hex_region_layer(uuid, text) to authenticated;
 grant execute on function public.clear_generated_hex_features(uuid) to authenticated;
+grant execute on function public.restore_poi_group_snapshots(uuid, uuid[], jsonb) to authenticated;
+grant execute on function public.restore_generated_poi_snapshots(uuid, uuid[], jsonb) to authenticated;
 grant execute on function public.restore_generated_map_overlays(uuid, jsonb) to authenticated;
 grant execute on function public.restore_generated_hex_region_snapshots(uuid, jsonb) to authenticated;
 grant execute on function public.restore_generated_hex_feature_snapshots(uuid, jsonb) to authenticated;

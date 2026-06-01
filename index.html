@@ -342,10 +342,11 @@
     <label><input type="checkbox" data-map-overlay-toggle="path" checked> Paths</label>
     <label><input type="checkbox" data-map-overlay-toggle="wall" checked> Walls</label>
     <label><input type="checkbox" data-map-overlay-toggle="mist" checked> Mist</label>
-    <label><input type="checkbox" data-map-overlay-toggle="geographic"> Geo Regions</label>
-    <label><input type="checkbox" data-map-overlay-toggle="political" checked> Pol Regions</label>
-    <label><input type="checkbox" data-map-overlay-toggle="politicalLabels" checked> Pol Labels</label>
-    <label><input type="checkbox" data-map-overlay-toggle="geographicLabels" checked> Geo Labels</label>
+    <label><input type="checkbox" data-map-overlay-toggle="geographic"> Geographic Regions</label>
+    <label><input type="checkbox" data-map-overlay-toggle="political" checked> Political Regions</label>
+    <label><input type="checkbox" data-map-overlay-toggle="politicalLabels" checked> Political Labels</label>
+    <label><input type="checkbox" data-map-overlay-toggle="geographicLabels" checked> Geographic Labels</label>
+    <label><input type="checkbox" data-map-overlay-toggle="coords" checked> Coords</label>
     <label><input type="checkbox" data-map-overlay-toggle="features" checked> Features</label>
     <label><input type="checkbox" data-map-overlay-toggle="pois" checked> POIs</label>
   </div>
@@ -415,7 +416,7 @@
     <div class="map-edit-pane-header">
       <div class="map-edit-pane-kicker">Hex Mapper</div>
       <div id="map-edit-section-heading" class="map-draw-panel-title">Overlay</div>
-      <p id="map-edit-section-copy" class="map-edit-section-copy">Draw roads, rivers, paths, walls, and mist on the generated map.</p>
+      <p id="map-edit-section-copy" class="map-edit-section-copy">Draw roads, rivers, paths, walls, mist, and farmland on the generated map.</p>
     </div>
 
     <div class="map-edit-pane-body">
@@ -428,10 +429,11 @@
           <label><input type="checkbox" data-map-overlay-toggle="path" checked> Paths</label>
           <label><input type="checkbox" data-map-overlay-toggle="wall" checked> Walls</label>
           <label><input type="checkbox" data-map-overlay-toggle="mist" checked> Mist</label>
-          <label><input type="checkbox" data-map-overlay-toggle="geographic"> Geo Regions</label>
-          <label><input type="checkbox" data-map-overlay-toggle="political" checked> Pol Regions</label>
-          <label><input type="checkbox" data-map-overlay-toggle="politicalLabels" checked> Pol Labels</label>
-          <label><input type="checkbox" data-map-overlay-toggle="geographicLabels" checked> Geo Labels</label>
+          <label><input type="checkbox" data-map-overlay-toggle="geographic"> Geographic Regions</label>
+          <label><input type="checkbox" data-map-overlay-toggle="political" checked> Political Regions</label>
+          <label><input type="checkbox" data-map-overlay-toggle="politicalLabels" checked> Political Labels</label>
+          <label><input type="checkbox" data-map-overlay-toggle="geographicLabels" checked> Geographic Labels</label>
+          <label><input type="checkbox" data-map-overlay-toggle="coords" checked> Coords</label>
           <label><input type="checkbox" data-map-overlay-toggle="features" checked> Features</label>
           <label><input type="checkbox" data-map-overlay-toggle="pois" checked> POIs</label>
         </div>
@@ -571,6 +573,7 @@
         <div class="map-draw-tool-row map-draw-tool-row-compact" data-overlay-subview-group="drawing" role="group" aria-label="Other overlay tools">
           <button type="button" data-map-draw-tool="wall">Wall</button>
           <button type="button" data-map-draw-tool="mist">Mist</button>
+          <button type="button" data-map-draw-tool="farmland">Farmland</button>
           <button type="button" data-map-draw-tool="erase">Erase Overlay</button>
         </div>
         <label class="map-draw-style-row map-draw-tool-setting" id="map-wall-mode-row" data-overlay-subview-group="drawing" hidden>
@@ -623,12 +626,12 @@
       <section class="map-draw-panel-section" data-map-edit-section="regions">
         <div class="map-draw-section-title">Region Tools</div>
         <div class="map-draw-tool-row map-draw-tool-row-paired" role="group" aria-label="Geographic region tools">
-          <button type="button" data-map-draw-tool="region">Paint Geo</button>
-          <button type="button" data-map-draw-tool="unregion">Clear Geo</button>
+          <button type="button" data-map-draw-tool="region">Paint Geographic</button>
+          <button type="button" data-map-draw-tool="unregion">Clear Geographic</button>
         </div>
         <div class="map-draw-tool-row map-draw-tool-row-paired" role="group" aria-label="Political region tools">
-          <button type="button" data-map-draw-tool="political-region">Paint Pol.</button>
-          <button type="button" data-map-draw-tool="clear-political-region">Clear Pol.</button>
+          <button type="button" data-map-draw-tool="political-region">Paint Political</button>
+          <button type="button" data-map-draw-tool="clear-political-region">Clear Political</button>
         </div>
         <label class="map-draw-region-row">
           <span>Geographic</span>
@@ -668,12 +671,14 @@
 
         <div class="map-draw-section-title map-draw-subsection-title">Overlays</div>
         <div class="map-draw-tool-row map-draw-tool-row-compact" role="group" aria-label="Purge saved overlay types">
+          <button id="map-clear-all-overlays" class="map-draw-clear" type="button">Purge ALL Overlays</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="road">Purge Roads</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="river">Purge Rivers</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="path">Purge Paths</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="sea_route">Purge Sea Routes</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="wall">Purge Walls</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="mist">Purge Mist</button>
+          <button class="map-draw-clear" type="button" data-clear-overlay-type="farmland">Purge Farmland</button>
         </div>
 
         <div class="map-draw-section-title map-draw-subsection-title">POIs</div>
@@ -684,8 +689,8 @@
 
         <div class="map-draw-section-title map-draw-subsection-title">Regions</div>
         <div class="map-draw-tool-row map-draw-tool-row-paired" role="group" aria-label="Purge region paint">
-          <button id="map-clear-geo-regions" class="map-draw-clear" type="button">Purge All Geo Regions</button>
-          <button id="map-clear-pol-regions" class="map-draw-clear" type="button">Purge All Pol Regions</button>
+          <button id="map-clear-geo-regions" class="map-draw-clear" type="button">Purge All Geographic Regions</button>
+          <button id="map-clear-pol-regions" class="map-draw-clear" type="button">Purge All Political Regions</button>
         </div>
       </section>
 
@@ -706,6 +711,10 @@
           </span>
         </div>
         <p class="map-edit-empty-note" data-poi-subview-group="generation">This POI pass creates standalone Settlements, Strongholds, Dungeons, Dungeon Complexes, Resource Sites, Waypoints, and broader world Sites. It avoids occupied hexes when possible and leaves grouped POIs for a later pass.</p>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Global Density / Amount <strong id="map-generation-poi-global-amount-value">100%</strong></span>
+          <input id="map-generation-poi-global-amount" type="range" min="0" max="200" step="5" value="100">
+        </label>
         <label class="map-draw-range-row" data-poi-subview-group="generation">
           <span>Settlement Density <strong id="map-generation-settlement-density-value">100%</strong></span>
           <input id="map-generation-settlement-density" type="range" min="0" max="200" step="5" value="100">
@@ -735,7 +744,7 @@
           <input id="map-generation-dungeon-complex-amount" type="range" min="0" max="200" step="5" value="100">
         </label>
         <label class="map-draw-range-row" data-poi-subview-group="generation">
-          <span>Site Amount <strong id="map-generation-site-amount-value">100%</strong></span>
+          <span>Places of Note Amount <strong id="map-generation-site-amount-value">100%</strong></span>
           <input id="map-generation-site-amount" type="range" min="0" max="200" step="5" value="100">
         </label>
         <label class="map-draw-option-row" data-poi-subview-group="generation">
@@ -1512,7 +1521,9 @@
 <script src="js/codex-dialog.js"></script>
 <script src="js/campaign-auth.js"></script>
 <script src="js/terrain-rules.js"></script>
+<script src="js/generated-map-generator-shared.js"></script>
 <script src="js/generated-map-generator.js"></script>
+<script src="js/generated-map-terrain-generator.js"></script>
 <script src="js/poi-types.js"></script>
 <script src="js/poi-tags.js"></script>
 <script src="js/poi-icons.js"></script>

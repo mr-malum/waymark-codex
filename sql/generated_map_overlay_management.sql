@@ -20,7 +20,7 @@ create table if not exists public.generated_map_overlays (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint generated_map_overlays_type_check
-    check (overlay_type in ('road', 'river', 'sea_route', 'path', 'wall', 'mist')),
+    check (overlay_type in ('road', 'river', 'sea_route', 'path', 'wall', 'mist', 'farmland')),
   constraint generated_map_overlays_edge_check
     check (edge is null or edge in ('E', 'SE', 'SW', 'W', 'NW', 'NE')),
   constraint generated_map_overlays_shape_check
@@ -31,7 +31,7 @@ create table if not exists public.generated_map_overlays (
       or
       (overlay_type = 'wall' and hex_id is not null and edge is not null and from_hex_id is null and to_hex_id is null)
       or
-      (overlay_type = 'mist' and hex_id is not null and edge is null and from_hex_id is null and to_hex_id is null)
+      (overlay_type in ('mist', 'farmland') and hex_id is not null and edge is null and from_hex_id is null and to_hex_id is null)
     )
 );
 
@@ -44,7 +44,7 @@ alter table public.generated_map_overlays
 
 alter table public.generated_map_overlays
   add constraint generated_map_overlays_type_check
-  check (overlay_type in ('road', 'river', 'sea_route', 'path', 'wall', 'mist'));
+  check (overlay_type in ('road', 'river', 'sea_route', 'path', 'wall', 'mist', 'farmland'));
 
 alter table public.generated_map_overlays
   drop constraint if exists generated_map_overlays_shape_check;
@@ -58,7 +58,7 @@ alter table public.generated_map_overlays
     or
     (overlay_type = 'wall' and hex_id is not null and edge is not null and from_hex_id is null and to_hex_id is null)
     or
-    (overlay_type = 'mist' and hex_id is not null and edge is null and from_hex_id is null and to_hex_id is null)
+    (overlay_type in ('mist', 'farmland') and hex_id is not null and edge is null and from_hex_id is null and to_hex_id is null)
   );
 
 create index if not exists idx_generated_map_overlays_campaign
@@ -136,7 +136,7 @@ begin
     raise exception 'not authorized';
   end if;
 
-  if normalized_type not in ('road', 'river', 'sea_route', 'path', 'wall', 'mist') then
+  if normalized_type not in ('road', 'river', 'sea_route', 'path', 'wall', 'mist', 'farmland') then
     raise exception 'unsupported overlay type';
   end if;
 
@@ -166,6 +166,8 @@ begin
     ) then
       raise exception 'unsupported wall style';
     end if;
+  elsif normalized_type = 'farmland' then
+    normalized_style := 'farmland';
   else
     normalized_style := 'mist';
   end if;
@@ -282,7 +284,7 @@ begin
     and (
       (normalized_type = 'wall' and edge = target_edge)
       or
-      (normalized_type = 'mist' and edge is null)
+      (normalized_type in ('mist', 'farmland') and edge is null)
     )
   limit 1;
 
