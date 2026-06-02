@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Generated campaign migration verification
 -- =========================================================
 --

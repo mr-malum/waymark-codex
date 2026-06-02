@@ -15,7 +15,7 @@ const generatedTerrainColors = {
   grassland: "#8fa75f",
   lush_grassland: "#4e7b45",
   wetland: "#3d6856",
-  jungle_floor: "#27663c",
+  jungle_floor: "#3E855A",
   desert: "#d4b36f",
   deep_desert: "#b88955",
   barrens: "#a56545",

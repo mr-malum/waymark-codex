@@ -200,7 +200,7 @@
 /* Map Reset Button */
 
 #map-reset-button {
-  bottom: 166px;
+  bottom: 311px;
   left: 21px;
 
   width: 126px;
@@ -246,17 +246,34 @@
 }
 
 #map-draw-button {
-  bottom: 356px;
-  left: 43px;
+  bottom: 166px;
+  left: 21px;
+
+  width: 126px;
+  height: 126px;
+
+  background-image: url("../assets/codex_map_button.png");
+  background-size: 118px 118px;
+
+  color: transparent;
+  font-size: 0;
+
+  transition:
+    transform 0.18s ease,
+    filter 0.18s ease;
+
+  filter:
+    drop-shadow(0 8px 15px rgba(0, 0, 0, 0.48))
+    drop-shadow(0 3px 5px rgba(0, 0, 0, 0.34))
+    drop-shadow(0 0 10px rgba(255, 225, 160, 0.12));
 }
 
 #map-view-button {
-  bottom: 304px;
-  left: 43px;
+  bottom: 62px;
+  left: 166px;
 }
 
-#map-view-button,
-#map-draw-button {
+#map-view-button {
   width: 104px;
   height: 44px;
   border: 1px solid var(--map-editor-brass-border-soft);
@@ -283,8 +300,44 @@
     box-shadow 140ms ease;
 }
 
-#map-view-button::before,
 #map-draw-button::before {
+  content: "MAP\A TOOLS";
+
+  position: absolute;
+  left: 50%;
+  top: 50%;
+
+  transform: translate(-50%, -50%);
+
+  z-index: 2;
+
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 1.82rem;
+  letter-spacing: 0.21em;
+  line-height: 0.78;
+  white-space: pre;
+  text-align: center;
+
+  color: #f2dfb6;
+
+  text-shadow:
+    0 0 10px rgba(25, 12, 4, 0.96),
+    0 0 22px rgba(25, 12, 4, 0.88),
+    0 0 42px rgba(25, 12, 4, 0.76),
+    0 3px 6px rgba(0, 0, 0, 0.72),
+    0 0 6px rgba(255, 220, 150, 0.30);
+
+  opacity: 0;
+
+  pointer-events: none;
+
+  transition:
+    opacity 220ms ease,
+    color 220ms ease,
+    text-shadow 220ms ease;
+}
+
+#map-view-button::before {
   content: "";
   position: absolute;
   inset: 4px;
@@ -300,12 +353,33 @@
   display: none;
 }
 
+#map-draw-button:focus,
+#map-draw-button:focus-visible,
+#map-draw-button:active {
+  outline: 1px solid var(--map-control-hitbox-outline);
+  outline-offset: -1px;
+  box-shadow: none;
+  background-color: transparent;
+}
+
+#map-draw-button.active,
+#map-draw-button:hover {
+  transform: scale(1.035);
+
+  filter:
+    drop-shadow(0 10px 18px rgba(0, 0, 0, 0.54))
+    drop-shadow(0 4px 7px rgba(0, 0, 0, 0.36))
+    drop-shadow(0 0 14px rgba(255, 225, 160, 0.16));
+}
+
+#map-draw-button.active::before,
+#map-draw-button:hover::before {
+  opacity: 1;
+}
+
 #map-view-button.active,
 #map-view-button:hover,
-#map-view-button:focus-visible,
-#map-draw-button.active,
-#map-draw-button:hover,
-#map-draw-button:focus-visible {
+#map-view-button:focus-visible {
   transform: scale(1.035);
   border-color: rgba(242, 211, 123, 0.72);
   background: var(--map-editor-brass-bg-hot);
@@ -316,13 +390,16 @@
     inset 0 0 18px var(--map-editor-brass-glow);
 }
 
-#map-view-button:active,
-#map-draw-button:active {
+#map-view-button:active {
   transform: scale(0.98);
   box-shadow:
     0 8px 14px rgba(0, 0, 0, 0.38),
     inset 0 2px 8px rgba(0, 0, 0, 0.28),
     inset 0 0 14px rgba(242, 211, 123, 0.12);
+}
+
+#map-draw-button:active {
+  transform: scale(0.985);
 }
 
 .map-control-panel {
@@ -1430,21 +1507,28 @@
 }
 
 @media (max-width: 520px), (max-height: 560px) {
-  #map-view-button,
-  #map-draw-button {
+  #map-view-button {
     width: 88px;
     height: 40px;
     font-size: 0.68rem;
   }
 
   #map-view-button {
-    bottom: 204px;
-    left: 28px;
+    bottom: 44px;
+    left: 128px;
   }
 
   #map-draw-button {
-    bottom: 248px;
-    left: 28px;
+    bottom: 122px;
+    left: 16px;
+    width: 96px;
+    height: 96px;
+    background-size: 90px 90px;
+  }
+
+  #map-draw-button::before {
+    font-size: 1.45rem;
+    letter-spacing: 0.16em;
   }
 
   .map-view-panel {

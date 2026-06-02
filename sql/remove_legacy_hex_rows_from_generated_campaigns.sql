@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Remove old 300:300-style legacy hex rows from generated campaigns
 -- =========================================================
 --

@@ -115,7 +115,7 @@
 
   function normalizeOptions(options = {}) {
     const settings = {
-      seed: String(options.seed || "campaign-codex"),
+      seed: String(options.seed || "waymark-codex"),
       regionStyle: normalizeRegionStyle(options.regionStyle),
       water: clamp(options.water, 0, 2, 1),
       coastalEdge: clamp(options.coastalEdge, 0, 2, 0),
@@ -729,6 +729,59 @@
     return score;
   }
 
+  function isAridBufferTerrain(baseTerrain) {
+    return baseTerrain === "desert" || baseTerrain === "deep_desert";
+  }
+
+  function requiresBiomePadding(baseTerrain, neighborBaseTerrain) {
+    return (
+      (baseTerrain === "snow" && isAridBufferTerrain(neighborBaseTerrain))
+      || (neighborBaseTerrain === "snow" && isAridBufferTerrain(baseTerrain))
+      || (baseTerrain === "wetland" && isAridBufferTerrain(neighborBaseTerrain))
+      || (neighborBaseTerrain === "wetland" && isAridBufferTerrain(baseTerrain))
+    );
+  }
+
+  function getBiomePaddingFamily(baseTerrain) {
+    if (baseTerrain === "snow") return "snow";
+    if (baseTerrain === "wetland") return "wetland";
+    if (isAridBufferTerrain(baseTerrain)) return "arid";
+    return baseTerrain;
+  }
+
+  function countBiomePaddingSupport(hex, byCoord) {
+    const family = getBiomePaddingFamily(hex.baseTerrain);
+    return neighbors(hex, byCoord).filter(neighbor => getBiomePaddingFamily(neighbor.baseTerrain) === family).length;
+  }
+
+  function transitionTerrainForPadding(baseTerrain, neighborBaseTerrain) {
+    if (baseTerrain === "snow" && isAridBufferTerrain(neighborBaseTerrain)) return "rock";
+    if (baseTerrain === "wetland" && isAridBufferTerrain(neighborBaseTerrain)) return "grassland";
+    if (isAridBufferTerrain(baseTerrain) && neighborBaseTerrain === "snow") return "barrens";
+    if (isAridBufferTerrain(baseTerrain) && neighborBaseTerrain === "wetland") return "plains";
+    return null;
+  }
+
+  function chooseBiomePaddingUpdate(hex, neighbor, byCoord) {
+    if (!requiresBiomePadding(hex.baseTerrain, neighbor.baseTerrain)) return null;
+
+    const hexSupport = countBiomePaddingSupport(hex, byCoord);
+    const neighborSupport = countBiomePaddingSupport(neighbor, byCoord);
+
+    let targetHex = hexSupport < neighborSupport ? hex : neighbor;
+    let otherHex = targetHex === hex ? neighbor : hex;
+
+    if (hexSupport === neighborSupport) {
+      targetHex = isAridBufferTerrain(hex.baseTerrain) ? hex : neighbor;
+      otherHex = targetHex === hex ? neighbor : hex;
+    }
+
+    const baseTerrain = transitionTerrainForPadding(targetHex.baseTerrain, otherHex.baseTerrain);
+    return baseTerrain && baseTerrain !== targetHex.baseTerrain
+      ? { hex: targetHex, baseTerrain }
+      : null;
+  }
+
   function transitionTerrainForClash(baseTerrain, neighborBaseTerrain, random) {
     const profile = TERRAIN_PROFILES[baseTerrain];
     const neighborProfile = TERRAIN_PROFILES[neighborBaseTerrain];
@@ -755,6 +808,11 @@
       hexes.forEach(hex => {
         neighbors(hex, helpers.byCoord).forEach(neighbor => {
           if (hex.id > neighbor.id) return;
+          const paddingUpdate = chooseBiomePaddingUpdate(hex, neighbor, helpers.byCoord);
+          if (paddingUpdate) {
+            if (!updates.has(paddingUpdate.hex)) updates.set(paddingUpdate.hex, paddingUpdate.baseTerrain);
+            return;
+          }
           if (terrainAdjacencyScore(hex.baseTerrain, neighbor.baseTerrain) < 5 || helpers.random() >= 0.62) return;
           const nextHexTerrain = transitionTerrainForClash(hex.baseTerrain, neighbor.baseTerrain, helpers.random);
           const nextNeighborTerrain = transitionTerrainForClash(neighbor.baseTerrain, hex.baseTerrain, helpers.random);
@@ -791,6 +849,11 @@
       hex.elevation = rules.getAutoElevation?.(hex.baseTerrain, hex.features) ?? TERRAIN_PROFILES[hex.baseTerrain]?.elevation ?? 1;
     });
 
+    applyMountainRangeCohesion(hexes, options);
+    hexes.forEach(hex => {
+      hex.elevation = rules.getAutoElevation?.(hex.baseTerrain, hex.features) ?? TERRAIN_PROFILES[hex.baseTerrain]?.elevation ?? 1;
+    });
+
     hexes.forEach(hex => {
       if (!isLandBase(hex.baseTerrain)) return;
       if (hex.features?.some(feature => ["mountains", "snowcapped_mountains", "volcano"].includes(feature))) return;
@@ -801,6 +864,63 @@
           : 0;
       if (nearRange) hex.elevation = Math.max(Number(hex.elevation) || 0, nearRange === 1 ? 2 : 1);
     });
+  }
+
+  function applyMountainRangeCohesion(hexes, options) {
+    const { settings, rules, context } = options;
+    if (!hexes.length || settings.mountains <= 0) return;
+
+    const passes = Math.max(1, Math.round(settings.mountains));
+    for (let pass = 0; pass < passes; pass += 1) {
+      const updates = [];
+      hexes.forEach(hex => {
+        const targetFeature = getMountainRangeTargetFeature(hex.baseTerrain);
+        if (!targetFeature) return;
+
+        const current = Array.isArray(hex.features) ? [...hex.features] : [];
+        const hasSnowyMountains = current.includes("snowcapped_mountains");
+        const hasMountains = current.includes("mountains");
+        const hasRidges = current.includes("ridges");
+        const mountainSupport = nearbyFeatureCountInSet(hex, ["mountains", "snowcapped_mountains"], context.byCoord, 1);
+        const rangeSupport = nearbyFeatureCountInSet(hex, ["mountains", "snowcapped_mountains", "ridges"], context.byCoord, 1);
+        const roll = hashNumber(`${settings.seed}:range-cohesion:${pass}:${hex.id}`) % 100;
+        const directMountainChance = Math.min(58, Math.round(8 + settings.mountains * 12 + mountainSupport * 10 + Math.max(0, rangeSupport - mountainSupport) * 6));
+
+        if (hex.baseTerrain === "snow" && hasMountains && !hasSnowyMountains && mountainSupport >= 1 && roll < directMountainChance) {
+          updates.push([hex, mergePreferredFeature(hex.baseTerrain, current.filter(feature => feature !== "mountains"), "snowcapped_mountains", rules, settings.maxFeatures)]);
+          return;
+        }
+
+        if (hasRidges && mountainSupport >= 2 && roll < directMountainChance) {
+          updates.push([hex, mergePreferredFeature(hex.baseTerrain, current.filter(feature => feature !== "ridges"), targetFeature, rules, settings.maxFeatures)]);
+        }
+      });
+
+      if (!updates.length) break;
+      updates.forEach(([hex, features]) => {
+        hex.features = features;
+      });
+    }
+  }
+
+  function getMountainRangeTargetFeature(baseTerrain) {
+    if (baseTerrain === "snow") return "snowcapped_mountains";
+    if (baseTerrain === "rock") return "mountains";
+    return null;
+  }
+
+  function nearbyFeatureCountInSet(hex, features, byCoord, radius = 1) {
+    const featureSet = new Set(features || []);
+    return nearbyWithin(hex, byCoord, radius)
+      .filter(neighbor => (neighbor.features || []).some(feature => featureSet.has(feature)))
+      .length;
+  }
+
+  function mergePreferredFeature(baseTerrain, features, preferredFeature, rules, maxFeatures) {
+    const nextFeatures = [preferredFeature, ...(features || []).filter(feature => feature !== preferredFeature)];
+    return rules.ensureValidFeatures
+      ? rules.ensureValidFeatures(baseTerrain, nextFeatures, { maxFeatures, preferredFeature })
+      : nextFeatures.slice(0, maxFeatures);
   }
 
   function makeRuleContext(byId, byCoord) {

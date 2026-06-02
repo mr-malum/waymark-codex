@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Backfill canonical POI / grouped POI type values
 -- =========================================================
 --

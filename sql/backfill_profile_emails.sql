@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Backfill profile emails for username login
 -- =========================================================
 --

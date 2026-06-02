@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Generated map bulk/nuke tools
 -- =========================================================
 --
@@ -274,6 +274,7 @@ begin
   with snapshot as (
     select
       coalesce(item.snapshot_order, row_number() over ())::integer as snapshot_order,
+      nullif(trim(coalesce(item.ref_code, '')), '') as ref_code,
       nullif(trim(coalesce(item.name, '')), '') as name,
       nullif(trim(coalesce(item.hex_ref, '')), '') as hex_ref,
       nullif(trim(coalesce(item.group_ref, '')), '') as group_ref,
@@ -286,6 +287,7 @@ begin
       nullif(trim(coalesce(item.generation_source, '')), '') as generation_source
     from jsonb_to_recordset(coalesce(poi_snapshot, '[]'::jsonb)) as item(
       snapshot_order integer,
+      ref_code text,
       name text,
       hex_ref text,
       group_ref text,
@@ -301,6 +303,7 @@ begin
   resolved as (
     select
       snapshot.snapshot_order,
+      snapshot.ref_code,
       snapshot.name,
       target_hex.id as hex_id,
       target_group.id as poi_group_id,
@@ -331,7 +334,10 @@ begin
   numbered as (
     select
       resolved.*,
-      next_base_number + row_number() over (order by resolved.snapshot_order) as next_number
+      coalesce(
+        resolved.ref_code,
+        'POI-' || lpad((next_base_number + row_number() over (order by resolved.snapshot_order))::text, 4, '0')
+      ) as next_ref_code
     from resolved
   ),
   inserted as (
@@ -353,7 +359,7 @@ begin
     )
     select
       target_campaign_id,
-      'POI-' || lpad(numbered.next_number::text, 4, '0'),
+      numbered.next_ref_code,
       numbered.name,
       numbered.hex_id,
       numbered.poi_group_id,
@@ -397,7 +403,7 @@ begin
     inserted.lore
   from inserted
   join numbered
-    on inserted.ref_code = 'POI-' || lpad(numbered.next_number::text, 4, '0')
+    on inserted.ref_code = numbered.next_ref_code
   order by numbered.snapshot_order;
 end;
 $$;

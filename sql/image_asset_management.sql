@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Record image upload / attachment management
 -- =========================================================
 --

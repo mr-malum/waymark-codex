@@ -1,11 +1,11 @@
-// JSON/CSV import-export helpers for the Campaign Codex hex map prototype.
+// JSON/CSV import-export helpers for the Waymark Codex hex map prototype.
 
 function exportDataObject() {
   const regions = ensureDefaultRegions();
 
   return {
     schemaVersion: 1,
-    mapType: "campaign-codex-hex-map",
+    mapType: "waymark-codex-hex-map",
     grid: {
       cols: GRID_COLS,
       rows: GRID_ROWS,

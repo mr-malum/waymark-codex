@@ -45,7 +45,7 @@
 
   function normalizePoiOptions(options = {}) {
     return {
-      seed: String(options.seed || "campaign-codex-pois"),
+      seed: String(options.seed || "waymark-codex-pois"),
       settlementDensity: clamp(options.settlementDensity, 0, 1, 0.5),
       populationConcentration: clamp(options.populationConcentration, 0.5, 1.5, 1),
       resourceAmount: clamp(options.resourceAmount, 0, 1, 0.5),

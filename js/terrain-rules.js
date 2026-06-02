@@ -5,11 +5,11 @@
     coastal_water: "#4a91ab",
     inland_water: "#79b8c8",
     beach: "#dbc487",
-    plains: "#c1b06d",
-    grassland: "#8fa75f",
-    lush_grassland: "#4e7b45",
+    plains: "#9DC156",
+    grassland: "#6AA754",
+    lush_grassland: "#47942C",
     wetland: "#3d6856",
-    jungle_floor: "#27663c",
+    jungle_floor: "#3E855A",
     desert: "#d4b36f",
     deep_desert: "#b88955",
     barrens: "#a56545",
@@ -893,7 +893,6 @@
     const hashNumber = options.hashNumber || defaultHashNumber;
     const seed = options.seed || `${hex?.id || "hex"}:${featureId}`;
     const manualBrush = Boolean(options.manualBrush);
-
     if (!getValidFeaturesForBase(base).includes(featureId)) return false;
     if (["barrens", "bleak_barrens", "wastes"].includes(base) && ["woods", "forest"].includes(featureId)) {
       if (manualBrush) return true;

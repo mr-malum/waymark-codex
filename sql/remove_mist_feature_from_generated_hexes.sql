@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- One-time generated hex mist feature cleanup
 -- =========================================================
 --

@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Owner-only generated campaign copy helper for testing
 -- =========================================================
 --

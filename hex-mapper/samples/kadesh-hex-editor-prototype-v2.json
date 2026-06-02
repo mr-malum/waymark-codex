@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "mapType": "campaign-codex-hex-map",
+  "mapType": "waymark-codex-hex-map",
   "grid": {
     "cols": 50,
     "rows": 50,

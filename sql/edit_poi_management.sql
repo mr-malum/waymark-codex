@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- POI / grouped POI edit management
 -- =========================================================
 -- 
@@ -59,14 +59,14 @@ as $$
     when icon_value in (
       'abbey', 'abandoned_shack', 'anchor', 'arcane_portal', 'bandit_camp', 'battlefield', 'border_post', 'bridge', 'bridge_gate',
       'campsite', 'canyon_pass', 'castle', 'catacombs', 'cave', 'chest', 'city', 'compass_rose', 'crater', 'crypt', 'dead_tree',
-      'docks', 'dragon_lair', 'dungeon', 'farmstead', 'ferry', 'fishing_camp', 'ford', 'fort', 'galleon', 'gate', 'geyser',
+      'docks', 'dragon_lair', 'dungeon', 'evil_temple', 'farmstead', 'ferry', 'fishing_camp', 'ford', 'fort', 'galleon', 'gate', 'geyser',
       'graveyard', 'harbor', 'hilltop_town', 'hunting_blind', 'inn', 'island', 'island_2', 'kraken', 'laboratory', 'lair',
       'ley_nexus', 'lighthouse', 'lodge', 'lumber_camp', 'lumber_mill', 'market', 'mausoleum', 'mine', 'monolith', 'mountain_city',
       'mountain_gate', 'mountain_hold', 'mountain_pass', 'oasis', 'obelisk', 'observatory', 'pirate_flag', 'plague_marker',
-      'port_town', 'pyramid', 'quarry', 'reef', 'roadside_shrine', 'rowboat', 'ruins', 'sacred_grove', 'sea_fort', 'ship_stern',
-      'shipwreck', 'shrine', 'skull_marker', 'sloop', 'spring', 'standing_stones', 'stone_tower', 'swamp', 'tavern', 'temple',
-      'trade_goods', 'trader', 'tree', 'unknown_marker', 'village', 'volcano', 'warehouse', 'walled_city', 'walled_encampment',
-      'watch_fire', 'watchtower', 'waterfall', 'whirlpool', 'windmill', 'wizard_tower', 'ziggurat'
+      'port_town', 'pyramid', 'quarry', 'reef', 'roadside_shrine', 'rowboat', 'ruins', 'sacred_grove', 'sea_fort', 'sewer', 'ship_stern',
+      'shipwreck', 'shrine', 'skull_marker', 'sloop', 'spring', 'standing_stones', 'stone_tower', 'swamp', 'tavern', 'temple', 'tomb',
+      'trade_goods', 'trader', 'tree', 'unknown_marker', 'vault', 'village', 'volcano', 'warehouse', 'walled_city', 'walled_encampment',
+      'watch_fire', 'watchtower', 'waterfall', 'whirlpool', 'windmill', 'wizard_tower', 'ziggurat', 'abandoned_mine', 'barrow', 'buried_ruins'
     ) then icon_value
     else null
   end

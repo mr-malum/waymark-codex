@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Diagnose profile insert blockers during signup
 -- =========================================================
 --

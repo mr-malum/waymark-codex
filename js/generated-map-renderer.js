@@ -6,11 +6,11 @@
     coastal_water: "#4a91ab",
     inland_water: "#79b8c8",
     beach: "#dbc487",
-    plains: "#c1b06d",
-    grassland: "#8fa75f",
-    lush_grassland: "#4e7b45",
+    plains: "#9DC156",
+    grassland: "#6AA754",
+    lush_grassland: "#47942C",
     wetland: "#3d6856",
-    jungle_floor: "#27663c",
+    jungle_floor: "#3E855A",
     desert: "#d4b36f",
     deep_desert: "#b88955",
     barrens: "#a56545",
@@ -385,8 +385,8 @@
     plains: { vegetation: "#3f5a32", relief: "#6f6336", surface: "#6f6336" },
     grassland: { vegetation: "#2f4f2f", relief: "#5d5638", surface: "#6f6336" },
     lush_grassland: { vegetation: "#255235", relief: "#465638", surface: "#496b3b" },
-    wetland: { vegetation: "#234d43", relief: "#3f534a", surface: "#2f6254" },
-    jungle_floor: { vegetation: "#155c38", relief: "#244a35", surface: "#1f5a45" },
+    wetland: { vegetation: "#53993A", relief: "#3f534a", surface: "#2f6254" },
+    jungle_floor: { vegetation: "#167311", relief: "#244a35", surface: "#1f5a45" },
     desert: { vegetation: "#5f6134", relief: "#735336", surface: "#8a693d" },
     deep_desert: { vegetation: "#5a5430", relief: "#68472f", surface: "#7b5636" },
     barrens: { vegetation: "#5b5a35", relief: "#6a4435", surface: "#754c3a" },
@@ -577,6 +577,9 @@
       generationCompression: 100,
       generationContinuity: 100,
       generationRoadAmount: 100,
+      generationRoadLength: 100,
+      generationIncludePaths: true,
+      generationIncludeTradeRoutes: false,
       generationRiverAmount: 100,
       generationRiverLength: 100,
       generationRiverWildcards: 100,
@@ -625,6 +628,10 @@
       lastHexId: null,
       dragLastHexId: null,
       paintedThisDrag: new Set(),
+      hexStyleBrushPreview: {
+        mist: { pending: new Set(), inflight: new Set() },
+        farmland: { pending: new Set(), inflight: new Set() }
+      },
       dragActionBatch: null,
       dragActionCommitTimer: null,
       queuedRenderFrame: null,
@@ -1508,6 +1515,7 @@
       ["map-generation-compression", "generationCompression"],
       ["map-generation-continuity", "generationContinuity"],
       ["map-generation-road", "generationRoadAmount"],
+      ["map-generation-road-length", "generationRoadLength"],
       ["map-generation-river", "generationRiverAmount"],
       ["map-generation-river-length", "generationRiverLength"],
       ["map-generation-river-wildcards", "generationRiverWildcards"],
@@ -1530,6 +1538,18 @@
         }
         updateGenerationControls();
       });
+    });
+
+    const includePathsInput = document.getElementById("map-generation-include-paths");
+    includePathsInput?.addEventListener("change", () => {
+      renderer.drawing.generationIncludePaths = Boolean(includePathsInput.checked);
+      updateGenerationControls();
+    });
+
+    const includeTradeRoutesInput = document.getElementById("map-generation-include-trade-routes");
+    includeTradeRoutesInput?.addEventListener("change", () => {
+      renderer.drawing.generationIncludeTradeRoutes = Boolean(includeTradeRoutesInput.checked);
+      updateGenerationControls();
     });
 
     generationPreviewTerrain?.addEventListener("click", event => {
@@ -2161,10 +2181,15 @@
 
   function showMapEditorIntroIfNeeded() {
     const campaignId = getActiveCampaign?.()?.id || "default";
-    const storageKey = `campaign-codex-map-editor-intro:${campaignId}`;
+    const storageKey = `waymark-codex-map-editor-intro:${campaignId}`;
+    const legacyStorageKey = `campaign-codex-map-editor-intro:${campaignId}`;
     let alreadySeen = renderer.drawing.editorIntroSeen;
     try {
-      alreadySeen = alreadySeen || window.sessionStorage?.getItem(storageKey) === "1";
+      const storage = window.sessionStorage;
+      const seenCurrent = storage?.getItem(storageKey) === "1";
+      const seenLegacy = storage?.getItem(legacyStorageKey) === "1";
+      if (!seenCurrent && seenLegacy) storage?.setItem(storageKey, "1");
+      alreadySeen = alreadySeen || seenCurrent || seenLegacy;
     } catch (error) {
       // Ignore storage failures and fall back to the in-memory flag.
     }
@@ -2185,7 +2210,7 @@
 
   function closeMapEditorIntro() {
     const campaignId = getActiveCampaign?.()?.id || "default";
-    const storageKey = `campaign-codex-map-editor-intro:${campaignId}`;
+    const storageKey = `waymark-codex-map-editor-intro:${campaignId}`;
     const intro = document.getElementById("map-editor-intro");
     intro?.classList.add("hidden");
     intro?.setAttribute("aria-hidden", "true");
@@ -2323,6 +2348,7 @@
       }
       renderer.drawing.dragActionCommitTimer = null;
       renderer.drawing.dragActionBatch = null;
+      clearHexStyleBrushPreview();
     }
     renderer.drawing.lastHexId = null;
     renderer.drawing.dragLastHexId = null;
@@ -2402,6 +2428,10 @@
     renderer.drawing.generationMountains = 100;
     renderer.drawing.generationCompression = 100;
     renderer.drawing.generationContinuity = 100;
+    renderer.drawing.generationRoadAmount = 100;
+    renderer.drawing.generationRoadLength = 100;
+    renderer.drawing.generationIncludePaths = true;
+    renderer.drawing.generationIncludeTradeRoutes = false;
     renderer.drawing.generationPoiGlobalAmount = 100;
     renderer.drawing.generationSettlementDensity = 100;
     renderer.drawing.generationPopulationConcentration = 100;
@@ -2670,6 +2700,7 @@
       renderer.drawing.dragActionCommitTimer = null;
     }
     const batch = renderer.drawing.dragActionBatch;
+    queuePendingHexStyleOverlaySaves(batch);
     if (batch?.pending?.length) {
       if (batch.committing) return;
       const pending = batch.pending.splice(0);
@@ -3291,6 +3322,7 @@
       ["compression", "generationCompression"],
       ["continuity", "generationContinuity"],
       ["road", "generationRoadAmount"],
+      ["road-length", "generationRoadLength"],
       ["river", "generationRiverAmount"],
       ["river-length", "generationRiverLength"],
       ["river-wildcards", "generationRiverWildcards"],
@@ -3309,6 +3341,16 @@
       if (input) input.value = String(numeric);
       if (value) value.textContent = `${numeric}%`;
     });
+    const includePathsInput = document.getElementById("map-generation-include-paths");
+    if (includePathsInput) {
+      includePathsInput.checked = renderer.drawing.generationIncludePaths !== false;
+      includePathsInput.disabled = Boolean(renderer.drawing.saving);
+    }
+    const includeTradeRoutesInput = document.getElementById("map-generation-include-trade-routes");
+    if (includeTradeRoutesInput) {
+      includeTradeRoutesInput.checked = Boolean(renderer.drawing.generationIncludeTradeRoutes);
+      includeTradeRoutesInput.disabled = Boolean(renderer.drawing.saving);
+    }
     const hasPreview = hasGenerationPreview();
     if (generationPreviewTerrain) generationPreviewTerrain.disabled = Boolean(renderer.drawing.saving);
     if (sharedApplyButton) sharedApplyButton.disabled = Boolean(renderer.drawing.saving || !hasPreview);
@@ -3328,6 +3370,9 @@
       generationCompression: 100,
       generationContinuity: 100,
       generationRoadAmount: 100,
+      generationRoadLength: 100,
+      generationIncludePaths: true,
+      generationIncludeTradeRoutes: false,
       generationRiverAmount: 100,
       generationRiverLength: 100,
       generationRiverWildcards: 100,
@@ -4205,7 +4250,17 @@
     } else {
       const dirtyBounds = getTerrainDirtyBounds();
       if (!dirtyBounds) return;
-      const patchHexes = renderer.hexes.filter(hex => hexIntersectsBounds(hex, dirtyBounds));
+      const contributorBounds = getFeatureDirtyBounds(dirtyBounds);
+      const patchHexes = renderer.hexes.filter(hex => hexIntersectsBounds(hex, contributorBounds));
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(
+        dirtyBounds.left,
+        dirtyBounds.top,
+        dirtyBounds.right - dirtyBounds.left,
+        dirtyBounds.bottom - dirtyBounds.top
+      );
+      ctx.clip();
       ctx.clearRect(
         dirtyBounds.left,
         dirtyBounds.top,
@@ -4216,6 +4271,7 @@
       if (renderer.drawing.visibleOverlays.features && shouldRenderFeatureArt()) {
         patchHexes.forEach(hex => renderFeatureArtForHex(ctx, hex));
       }
+      ctx.restore();
     }
     renderer.featureCacheDirty = false;
   }
@@ -4248,6 +4304,29 @@
     });
 
     return bounds;
+  }
+
+  function getFeatureDirtyBounds(bounds = null) {
+    bounds = bounds || getTerrainDirtyBounds();
+    if (!bounds) return null;
+    const dimensions = getGeneratedMapDimensions();
+    // Edge bleed and feature art can spill across the base terrain patch boundary.
+    return expandRenderBounds(bounds, {
+      left: Math.max(90, dimensions.radius * 2),
+      right: Math.max(90, dimensions.radius * 2),
+      top: Math.max(110, dimensions.hexHeight * 1.8),
+      bottom: Math.max(110, dimensions.hexHeight * 1.8)
+    });
+  }
+
+  function expandRenderBounds(bounds, padding = {}) {
+    if (!bounds) return null;
+    return {
+      left: Math.max(0, bounds.left - Math.max(0, Number(padding.left) || 0)),
+      right: Math.min(renderer.view.width, bounds.right + Math.max(0, Number(padding.right) || 0)),
+      top: Math.max(0, bounds.top - Math.max(0, Number(padding.top) || 0)),
+      bottom: Math.min(renderer.view.height, bounds.bottom + Math.max(0, Number(padding.bottom) || 0))
+    };
   }
 
   function updateOverlayCache() {
@@ -4347,8 +4426,12 @@
         const passRoadSegments = segments.filter(isAutoPassRoadSegment);
         const baseRoadSegments = segments.filter(segment => !isAutoPassRoadSegment(segment));
         const strictRoadSegments = baseRoadSegments.filter(segment => !overlayHasStyleFlag(segment, OVERLAY_STYLE_FLAGS.roadWaterOverride));
+        const roadBreakHexIds = new Set([
+          ...getAutoPassConnectorHexIds(passRoadSegments, baseRoadSegments),
+          ...getRoadVisualAnchorBreakHexIds(baseRoadSegments)
+        ]);
         renderRoadWaterCrossingDecorations(ctx, strictRoadSegments);
-        connectedPathStrings(baseRoadSegments, "road", getAutoPassConnectorHexIds(passRoadSegments, baseRoadSegments)).forEach(pathData => {
+        connectedPathStrings(baseRoadSegments, "road", roadBreakHexIds).forEach(pathData => {
           drawCanvasOverlayPath(ctx, pathData.d, {
             stroke: ROAD_STYLE_COLORS[getOverlayBaseStyle(pathData.style)] || ROAD_STYLE_COLORS.dark_brown,
             width: pathData.isMajor ? 9 : 6,
@@ -5014,7 +5097,7 @@
     const base = hex.baseTerrain;
     if (["barrens", "bleak_barrens", "wastes"].includes(base)) return "woods_dead.svg";
     if (!["plains", "grassland", "lush_grassland", "wetland", "snow", "rock"].includes(base)) return null;
-    if (base === "snow") return pickStableWeighted(hex, "woods", [["woods_con.svg", 6], ["woods_dec.svg", 1]]);
+    if (base === "snow") return pickStableWeighted(hex, "woods", [["woods_con.svg", 5], ["woods_dec.svg", 1], ["woods_dead.svg", 2]]);
     if (base === "rock") return pickStableWeighted(hex, "woods", [["woods_con.svg", 5], ["woods_dec.svg", 2]]);
     if (base === "wetland") return pickStableWeighted(hex, "woods", [["woods_con.svg", 2], ["woods_dec.svg", 3], ["woods_dead.svg", 1]]);
     if (base === "lush_grassland") return pickStableWeighted(hex, "woods", [["woods_dec.svg", 8], ["woods_con.svg", 1], ["woods_dead.svg", 1]]);
@@ -5026,7 +5109,7 @@
     const base = hex.baseTerrain;
     if (["barrens", "bleak_barrens", "wastes"].includes(base)) return "forest_dead.svg";
     if (!["grassland", "lush_grassland", "wetland", "snow", "rock"].includes(base)) return null;
-    if (base === "snow") return pickStableWeighted(hex, "forest", [["forest_con.svg", 6], ["forest_dec.svg", 1]]);
+    if (base === "snow") return pickStableWeighted(hex, "forest", [["forest_con.svg", 5], ["forest_dec.svg", 1], ["forest_dead.svg", 2]]);
     if (base === "rock") return pickStableWeighted(hex, "forest", [["forest_con.svg", 5], ["forest_dec.svg", 2]]);
     if (base === "wetland") return pickStableWeighted(hex, "forest", [["forest_con.svg", 3], ["forest_dec.svg", 4], ["forest_dead.svg", 1]]);
     if (base === "lush_grassland") return pickStableWeighted(hex, "forest", [["forest_dec.svg", 8], ["forest_con.svg", 2], ["forest_dead.svg", 1]]);
@@ -5057,8 +5140,10 @@
     if (["barrens", "bleak_barrens"].includes(base) && isRelief) return "#b88a62";
     if (["barrens", "bleak_barrens"].includes(base) && ["shrub", "cactus_scrub"].includes(featureId)) return "#958a57";
     if (base === "wastes" && isRelief) return "#8a675b";
-    if (featureId === "jungle") return "#519942";
-    if (["wetland", "jungle_floor"].includes(base) && isVegetation) return base === "jungle_floor" ? "#63a56d" : "#5d9380";
+    if (featureId === "jungle") return base === "jungle_floor" ? "#167311" : base === "wetland" ? "#53993A" : "#519942";
+    if (["wetland", "jungle_floor"].includes(base) && isVegetation) {
+      return base === "jungle_floor" ? "#167311" : "#53993A";
+    }
     if (featureId === "volcano") return "#2b2020";
     if (featureId === "kelp") return "#1f5a45";
     if (featureId === "reef") return "#7b5a4a";
@@ -5067,7 +5152,7 @@
     if (file.includes("jungle_temp")) return "#244a35";
     if (file.includes("_dead")) {
       if (base === "wastes") return "#8e9294";
-      if (base === "lush_grassland") return "#8a5f4f";
+      if (base === "lush_grassland" || base === "wetland") return "#8a5f4f";
       if (["barrens", "bleak_barrens"].includes(base)) return "#8f6f68";
       return "#746852";
     }
@@ -5392,8 +5477,11 @@
       renderEraseOverlayPreview(fragment, renderer.drawing.hoverEraseHexId);
     }
 
-    if (["mist", "farmland"].includes(renderer.drawing.tool) && renderer.drawing.hoverMistHexIds?.length) {
-      renderMistBrushPreview(fragment, visibleHexes);
+    if (["mist", "farmland"].includes(renderer.drawing.tool) && (
+      renderer.drawing.hoverMistHexIds?.length ||
+      hasHexStyleBrushPreview(renderer.drawing.tool)
+    )) {
+      renderMistBrushPreview(fragment, visibleHexes, renderer.drawing.tool);
     }
 
     if ((renderer.drawing.tool === "terrain" || renderer.drawing.tool === "terrain-eyedropper" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase" || renderer.drawing.tool === "feature-eyedropper" || REGION_PAINT_TYPES.has(renderer.drawing.tool)) && renderer.drawing.hoverBrushHexIds?.length) {
@@ -5479,6 +5567,8 @@
 
   function getPrimaryPoiMarkerRecord(pois) {
     return [...(pois || [])].sort((left, right) => {
+      const primaryDelta = getPoiMarkerPrimaryDisplayRank(left) - getPoiMarkerPrimaryDisplayRank(right);
+      if (primaryDelta !== 0) return primaryDelta;
       const notorietyDelta = getPoiMarkerNotorietyRank(left) - getPoiMarkerNotorietyRank(right);
       if (notorietyDelta !== 0) return notorietyDelta;
       return String(left?.Name || left?.POI_ID || "")
@@ -5507,6 +5597,25 @@
   function getPoiMarkerTypeValue(poi) {
     return window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || poi?.type || "")
       || String(poi?.POI_Type_Value || poi?.POI_Type || poi?.type || "").trim().toLowerCase();
+  }
+
+  function getPoiMarkerPrimaryDisplayRank(poi) {
+    const type = getPoiMarkerTypeValue(poi);
+    if (type === "settlement") return 0;
+    if (type === "stronghold") return 1;
+    if (["ruin", "holy_site", "arcane_site", "wilderness_site", "hazard", "landmark"].includes(type)) return 2;
+    if (type === "resource_site") return 3;
+    if (type === "waypoint") return 4;
+    if (type === "dungeon_complex") return 6;
+    if (type === "dungeon") return 7;
+
+    const family = window.CampaignPoiIcons?.getIconFamily?.(poi?.POI_Icon || poi?.poi_icon || "") || "";
+    if (family === "settlement") return 0;
+    if (family === "stronghold") return 1;
+    if (family === "resource_site") return 3;
+    if (family === "waypoint") return 4;
+    if (family === "dungeon") return 7;
+    return 5;
   }
 
   function getPoiMarkerShapeKind(poi) {
@@ -5893,17 +6002,54 @@
     }
   }
 
-  function renderMistBrushPreview(fragment, visibleHexes) {
+  function renderMistBrushPreview(fragment, visibleHexes, overlayType = "mist") {
     const visibleIds = new Set(visibleHexes.map(hex => hex.id));
-    renderer.drawing.hoverMistHexIds
+    const previewIds = new Set([
+      ...(renderer.drawing.hoverMistHexIds || []),
+      ...getHexStyleBrushPreviewHexIds(overlayType)
+    ]);
+    [...previewIds]
       .map(hexId => hexForPathPoint(hexId))
       .filter(hex => hex && visibleIds.has(hex.id))
       .forEach(hex => {
+        const previewNode = createHexStyleBrushPreviewNode(hex, overlayType);
+        if (previewNode) {
+          fragment.appendChild(previewNode);
+          return;
+        }
         const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
         polygon.setAttribute("class", "generated-map-mist-brush-preview");
         polygon.setAttribute("points", hex.points.map(point => `${point.x},${point.y}`).join(" "));
         fragment.appendChild(polygon);
       });
+  }
+
+  function createHexStyleBrushPreviewNode(hex, overlayType = "mist") {
+    if (!hex || !shouldRenderFeatureArt()) return null;
+    const file = overlayType === "farmland" ? FEATURE_ART_FILES.farmland : FEATURE_ART_FILES.mist;
+    const asset = renderer.featureAssets.get(file);
+    if (!asset) return null;
+
+    const color = overlayType === "farmland"
+      ? getFeatureArtTint(hex, { featureId: "farmland", file })
+      : "#f0f0e8";
+    const opacity = overlayType === "farmland"
+      ? getFeatureArtOpacity(hex, { featureId: "farmland", opacity: FEATURE_ART_OPACITY.farmland || 0.64 }, getFeatureArtZoomOpacity())
+      : FEATURE_ART_OPACITY.mist || 0.24;
+    const box = applyFeatureArtSizeMultiplier(featureArtDrawBox(hex, 0), overlayType);
+
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("class", `generated-map-${overlayType}-brush-art-preview`);
+    icon.setAttribute("viewBox", asset.viewBox);
+    icon.setAttribute("x", String(box.x));
+    icon.setAttribute("y", String(box.y));
+    icon.setAttribute("width", String(box.width));
+    icon.setAttribute("height", String(box.height));
+    icon.setAttribute("opacity", String(opacity));
+    icon.setAttribute("aria-hidden", "true");
+    icon.style.color = color;
+    icon.innerHTML = asset.body;
+    return icon;
   }
 
   function renderEditorBrushPreview(fragment, visibleHexes) {
@@ -7001,13 +7147,61 @@
     if (!centerHex) return [];
     const radius = Math.max(0, (renderer.drawing.mistBrushSize || 1) - 1);
     const noise = Math.max(0, Math.min(90, renderer.drawing.mistNoise || 0)) / 100;
-    return getHexesInRange(centerHex, radius)
+    const hexIds = getHexesInRange(centerHex, radius)
       .filter(hex => {
         if (hex.id === centerHex.id || noise <= 0) return true;
         const roll = seededPathFloat(`${tool}:${centerHex.id}:${hex.id}:${renderer.drawing.mistBrushSize}:${renderer.drawing.mistNoise}`);
         return roll >= noise;
       })
       .map(hex => hex.id);
+    return tool === "farmland" ? filterFarmlandBrushHexIds(hexIds) : hexIds;
+  }
+
+  function filterFarmlandBrushHexIds(hexIds = []) {
+    return [...new Set(hexIds || [])]
+      .map(hexId => renderer.hexesById.get(hexId))
+      .filter(isEligibleFarmlandHex)
+      .map(hex => hex.id);
+  }
+
+  function getHexStyleBrushPreviewState(overlayType) {
+    return renderer.drawing.hexStyleBrushPreview?.[overlayType] || null;
+  }
+
+  function getHexStyleBrushPreviewHexIds(overlayType) {
+    const state = getHexStyleBrushPreviewState(overlayType);
+    if (!state) return [];
+    return [...new Set([...(state.pending || []), ...(state.inflight || [])])];
+  }
+
+  function hasHexStyleBrushPreview(overlayType) {
+    return getHexStyleBrushPreviewHexIds(overlayType).length > 0;
+  }
+
+  function clearHexStyleBrushPreview(overlayType = "") {
+    const overlayTypes = overlayType ? [overlayType] : ["mist", "farmland"];
+    overlayTypes.forEach(type => {
+      const state = getHexStyleBrushPreviewState(type);
+      if (!state) return;
+      state.pending.clear();
+      state.inflight.clear();
+    });
+  }
+
+  function queueHexStyleBrushPreview(overlayType, hexIds = []) {
+    const state = getHexStyleBrushPreviewState(overlayType);
+    if (!state) return [];
+    const existingHexIds = new Set((renderer.mapOverlays || [])
+      .filter(overlay => overlay.Overlay_Type === overlayType)
+      .map(overlay => overlay.Hex_ID_Ref)
+      .filter(Boolean));
+    const added = [];
+    [...new Set(hexIds || [])].forEach(hexId => {
+      if (!hexId || existingHexIds.has(hexId) || state.pending.has(hexId) || state.inflight.has(hexId)) return;
+      state.pending.add(hexId);
+      added.push(hexId);
+    });
+    return added;
   }
 
   function getHexesInRange(centerHex, radius) {
@@ -9166,7 +9360,8 @@
       tool: "road",
       style: "dark_brown",
       routeMetadata: { isMajorRoute: false, routeName: "" },
-      emptyMessage: "Generated roads already matched existing road overlays."
+      emptyMessage: "Generated roads already matched existing road overlays.",
+      existingKeyMode: renderer.drawing.generationIncludeTradeRoutes ? "route" : "type"
     });
   }
 
@@ -9209,9 +9404,8 @@
       if (!await ensurePoiGenerationRiverBackdrop()) return;
       const existingPois = Array.isArray(db?.raw?.pois) ? db.raw.pois : [];
       const replaceGeneratedPois = Boolean(renderer.drawing.generationReplaceGeneratedPois);
-      const generatedPoisToReplace = replaceGeneratedPois
-        ? getPoiHistoryRecords(existingPois.filter(poi => poi?.Generation_Source))
-        : [];
+      let purgedGeneratedPoiHistory = [];
+      let purgedGeneratedGroupHistory = [];
       const drafts = generator.generatePoiDrafts({
         ...getPoiGeneratorOptions(campaign.id),
         hexes: renderer.hexes,
@@ -9226,27 +9420,34 @@
         return;
       }
 
-      if (generatedPoisToReplace.length) {
+      if (replaceGeneratedPois) {
         const purgeResult = await purgePois({
           generatedOnly: true,
           skipConfirm: true,
           silentIfEmpty: true,
-          showSuccessAlert: false
+          showSuccessAlert: false,
+          deferHistory: true
         });
         if (purgeResult?.success === false) return;
+        purgedGeneratedPoiHistory = Array.isArray(purgeResult?.historyPois) ? purgeResult.historyPois : [];
+        purgedGeneratedGroupHistory = Array.isArray(purgeResult?.historyGroups) ? purgeResult.historyGroups : [];
       }
 
       const result = await persistGeneratedPois(campaign.id, drafts, { showSuccessAlert: false });
       const historyPois = [
-        ...generatedPoisToReplace.map(poi => ({ ...poi, __undoDeleted: true })),
+        ...purgedGeneratedPoiHistory.map(poi => ({ ...poi, __undoDeleted: true })),
         ...((result?.historyPois || []).map(poi => ({ ...poi, __undoDeleted: false })))
       ];
-      const poiHistoryAction = historyPois.length ? { type: "poi", pois: historyPois } : null;
+      const historyGroups = purgedGeneratedGroupHistory.map(group => ({ ...group, __undoDeleted: true }));
+      const poiHistoryAction = (historyPois.length || historyGroups.length)
+        ? { type: "poi", pois: historyPois, groups: historyGroups }
+        : null;
       let farmlandHistoryAction = null;
       if (result?.success) {
         try {
           const farmlandResult = await regenerateGeneratedFarmlandOverlays(campaign.id, {
-            pois: Array.isArray(db?.raw?.pois) ? db.raw.pois : []
+            pois: Array.isArray(db?.raw?.pois) ? db.raw.pois : [],
+            replaceExisting: replaceGeneratedPois
           });
           if (Array.isArray(farmlandResult?.historyOverlays) && farmlandResult.historyOverlays.length) {
             farmlandHistoryAction = {
@@ -9350,6 +9551,7 @@
     const skipConfirm = options.skipConfirm === true;
     const silentIfEmpty = options.silentIfEmpty === true;
     const showSuccessAlert = options.showSuccessAlert !== false;
+    const deferHistory = options.deferHistory === true;
     const campaign = getActiveCampaign?.();
     if (!campaign || renderer.drawing.saving) return { success: false, cancelled: true };
 
@@ -9413,7 +9615,7 @@
       refreshPoiViews?.();
       const poiHistory = getPoiHistoryRecords(poiRows, { undoDeleted: true });
       const groupHistory = getPoiGroupHistoryRecords(groupRows, { undoDeleted: true });
-      if (poiHistory.length || groupHistory.length) {
+      if (!deferHistory && (poiHistory.length || groupHistory.length)) {
         pushMapEditAction({
           type: "poi",
           purgeAction: true,
@@ -9425,7 +9627,13 @@
         ? `${deletedPoiCount} ${generatedOnly ? "generated " : ""}POI${deletedPoiCount === 1 ? "" : "s"} and ${deletedGroupCount} ${generatedOnly ? "generated " : ""}grouped POI${deletedGroupCount === 1 ? "" : "s"}`
         : `${deletedPoiCount} ${generatedOnly ? "generated " : ""}POI${deletedPoiCount === 1 ? "" : "s"}`;
       if (showSuccessAlert) window.alert?.(`Purged ${successSummary}.`);
-      return { success: true, deletedPoiCount, deletedGroupCount };
+      return {
+        success: true,
+        deletedPoiCount,
+        deletedGroupCount,
+        historyPois: poiHistory,
+        historyGroups: groupHistory
+      };
     } catch (error) {
       console.error(`Unable to purge ${generatedOnly ? "generated " : ""}POIs:`, error);
       if (deletedPoiCount || deletedGroupCount) {
@@ -9461,7 +9669,7 @@
     if (!existing) return true;
     const replaceGeneratedPois = Boolean(renderer.drawing.generationReplaceGeneratedPois);
     const message = replaceGeneratedPois
-      ? "Replace existing generated POIs before creating new ones? Manually created POIs will be kept, and new POIs still save directly to the live map."
+      ? "Replace existing generated POIs and farmland overlays before creating new POIs? Manually created POIs will be kept, and new POIs still save directly to the live map."
       : `Generate new POIs on top of ${existing} existing saved POI${existing === 1 ? "" : "s"}? This saves directly to the live map and avoids occupied hexes when possible.`;
     return showMapConfirm(message, {
       title: replaceGeneratedPois ? "Replace POIs?" : "Generate POIs?",
@@ -9630,6 +9838,7 @@
       .filter(poi => poi?.Hex_ID_Ref)
       .map((poi, index) => ({
         snapshot_order: index + 1,
+        ref_code: poi.POI_ID || "",
         name: poi.Name || "",
         hex_ref: poi.Hex_ID_Ref || "",
         group_ref: poi.POI_Group_ID || "",
@@ -9664,6 +9873,14 @@
     return db?.hexesById?.[hexRef]?.__uuid
       || db?.raw?.hexes?.find(hex => hex.Hex_ID === hexRef)?.__uuid
       || "";
+  }
+
+  function resolvePoiHistoryUuid(poi) {
+    const uuid = poi?.__uuid || "";
+    if (uuid && (db?.raw?.pois || []).some(row => row?.__uuid === uuid)) return uuid;
+    const refCode = String(poi?.POI_ID || "").trim();
+    if (!refCode) return uuid;
+    return (db?.raw?.pois || []).find(row => row?.POI_ID === refCode)?.__uuid || uuid;
   }
 
   function resolvePoiGroupUuid(groupRef) {
@@ -9780,10 +9997,10 @@
     return (Array.isArray(created) ? created : [created]).filter(Boolean)[0] || null;
   }
 
-  function previewGeneratedOverlayRoutes({ campaignId, routes, tool, style, routeMetadata, emptyMessage }) {
+  function previewGeneratedOverlayRoutes({ campaignId, routes, tool, style, routeMetadata, emptyMessage, existingKeyMode = "type" }) {
     discardOverlayPreviewType(tool, { silent: true });
 
-    const segments = getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting: true });
+    const segments = getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting: true, existingKeyMode });
 
     if (!segments.length) {
       window.alert?.(emptyMessage || "No new overlays were generated.");
@@ -9805,9 +10022,9 @@
     updateGenerationControls();
   }
 
-  async function persistGeneratedOverlayRoutes({ campaignId, routes, tool, style, routeMetadata, emptyMessage }) {
+  async function persistGeneratedOverlayRoutes({ campaignId, routes, tool, style, routeMetadata, emptyMessage, existingKeyMode = "type" }) {
     const existingOverlayIds = new Set((renderer.mapOverlays || []).map(overlay => overlay.__uuid).filter(Boolean));
-    const segments = getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting: true });
+    const segments = getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting: true, existingKeyMode });
 
     if (!segments.length) {
       window.alert?.(emptyMessage || "No new overlays were generated.");
@@ -9818,26 +10035,49 @@
     return Array.isArray(saved) && saved.length > 0;
   }
 
-  function getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting = true }) {
+  function getGeneratedOverlaySegments({ routes, tool, style, routeMetadata, skipExisting = true, existingKeyMode = "type" }) {
     const existingKeys = new Set((renderer.mapOverlays || [])
-      .filter(overlay => !overlay.__preview && overlay.Overlay_Type === tool && overlay.From_Hex_ID_Ref && overlay.To_Hex_ID_Ref)
-      .map(overlay => overlaySegmentKey(tool, overlay.From_Hex_ID_Ref, overlay.To_Hex_ID_Ref)));
+      .filter(overlay => !overlay.__preview && PATH_OVERLAY_TYPES.has(overlay.Overlay_Type) && overlay.From_Hex_ID_Ref && overlay.To_Hex_ID_Ref)
+      .map(overlay => overlaySegmentExistingKey(
+        overlay.Overlay_Type,
+        overlay.From_Hex_ID_Ref,
+        overlay.To_Hex_ID_Ref,
+        {
+          isMajorRoute: Boolean(overlay.Is_Major_Route),
+          routeName: overlay.Route_Name || ""
+        },
+        existingKeyMode
+      )));
+    const existingEdgeKeys = new Set((renderer.mapOverlays || [])
+      .filter(overlay => !overlay.__preview && PATH_OVERLAY_TYPES.has(overlay.Overlay_Type) && overlay.From_Hex_ID_Ref && overlay.Edge)
+      .map(overlay => overlayEdgeExistingKey(
+        overlay.Overlay_Type,
+        overlay.From_Hex_ID_Ref,
+        overlay.Edge,
+        {
+          isMajorRoute: Boolean(overlay.Is_Major_Route),
+          routeName: overlay.Route_Name || ""
+        },
+        existingKeyMode
+      )));
     const queuedKeys = new Set();
     const segments = [];
 
     routes.forEach(route => {
       const sequence = Array.isArray(route) ? route : route?.sequence || [];
-      const segmentRouteMetadata = getRouteMetadataForOverlayRoute(route, tool, routeMetadata);
+      const routeTool = route && !Array.isArray(route) && route.tool ? route.tool : tool;
+      const segmentRouteMetadata = getRouteMetadataForOverlayRoute(route, routeTool, routeMetadata);
       const routeStyle = route && !Array.isArray(route) && route.style
         ? route.style
         : style;
       if (route?.startEdge && sequence.length) {
         const fromHexId = sequence[0];
-        const key = `${tool}:${fromHexId}:edge:${route.startEdge}`;
-        if (!queuedKeys.has(key)) {
-          queuedKeys.add(key);
+        const key = overlayEdgeExistingKey(routeTool, fromHexId, route.startEdge, segmentRouteMetadata, existingKeyMode);
+        const queuedKey = `${routeTool}:${fromHexId}:edge:${route.startEdge}`;
+        if (!(skipExisting && existingEdgeKeys.has(key)) && !queuedKeys.has(queuedKey)) {
+          queuedKeys.add(queuedKey);
           segments.push({
-            tool,
+            tool: routeTool,
             fromHexId,
             toHexId: null,
             edge: route.startEdge,
@@ -9848,25 +10088,28 @@
       }
       sequence.slice(0, -1).forEach((fromHexId, index) => {
         const toHexId = sequence[index + 1];
-        const segmentTool = getPersistedSegmentTool(tool, fromHexId, toHexId);
-        const key = overlaySegmentKey(segmentTool, fromHexId, toHexId);
-        if ((skipExisting && existingKeys.has(key)) || queuedKeys.has(key)) return;
-        queuedKeys.add(key);
+        const segmentTool = getPersistedSegmentTool(routeTool, fromHexId, toHexId);
+        const persistedRouteMetadata = getSegmentRouteMetadata(segmentTool, segmentRouteMetadata);
+        const existingKey = overlaySegmentExistingKey(segmentTool, fromHexId, toHexId, persistedRouteMetadata, existingKeyMode);
+        const queuedKey = overlaySegmentKey(segmentTool, fromHexId, toHexId);
+        if ((skipExisting && existingKeys.has(existingKey)) || queuedKeys.has(queuedKey)) return;
+        queuedKeys.add(queuedKey);
         segments.push({
           tool: segmentTool,
           fromHexId,
           toHexId,
           style: segmentTool === "sea_route" ? "sea_route" : routeStyle,
-          routeMetadata: getSegmentRouteMetadata(segmentTool, segmentRouteMetadata)
+          routeMetadata: persistedRouteMetadata
         });
       });
       if (route?.exitEdge && sequence.length) {
         const fromHexId = sequence[sequence.length - 1];
-        const key = `${tool}:${fromHexId}:edge:${route.exitEdge}`;
-        if (!queuedKeys.has(key)) {
-          queuedKeys.add(key);
+        const key = overlayEdgeExistingKey(routeTool, fromHexId, route.exitEdge, segmentRouteMetadata, existingKeyMode);
+        const queuedKey = `${routeTool}:${fromHexId}:edge:${route.exitEdge}`;
+        if (!(skipExisting && existingEdgeKeys.has(key)) && !queuedKeys.has(queuedKey)) {
+          queuedKeys.add(queuedKey);
           segments.push({
-            tool,
+            tool: routeTool,
             fromHexId,
             toHexId: null,
             edge: route.exitEdge,
@@ -9939,7 +10182,7 @@
 
   async function persistGeneratedPois(campaignId, drafts, options = {}) {
     const showSuccessAlert = options.showSuccessAlert !== false;
-    const registerCreatedPois = window.CampaignCodexPoiMutations?.registerCreatedPoiRowsInLocalDb || registerGeneratedPoiRowsInLocalDb;
+    const registerCreatedPois = registerGeneratedPoiRowsInLocalDb;
     const refreshPoiViews = window.CampaignCodexPoiMutations?.refreshPoiViews || (() => {
       refreshPoiLayerFromDatabase();
     });
@@ -10173,9 +10416,13 @@
   }
 
   async function regenerateGeneratedFarmlandOverlays(campaignId, options = {}) {
-    const farmlandSnapshot = (renderer.mapOverlays || [])
-      .filter(overlay => overlay?.Overlay_Type === "farmland")
-      .map(overlay => ({ ...cloneOverlayRecord(overlay), __undoDeleted: true }));
+    const replaceExisting = options.replaceExisting === true;
+    const existingFarmlandOverlays = (renderer.mapOverlays || [])
+      .filter(overlay => overlay?.Overlay_Type === "farmland");
+    const existingFarmlandHexIds = new Set(existingFarmlandOverlays.map(overlay => overlay?.Hex_ID_Ref).filter(Boolean));
+    const farmlandSnapshot = replaceExisting
+      ? existingFarmlandOverlays.map(overlay => ({ ...cloneOverlayRecord(overlay), __undoDeleted: true }))
+      : [];
     const createdOverlays = [];
 
     try {
@@ -10184,7 +10431,8 @@
         removeLocalOverlaysById(farmlandSnapshot.map(overlay => overlay.__uuid));
       }
 
-      const segments = buildGeneratedFarmlandSegments(options.pois || []);
+      const segments = buildGeneratedFarmlandSegments(options.pois || [])
+        .filter(segment => replaceExisting || !existingFarmlandHexIds.has(segment.fromHexId));
       if (!segments.length) {
         return {
           historyOverlays: farmlandSnapshot,
@@ -10221,6 +10469,784 @@
     return `${type}:${ends[0]}:${ends[1]}`;
   }
 
+  function overlaySegmentExistingKey(type, fromHexId, toHexId, routeMetadata = {}, mode = "type") {
+    const baseKey = overlaySegmentKey(type, fromHexId, toHexId);
+    if (mode !== "route") return baseKey;
+    return `${baseKey}:${routeMetadata.isMajorRoute ? "major" : "minor"}:${routeMetadata.routeName || ""}`;
+  }
+
+  function overlayEdgeExistingKey(type, fromHexId, edge, routeMetadata = {}, mode = "type") {
+    const baseKey = `${type}:${fromHexId}:edge:${edge || ""}`;
+    if (mode !== "route") return baseKey;
+    return `${baseKey}:${routeMetadata.isMajorRoute ? "major" : "minor"}:${routeMetadata.routeName || ""}`;
+  }
+
+  function buildGeneratedTradeRoutes(campaignId) {
+    const anchors = getGeneratedTradeRouteAnchors(campaignId);
+    const seedBase = getGenerationSeedBase(campaignId);
+    const usedRouteNames = new Set();
+    const landAnchors = chooseGeneratedTradeLoopAnchors(anchors, seedBase, 8);
+    if (landAnchors.length < 2) return [];
+    const loopAnchors = chooseGeneratedTradeLoopAnchorOrder(landAnchors, seedBase, Math.min(10, landAnchors.length));
+    const sequence = buildGeneratedTradeLoopSequence(loopAnchors, getGeneratedRoadAnchors(campaignId), seedBase);
+    if (!sequence?.length || sequence.length < 2) return [];
+
+    return [{
+      tool: "road",
+      style: "dark_brown",
+      sequence,
+      routeMetadata: {
+        isMajorRoute: true,
+        routeName: buildGeneratedTradeRouteName("land", loopAnchors[0], loopAnchors[Math.max(1, loopAnchors.length - 1)], seedBase, usedRouteNames, 0)
+      }
+    }];
+  }
+
+  function chooseGeneratedTradeLoopAnchors(anchors, seedBase, maxCount = 8) {
+    const settlementAnchors = (anchors || [])
+      .filter(anchor => anchor?.type === "settlement" && !isWaterHex(anchor.hex));
+    const selected = [];
+    const selectedIds = new Set();
+    const addAnchor = anchor => {
+      if (!anchor?.hex?.id || selectedIds.has(anchor.hex.id) || selected.length >= maxCount) return;
+      selected.push(anchor);
+      selectedIds.add(anchor.hex.id);
+    };
+
+    settlementAnchors
+      .filter(anchor => ["city", "walled_city", "mountain_city"].includes(anchor.icon))
+      .sort((left, right) => right.population - left.population || right.landScore - left.landScore || left.hex.id.localeCompare(right.hex.id))
+      .forEach(addAnchor);
+
+    const portTown = settlementAnchors
+      .filter(anchor => anchor.icon === "port_town" && !selectedIds.has(anchor.hex.id))
+      .sort((left, right) => right.population - left.population || right.landScore - left.landScore || left.hex.id.localeCompare(right.hex.id))[0];
+    addAnchor(portTown);
+
+    settlementAnchors
+      .filter(anchor => !selectedIds.has(anchor.hex.id))
+      .sort((left, right) => (
+        right.population - left.population ||
+        right.landScore - left.landScore ||
+        seededUnit(`${seedBase}:trade-loop-populous:${left.hex.id}`) - seededUnit(`${seedBase}:trade-loop-populous:${right.hex.id}`) ||
+        left.hex.id.localeCompare(right.hex.id)
+      ))
+      .forEach(addAnchor);
+
+    return selected;
+  }
+
+  function chooseGeneratedTradeLoopAnchorOrder(anchors, seedBase, maxCount = 8) {
+    const selected = (anchors || []).slice(0, Math.max(2, maxCount));
+    if (selected.length <= 2) return selected;
+    const center = selected.reduce((sum, anchor) => ({
+      x: sum.x + anchor.hex.center.x,
+      y: sum.y + anchor.hex.center.y
+    }), { x: 0, y: 0 });
+    center.x /= selected.length;
+    center.y /= selected.length;
+
+    const clockwise = seededUnit(`${seedBase}:trade-loop-direction`) < 0.5;
+    const startOffset = stableHash(`${seedBase}:trade-loop-start`) % selected.length;
+    const ordered = selected
+      .map(anchor => ({
+        anchor,
+        angle: Math.atan2(anchor.hex.center.y - center.y, anchor.hex.center.x - center.x)
+      }))
+      .sort((left, right) => clockwise
+        ? left.angle - right.angle || left.anchor.hex.id.localeCompare(right.anchor.hex.id)
+        : right.angle - left.angle || left.anchor.hex.id.localeCompare(right.anchor.hex.id))
+      .map(entry => entry.anchor);
+    return ordered.slice(startOffset).concat(ordered.slice(0, startOffset));
+  }
+
+  function buildGeneratedTradeLoopSequence(orderedAnchors, detourAnchors, seedBase) {
+    if (!Array.isArray(orderedAnchors) || orderedAnchors.length < 2) return [];
+    const usedDetourIds = new Set();
+    const stops = orderedAnchors.length >= 3
+      ? orderedAnchors.concat(orderedAnchors[0])
+      : orderedAnchors;
+    const sequence = [];
+    for (let index = 0; index < stops.length - 1; index += 1) {
+      const fromAnchor = stops[index];
+      const toAnchor = stops[index + 1];
+      const detours = chooseGeneratedRoadDetours(fromAnchor, toAnchor, detourAnchors, usedDetourIds, seedBase, index, 1.35, {
+        maxDetours: 1
+      });
+      const leg = buildGeneratedAnchorRouteSequence("road", fromAnchor, toAnchor, detours, {
+        majorRoute: true,
+        generatedRoadMode: true,
+        pathSalt: `${seedBase}:trade-loop:${index}:${fromAnchor.hex.id}:${toAnchor.hex.id}`
+      });
+      if (!leg?.length || leg.length < 2) continue;
+      if (!sequence.length) sequence.push(...leg);
+      else sequence.push(...leg.slice(1));
+      detours.forEach(anchor => usedDetourIds.add(anchor.hex.id));
+    }
+    return sequence;
+  }
+
+  function addGeneratedLandTradeRoutes({ routes, anchors, detourAnchors = [], seedBase, usedRouteNames, maxCount }) {
+    if (!Array.isArray(anchors) || anchors.length < 2 || maxCount <= 0) return;
+    const primaryAnchors = anchors.slice(0, Math.min(8, anchors.length));
+    const connected = [primaryAnchors[0]];
+    const remaining = primaryAnchors.slice(1);
+    const usedDetourIds = new Set();
+    let step = 0;
+
+    while (remaining.length && step < maxCount) {
+      const candidate = connected
+        .flatMap(fromAnchor => remaining.map(toAnchor => ({
+          fromAnchor,
+          toAnchor,
+          score: getGeneratedTradePairScore(fromAnchor, toAnchor, seedBase, "land", step)
+        })))
+        .sort((left, right) => left.score - right.score || left.toAnchor.hex.id.localeCompare(right.toAnchor.hex.id))[0];
+      if (!candidate) break;
+
+      const detours = chooseGeneratedRoadDetours(candidate.fromAnchor, candidate.toAnchor, detourAnchors, usedDetourIds, seedBase, step, 1.25, {
+        maxDetours: 2
+      });
+      const sequence = buildGeneratedAnchorRouteSequence("road", candidate.fromAnchor, candidate.toAnchor, detours, {
+        majorRoute: true,
+        generatedRoadMode: true,
+        pathSalt: `${seedBase}:trade-road:${step}:${candidate.fromAnchor.hex.id}:${candidate.toAnchor.hex.id}`
+      });
+      remaining.splice(remaining.findIndex(anchor => anchor.hex.id === candidate.toAnchor.hex.id), 1);
+      if (!sequence?.length || sequence.length < 2) continue;
+
+      const routeName = buildGeneratedTradeRouteName("land", candidate.fromAnchor, candidate.toAnchor, seedBase, usedRouteNames, step);
+      routes.push({
+        tool: "road",
+        style: "dark_brown",
+        sequence,
+        routeMetadata: {
+          isMajorRoute: true,
+          routeName
+        }
+      });
+      detours.forEach(anchor => usedDetourIds.add(anchor.hex.id));
+      connected.push(candidate.toAnchor);
+      step += 1;
+    }
+  }
+
+  function addGeneratedSeaTradeRoutes({ routes, anchors, seedBase, usedRouteNames, dangerHexIds, usedSeaAnchorIds, maxCount }) {
+    if (!Array.isArray(anchors) || anchors.length < 2 || maxCount <= 0) return;
+    const pairKeySet = new Set();
+    const candidates = [];
+    anchors.slice(0, Math.min(12, anchors.length)).forEach((fromAnchor, fromIndex) => {
+      anchors.slice(fromIndex + 1, Math.min(12, anchors.length)).forEach(toAnchor => {
+        if (!fromAnchor.seaAccess || !toAnchor.seaAccess) return;
+        const distance = roadPathHeuristic(fromAnchor.seaAccess, toAnchor.seaAccess);
+        if (distance < 5) return;
+        candidates.push({
+          fromAnchor,
+          toAnchor,
+          distance,
+          score: getGeneratedTradePairScore(fromAnchor, toAnchor, seedBase, "sea", candidates.length)
+        });
+      });
+    });
+
+    candidates
+      .sort((left, right) => left.score - right.score || left.fromAnchor.hex.id.localeCompare(right.fromAnchor.hex.id))
+      .some((candidate, index) => {
+        if (routes.filter(route => route.tool === "sea_route").length >= maxCount) return true;
+        const pairKey = [candidate.fromAnchor.hex.id, candidate.toAnchor.hex.id].sort().join(":");
+        if (pairKeySet.has(pairKey)) return false;
+        const fromEndpoint = getGeneratedSeaTradeEndpointHex(candidate.fromAnchor);
+        const toEndpoint = getGeneratedSeaTradeEndpointHex(candidate.toAnchor);
+        if (!fromEndpoint?.id || !toEndpoint?.id || fromEndpoint.id === toEndpoint.id) return false;
+        const sequence = getSeaRoutePathSequence(fromEndpoint.id, toEndpoint.id, {
+          seaDangerHexIds: dangerHexIds
+        });
+        if (!sequence?.length || sequence.length < 6) return false;
+        pairKeySet.add(pairKey);
+        const routeName = buildGeneratedTradeRouteName("sea", candidate.fromAnchor, candidate.toAnchor, seedBase, usedRouteNames, index);
+        addGeneratedSeaTradeLandConnector(routes, candidate.fromAnchor, fromEndpoint, routeName, seedBase, `sea-from:${index}`);
+        addGeneratedSeaTradeLandConnector(routes, candidate.toAnchor, toEndpoint, routeName, seedBase, `sea-to:${index}`);
+        routes.push({
+          tool: "sea_route",
+          style: "sea_route",
+          sequence,
+          routeMetadata: {
+            isMajorRoute: true,
+            routeName
+          }
+        });
+        usedSeaAnchorIds?.add(candidate.fromAnchor.hex.id);
+        usedSeaAnchorIds?.add(candidate.toAnchor.hex.id);
+        return false;
+      });
+  }
+
+  function addGeneratedOffMapSeaTradeRoutes({ routes, anchors, seedBase, usedRouteNames, dangerHexIds, usedSeaAnchorIds, maxCount }) {
+    if (!Array.isArray(anchors) || !anchors.length || maxCount <= 0) return;
+    const candidates = anchors
+      .slice(0, Math.min(8, anchors.length))
+      .filter(anchor => isGeneratedOffMapSeaTradeAnchor(anchor))
+      .map((anchor, index) => ({
+        anchor,
+        exit: getGeneratedSeaTradeExit(anchor, seedBase, index),
+        score: -anchor.seaScore + seededUnit(`${seedBase}:offmap-trade:${anchor.hex.id}`) * 22
+      }))
+      .filter(candidate => candidate.exit?.hex?.id && candidate.exit.edge)
+      .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id));
+
+    let added = 0;
+    candidates.forEach((candidate, index) => {
+      if (added >= maxCount) return;
+      const endpoint = getGeneratedSeaTradeEndpointHex(candidate.anchor);
+      if (!endpoint?.id || endpoint.id === candidate.exit.hex.id) return;
+      const sequence = getSeaRoutePathSequence(endpoint.id, candidate.exit.hex.id, {
+        seaDangerHexIds: dangerHexIds
+      });
+      if (!sequence?.length || sequence.length < 6) return;
+      const routeName = buildGeneratedTradeRouteName("offmap-sea", candidate.anchor, null, seedBase, usedRouteNames, index);
+      addGeneratedSeaTradeLandConnector(routes, candidate.anchor, endpoint, routeName, seedBase, `offmap:${index}`);
+      routes.push({
+        tool: "sea_route",
+        style: "sea_route",
+        sequence,
+        exitEdge: candidate.exit.edge,
+        routeMetadata: {
+          isMajorRoute: true,
+          routeName
+        }
+      });
+      usedSeaAnchorIds?.add(candidate.anchor.hex.id);
+      added += 1;
+    });
+  }
+
+  function addGeneratedSeaLandNetworkConnectors({ routes, seaAnchors, landAnchors, usedSeaAnchorIds, seedBase, usedRouteNames, maxCount }) {
+    if (!usedSeaAnchorIds?.size || !Array.isArray(seaAnchors) || !Array.isArray(landAnchors) || maxCount <= 0) return;
+    const inlandAnchors = landAnchors
+      .filter(anchor => !anchor.seaAccess && anchor.landScore >= 58)
+      .slice(0, 12);
+    const fallbackLandAnchors = landAnchors
+      .filter(anchor => anchor.landScore >= 68)
+      .slice(0, 12);
+    const targets = inlandAnchors.length ? inlandAnchors : fallbackLandAnchors;
+    if (!targets.length) return;
+
+    let added = 0;
+    seaAnchors
+      .filter(anchor => usedSeaAnchorIds.has(anchor.hex.id) && !isWaterHex(anchor.hex))
+      .map(anchor => {
+        const target = targets
+          .filter(candidate => candidate.hex.id !== anchor.hex.id)
+          .map(candidate => ({
+            anchor: candidate,
+            distance: roadPathHeuristic(anchor.hex, candidate.hex),
+            score: roadPathHeuristic(anchor.hex, candidate.hex)
+              - candidate.landScore * 0.08
+              + seededUnit(`${seedBase}:sea-land-network:${anchor.hex.id}:${candidate.hex.id}`) * 2.5
+          }))
+          .filter(candidate => candidate.distance >= 4)
+          .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id))[0];
+        return target ? { anchor, target, score: target.score } : null;
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id))
+      .forEach((candidate, index) => {
+        if (added >= maxCount) return;
+        const sequence = getPathOverlaySequence("road", candidate.anchor.hex.id, candidate.target.anchor.hex.id, "", {
+          majorRoute: true,
+          generatedRoadMode: true,
+          pathSalt: `${seedBase}:sea-land-network:${index}:${candidate.anchor.hex.id}:${candidate.target.anchor.hex.id}`
+        });
+        if (!sequence?.length || sequence.length < 5) return;
+        routes.push({
+          tool: "road",
+          style: "dark_brown",
+          sequence,
+          routeMetadata: {
+            isMajorRoute: true,
+            routeName: getGeneratedTradeConnectorRouteName(
+              buildGeneratedTradeRouteName("land", candidate.anchor, candidate.target.anchor, seedBase, usedRouteNames, index),
+              sequence,
+              7
+            )
+          }
+        });
+        added += 1;
+      });
+  }
+
+  function addGeneratedMajorTradeAnchorCompletion({ routes, anchors, seedBase, usedRouteNames, maxCount }) {
+    if (!Array.isArray(routes) || !Array.isArray(anchors) || maxCount <= 0) return;
+    const networkHexIds = getGeneratedRouteHexIdSet(routes);
+    if (!networkHexIds.size) return;
+    const candidates = anchors
+      .filter(isGeneratedMajorTradeAnchor)
+      .filter(anchor => !networkHexIds.has(anchor.hex.id))
+      .map(anchor => {
+        const target = getNearestGeneratedTradeNetworkAnchor(anchor, networkHexIds, seedBase);
+        return target ? {
+          anchor,
+          target,
+          score: target.score - anchor.landScore * 0.12 + seededUnit(`${seedBase}:major-trade-completion:${anchor.hex.id}`) * 2
+        } : null;
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id));
+
+    let added = 0;
+    candidates.forEach((candidate, index) => {
+      if (added >= maxCount) return;
+      const sequence = getPathOverlaySequence("road", candidate.anchor.hex.id, candidate.target.anchor.hex.id, "", {
+        majorRoute: true,
+        generatedRoadMode: true,
+        pathSalt: `${seedBase}:major-trade-completion:${index}:${candidate.anchor.hex.id}:${candidate.target.anchor.hex.id}`
+      });
+      if (!sequence?.length || sequence.length < 2) return;
+      routes.push({
+        tool: "road",
+        style: "dark_brown",
+        sequence,
+        routeMetadata: {
+          isMajorRoute: true,
+          routeName: getGeneratedTradeConnectorRouteName(
+            buildGeneratedTradeRouteName("land", candidate.anchor, candidate.target.anchor, seedBase, usedRouteNames, index),
+            sequence,
+            6
+          )
+        }
+      });
+      sequence.forEach(hexId => networkHexIds.add(hexId));
+      added += 1;
+    });
+  }
+
+  function addGeneratedRiverTradeRoutes({ routes, anchors, riverNetwork, seedBase, usedRouteNames, maxCount }) {
+    if (!riverNetwork?.nodes?.size || !Array.isArray(anchors) || maxCount <= 0) return;
+    const riverAnchors = anchors
+      .filter(anchor => anchor.riverAccess?.hex?.id && anchor.riverAccess?.componentId)
+      .sort((left, right) => right.landScore - left.landScore || left.hex.id.localeCompare(right.hex.id))
+      .slice(0, 12);
+    if (riverAnchors.length < 2) return;
+
+    const candidates = [];
+    riverAnchors.forEach((fromAnchor, fromIndex) => {
+      riverAnchors.slice(fromIndex + 1).forEach(toAnchor => {
+        if (fromAnchor.riverAccess.componentId !== toAnchor.riverAccess.componentId) return;
+        const distance = roadPathHeuristic(fromAnchor.riverAccess.hex, toAnchor.riverAccess.hex);
+        if (distance < 5) return;
+        candidates.push({
+          fromAnchor,
+          toAnchor,
+          score: distance * 1.55
+            - (fromAnchor.landScore + toAnchor.landScore) * 0.22
+            + seededUnit(`${seedBase}:trade-river-pair:${fromAnchor.hex.id}:${toAnchor.hex.id}`) * 5
+        });
+      });
+    });
+
+    let added = 0;
+    candidates
+      .sort((left, right) => left.score - right.score || left.fromAnchor.hex.id.localeCompare(right.fromAnchor.hex.id))
+      .forEach((candidate, index) => {
+        if (added >= maxCount) return;
+        const sequence = getTradeRiverNetworkSequence(
+          riverNetwork,
+          candidate.fromAnchor.riverAccess.hex.id,
+          candidate.toAnchor.riverAccess.hex.id
+        );
+        if (!sequence?.length || sequence.length < 4) return;
+        const routeName = buildGeneratedTradeRouteName("river", candidate.fromAnchor, candidate.toAnchor, seedBase, usedRouteNames, index);
+        addGeneratedRiverTradeLandConnector(routes, candidate.fromAnchor, candidate.fromAnchor.riverAccess.hex, routeName, seedBase, `river-from:${index}`);
+        addGeneratedRiverTradeLandConnector(routes, candidate.toAnchor, candidate.toAnchor.riverAccess.hex, routeName, seedBase, `river-to:${index}`);
+        routes.push({
+          tool: "river",
+          style: composeOverlayStyle("river", [OVERLAY_STYLE_FLAGS.riverNoAutoFalls]),
+          sequence,
+          routeMetadata: {
+            isMajorRoute: true,
+            routeName
+          }
+        });
+        added += 1;
+      });
+  }
+
+  function getGeneratedTradeRouteAnchors(campaignId, riverNetwork = null) {
+    const seedBase = getGenerationSeedBase(campaignId);
+    const hexById = new Map();
+    renderer.hexes.forEach(hex => {
+      hexById.set(hex.id, hex);
+      if (hex.label) hexById.set(hex.label, hex);
+    });
+    const bestByHex = new Map();
+
+    (db?.raw?.pois || []).forEach(poi => {
+      const hex = hexById.get(poi?.Hex_ID_Ref || "");
+      if (!hex) return;
+      const profile = getGeneratedTradeAnchorProfile(poi, hex, campaignId, seedBase, riverNetwork);
+      if (!profile) return;
+      const existing = bestByHex.get(hex.id);
+      if (!existing || profile.totalScore > existing.totalScore) bestByHex.set(hex.id, profile);
+    });
+
+    return [...bestByHex.values()]
+      .sort((left, right) => right.totalScore - left.totalScore || left.hex.id.localeCompare(right.hex.id));
+  }
+
+  function getGeneratedTradeAnchorProfile(poi, hex, campaignId, seedBase, riverNetwork = null) {
+    if (!poi || !hex) return null;
+    const icon = getStoredPoiIconValue(poi).toLowerCase();
+    const type = getStoredPoiTypeValue(poi);
+    const iconMeta = getPoiIconMetaForRoads(poi);
+    const family = iconMeta?.family || "";
+    const traitSet = new Set(iconMeta?.traits || []);
+    const tagSet = getPoiTagSet(poi);
+    const population = parseRoadPoiPopulation(poi);
+    const text = `${poi?.Name || ""} ${poi?.POI_Type || ""} ${icon} ${[...tagSet].join(" ")}`.toLowerCase();
+    const isSettlement = type === "settlement" || family === "settlement";
+    const isStronghold = type === "stronghold" || family === "stronghold";
+    const isResource = type === "resource_site" || family === "resource_site";
+    const isRoadstop = family === "waypoint" && (traitSet.has("roadside") || traitSet.has("rest") || traitSet.has("crossroads") || tagSet.has("crossroads"));
+    const isTradeSite = traitSet.has("trade") || tagSet.has("trade") || /market|port|harbor|harbour|dock|crossroads|mill|mine|quarry|fish|farm|inn/.test(text);
+    const isWaterAnchor = isTradeSeaWaterHex(hex);
+    const seaAccess = isWaterAnchor ? hex : getTradeSeaAccessHex(hex, campaignId);
+    const riverAccess = !isWaterAnchor ? getTradeRiverAccess(hex, riverNetwork) : null;
+    let landScore = 0;
+    let seaScore = 0;
+
+    if (isSettlement && !isWaterAnchor) {
+      landScore += 48;
+      if (traitSet.has("major") || traitSet.has("urban") || ["city", "walled_city", "port_town", "mountain_city"].includes(icon)) landScore += 30;
+      if (population >= 9000) landScore += 26;
+      else if (population >= 3500) landScore += 16;
+      else if (population >= 900) landScore += 8;
+      if (traitSet.has("lawless") || tagSet.has("lawless")) landScore -= 6;
+    }
+    if (isStronghold && !isWaterAnchor) landScore += 34;
+    if (isResource && isTradeSite && !isWaterAnchor) landScore += 30;
+    else if (isResource && !isWaterAnchor) landScore += 14;
+    if (isRoadstop && !isWaterAnchor) landScore += 18;
+    if ((traitSet.has("crossroads") || tagSet.has("crossroads")) && !isWaterAnchor) landScore += 24;
+    if (seaAccess && (isSettlement || isTradeSite || traitSet.has("coastal") || traitSet.has("major_port"))) seaScore += landScore + 28;
+    if (seaAccess && ["port_town", "harbor", "docks", "lighthouse", "sea_fort", "fishing_camp"].includes(icon)) seaScore += 36;
+    if (isWaterAnchor && isStronghold) seaScore += 26;
+    if (icon === "sea_fort") seaScore += 18;
+    landScore += seededUnit(`${seedBase}:trade-anchor-land:${poi.POI_ID || poi.__uuid || hex.id}`) * 10;
+    seaScore += seededUnit(`${seedBase}:trade-anchor-sea:${poi.POI_ID || poi.__uuid || hex.id}`) * 10;
+
+    const totalScore = Math.max(landScore, seaScore);
+    if (totalScore < 34) return null;
+    return {
+      poi,
+      hex,
+      name: String(poi.Name || "").trim() || getGeneratedTradeFallbackAnchorName(hex),
+      icon,
+      type,
+      family,
+      traitSet,
+      tagSet,
+      population,
+      seaAccess,
+      riverAccess,
+      landScore,
+      seaScore,
+      totalScore
+    };
+  }
+
+  function getTradeSeaAccessHex(hex, campaignId) {
+    if (!hex) return null;
+    if (isTradeSeaWaterHex(hex)) return hex;
+    const candidates = [hex, ...nearbyHexesWithin(hex, 2)]
+      .flatMap(candidate => EDGE_NAMES.map(edgeName => getNeighborHex(candidate, edgeName)))
+      .filter(candidate => candidate?.id && isTradeSeaWaterHex(candidate))
+      .map(candidate => ({
+        hex: candidate,
+        score: roadPathHeuristic(hex, candidate)
+          + (candidate.baseTerrain === "coastal_water" ? -1.2 : 0)
+          + (candidate.baseTerrain === "deep_sea" ? 0.8 : 0)
+          + seededUnit(`${getGenerationSeedBase(campaignId)}:trade-sea-access:${hex.id}:${candidate.id}`) * 0.35
+      }))
+      .sort((left, right) => left.score - right.score || left.hex.id.localeCompare(right.hex.id));
+    return candidates[0]?.hex || null;
+  }
+
+  function isTradeSeaWaterHex(hex) {
+    return ["coastal_water", "sea", "deep_sea"].includes(hex?.baseTerrain);
+  }
+
+  function getGeneratedSeaTradeEndpointHex(anchor) {
+    if (!anchor?.hex) return null;
+    if (canGeneratedSeaTradeConnectDirectly(anchor)) return anchor.hex;
+    return anchor.seaAccess || null;
+  }
+
+  function canGeneratedSeaTradeConnectDirectly(anchor) {
+    if (!anchor?.hex || isWaterHex(anchor.hex) || !canSeaRouteUseHex(anchor.hex)) return false;
+    const traits = anchor.traitSet instanceof Set ? anchor.traitSet : new Set();
+    return anchor.type === "settlement" && (
+      anchor.icon === "port_town" ||
+      traits.has("coastal") ||
+      traits.has("major_port") ||
+      /port|harbor|harbour|dock|quay|wharf/i.test(anchor.name || "")
+    );
+  }
+
+  function addGeneratedSeaTradeLandConnector(routes, anchor, endpoint, routeName, seedBase, salt) {
+    if (!anchor?.hex?.id || !endpoint?.id || anchor.hex.id === endpoint.id) return;
+    const sequence = getPathOverlaySequence("road", anchor.hex.id, endpoint.id, "", {
+      majorRoute: true,
+      generatedRoadMode: true,
+      pathSalt: `${seedBase}:trade-sea-connector:${salt}:${anchor.hex.id}:${endpoint.id}`
+    });
+    if (!sequence?.length || sequence.length < 2) return;
+    routes.push({
+      tool: "road",
+      style: "dark_brown",
+      sequence,
+      routeMetadata: {
+        isMajorRoute: true,
+        routeName: getGeneratedTradeConnectorRouteName(routeName, sequence)
+      }
+    });
+  }
+
+  function addGeneratedRiverTradeLandConnector(routes, anchor, endpoint, routeName, seedBase, salt) {
+    if (!anchor?.hex?.id || !endpoint?.id || anchor.hex.id === endpoint.id) return;
+    const sequence = getPathOverlaySequence("road", anchor.hex.id, endpoint.id, "", {
+      majorRoute: true,
+      generatedRoadMode: true,
+      pathSalt: `${seedBase}:trade-river-connector:${salt}:${anchor.hex.id}:${endpoint.id}`
+    });
+    if (!sequence?.length || sequence.length < 2) return;
+    routes.push({
+      tool: "road",
+      style: "dark_brown",
+      sequence,
+      routeMetadata: {
+        isMajorRoute: true,
+        routeName: getGeneratedTradeConnectorRouteName(routeName, sequence)
+      }
+    });
+  }
+
+  function isGeneratedOffMapSeaTradeAnchor(anchor) {
+    if (!anchor?.seaAccess || anchor.seaScore < 70) return false;
+    if (anchor.type !== "settlement") return false;
+    const traits = anchor.traitSet instanceof Set ? anchor.traitSet : new Set();
+    return anchor.icon === "port_town" || traits.has("coastal") || traits.has("major_port") || /port|harbor|harbour|dock/i.test(anchor.name || "");
+  }
+
+  function isGeneratedPrimarySeaTradeAnchor(anchor) {
+    if (!anchor?.seaAccess || anchor.seaScore < 54) return false;
+    if (anchor.type === "settlement") return true;
+    const traits = anchor.traitSet instanceof Set ? anchor.traitSet : new Set();
+    return anchor.icon === "sea_fort" || traits.has("major_port");
+  }
+
+  function isGeneratedMajorTradeAnchor(anchor) {
+    if (!anchor?.hex?.id || isWaterHex(anchor.hex)) return false;
+    return anchor.type === "settlement" && ["city", "walled_city", "mountain_city"].includes(anchor.icon);
+  }
+
+  function getNearestGeneratedTradeNetworkAnchor(anchor, networkHexIds, seedBase) {
+    if (!anchor?.hex?.id || !(networkHexIds instanceof Set) || !networkHexIds.size) return null;
+    return [...networkHexIds]
+      .map(hexId => {
+        const hex = hexForPathPoint(hexId);
+        if (!hex || hex.id === anchor.hex.id || isWaterHex(hex)) return null;
+        const distance = roadPathHeuristic(anchor.hex, hex);
+        if (distance > 32) return null;
+        return {
+          anchor: {
+            hex,
+            name: "",
+            landScore: 0
+          },
+          distance,
+          score: distance + seededUnit(`${seedBase}:trade-network-target:${anchor.hex.id}:${hex.id}`) * 1.5
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id))[0] || null;
+  }
+
+  function getGeneratedTradeConnectorRouteName(routeName, sequence, minNamedLength = 5) {
+    return (sequence || []).length >= minNamedLength ? routeName : "";
+  }
+
+  function getTradeRiverOverlayNetwork() {
+    const graph = new Map();
+    const nodes = new Map();
+    (renderer.mapOverlays || []).forEach(overlay => {
+      if (overlay?.__preview || overlay?.Overlay_Type !== "river" || !overlay.From_Hex_ID_Ref || !overlay.To_Hex_ID_Ref) return;
+      const fromHex = hexForPathPoint(overlay.From_Hex_ID_Ref);
+      const toHex = hexForPathPoint(overlay.To_Hex_ID_Ref);
+      if (!fromHex || !toHex) return;
+      nodes.set(fromHex.id, fromHex);
+      nodes.set(toHex.id, toHex);
+      if (!graph.has(fromHex.id)) graph.set(fromHex.id, new Set());
+      if (!graph.has(toHex.id)) graph.set(toHex.id, new Set());
+      graph.get(fromHex.id).add(toHex.id);
+      graph.get(toHex.id).add(fromHex.id);
+    });
+    const componentByHexId = new Map();
+    let componentIndex = 0;
+    nodes.forEach((hex, hexId) => {
+      if (componentByHexId.has(hexId)) return;
+      componentIndex += 1;
+      const componentId = `river-${componentIndex}`;
+      const queue = [hexId];
+      componentByHexId.set(hexId, componentId);
+      while (queue.length) {
+        const currentId = queue.shift();
+        (graph.get(currentId) || []).forEach(nextId => {
+          if (componentByHexId.has(nextId)) return;
+          componentByHexId.set(nextId, componentId);
+          queue.push(nextId);
+        });
+      }
+    });
+    return { graph, nodes, componentByHexId };
+  }
+
+  function getTradeRiverAccess(hex, riverNetwork) {
+    if (!hex?.id || !riverNetwork?.nodes?.size) return null;
+    const candidates = [hex, ...nearbyHexesWithin(hex, 2)]
+      .map(candidate => {
+        const riverHex = riverNetwork.nodes.get(candidate.id);
+        if (!riverHex) return null;
+        return {
+          hex: riverHex,
+          componentId: riverNetwork.componentByHexId.get(riverHex.id) || "",
+          distance: roadPathHeuristic(hex, riverHex)
+        };
+      })
+      .filter(candidate => candidate?.componentId)
+      .sort((left, right) => left.distance - right.distance || left.hex.id.localeCompare(right.hex.id));
+    return candidates[0] || null;
+  }
+
+  function getTradeRiverNetworkSequence(riverNetwork, fromHexId, toHexId) {
+    if (!riverNetwork?.graph?.has(fromHexId) || !riverNetwork.graph.has(toHexId)) return [];
+    const queue = [fromHexId];
+    const visited = new Set([fromHexId]);
+    const previous = new Map();
+    while (queue.length) {
+      const current = queue.shift();
+      if (current === toHexId) break;
+      [...(riverNetwork.graph.get(current) || [])]
+        .sort((left, right) => {
+          const leftHex = riverNetwork.nodes.get(left);
+          const rightHex = riverNetwork.nodes.get(right);
+          const goalHex = riverNetwork.nodes.get(toHexId);
+          return roadPathHeuristic(leftHex, goalHex) - roadPathHeuristic(rightHex, goalHex) || left.localeCompare(right);
+        })
+        .forEach(next => {
+          if (visited.has(next)) return;
+          visited.add(next);
+          previous.set(next, current);
+          queue.push(next);
+        });
+    }
+    if (!visited.has(toHexId)) return [];
+    const sequence = [toHexId];
+    let current = toHexId;
+    while (previous.has(current)) {
+      current = previous.get(current);
+      sequence.unshift(current);
+    }
+    return sequence;
+  }
+
+  function getGeneratedTradePairScore(fromAnchor, toAnchor, seedBase, mode, step = 0) {
+    const fromHex = mode === "sea" ? fromAnchor.seaAccess : fromAnchor.hex;
+    const toHex = mode === "sea" ? toAnchor.seaAccess : toAnchor.hex;
+    const distance = roadPathHeuristic(fromHex, toHex);
+    const combinedScore = mode === "sea"
+      ? fromAnchor.seaScore + toAnchor.seaScore
+      : fromAnchor.landScore + toAnchor.landScore;
+    const tooClosePenalty = distance < 7 ? (7 - distance) * 4 : 0;
+    const veryLongPenalty = distance > 36 ? (distance - 36) * 0.65 : 0;
+    const seed = seededUnit(`${seedBase}:trade-pair:${mode}:${step}:${fromAnchor.hex.id}:${toAnchor.hex.id}`) * 6;
+    return distance * 1.8 + tooClosePenalty + veryLongPenalty - combinedScore * 0.28 + seed;
+  }
+
+  function buildGeneratedTradeRouteName(mode, fromAnchor, toAnchor, seedBase, usedRouteNames, index = 0) {
+    const namesByMode = {
+      land: ["High Road", "Old Way", "Market Way", "Stone Road", "Greenway", "Kingroad", "Caravan Way", "South Road", "North Road", "West Road", "Pilgrim Way", "Copper Road", "Amber Way", "Hill Road"],
+      river: ["River Road", "Reedway", "Silver Run", "Bargeway", "Low Road", "Waterway", "Willow Run", "Mill Run", "Bluewater", "Fenway"],
+      sea: ["Saltway", "Blue Run", "Coastway", "Tideway", "Deep Road", "Sailway", "White Wake", "Longwake", "Harbor Run", "Grey Tide", "Goldwake"],
+      "offmap-sea": ["Outer Run", "Far Tide", "Deep Run", "Salt Road", "Blue Road", "Seaway", "Farwake", "Outer Tide"]
+    };
+    const names = namesByMode[mode] || namesByMode.land;
+    const seed = `${seedBase}:trade-route-name:${mode}:${fromAnchor?.hex?.id || ""}:${toAnchor?.hex?.id || ""}:${index}`;
+    const startIndex = stableHash(seed) % names.length;
+    for (let offset = 0; offset < names.length; offset += 1) {
+      const candidate = names[(startIndex + offset) % names.length] || "";
+      if (candidate && !usedRouteNames.has(candidate)) {
+        usedRouteNames.add(candidate);
+        return candidate;
+      }
+    }
+    return names[startIndex] || "Trade Route";
+  }
+
+  function sanitizeGeneratedRouteAnchorName(name) {
+    return String(name || "")
+      .replace(/\s+/g, " ")
+      .replace(/^(the|a|an)\s+/i, "")
+      .trim()
+      .slice(0, 36);
+  }
+
+  function getGeneratedTradeFallbackAnchorName(hex) {
+    return hex?.label || hex?.id || "Trade Anchor";
+  }
+
+  function getSeaTradeDangerHexIds(campaignId) {
+    const seedBase = getGenerationSeedBase(campaignId);
+    const dangerHexIds = new Set();
+    (db?.raw?.pois || []).forEach(poi => {
+      const hex = renderer.hexesById.get(poi?.Hex_ID_Ref || "");
+      if (!hex) return;
+      const type = getStoredPoiTypeValue(poi);
+      const icon = getStoredPoiIconValue(poi).toLowerCase();
+      const tags = getPoiTagSet(poi);
+      const dangerous = ["dungeon", "dungeon_complex", "hazard"].includes(type)
+        || tags.has("lawless")
+        || ["pirate_flag", "lair", "dragon_lair", "kraken", "whirlpool", "sea_monster"].includes(icon);
+      if (!dangerous) return;
+      nearbyHexesWithin(hex, 2).forEach(candidate => {
+        if (isTradeSeaWaterHex(candidate) && seededUnit(`${seedBase}:sea-danger:${hex.id}:${candidate.id}`) < 0.92) {
+          dangerHexIds.add(candidate.id);
+        }
+      });
+    });
+    return dangerHexIds;
+  }
+
+  function getGeneratedSeaTradeExit(anchor, seedBase, index = 0) {
+    if (!anchor?.seaAccess) return null;
+    const candidates = [];
+    renderer.hexes.forEach(hex => {
+      if (!isTradeSeaWaterHex(hex)) return;
+      EDGE_NAMES.forEach(edgeName => {
+        if (getNeighborHex(hex, edgeName)) return;
+        candidates.push({
+          hex,
+          edge: edgeName,
+          score: roadPathHeuristic(anchor.seaAccess, hex)
+            + (hex.baseTerrain === "deep_sea" ? -1.4 : 0)
+            + (hex.baseTerrain === "coastal_water" ? 0.8 : 0)
+            + seededUnit(`${seedBase}:trade-exit:${index}:${anchor.hex.id}:${hex.id}:${edgeName}`) * 3
+        });
+      });
+    });
+    return candidates
+      .sort((left, right) => left.score - right.score || left.hex.id.localeCompare(right.hex.id))[0] || null;
+  }
+
   function buildGeneratedRoadRoutes(campaignId) {
     const anchors = getGeneratedRoadAnchors(campaignId);
     if (anchors.length < 2) return [];
@@ -10228,79 +11254,617 @@
     const seedBase = getGenerationSeedBase(campaignId);
     const routes = [];
     const amountScale = Math.max(0.25, Math.min(2, Number(renderer.drawing.generationRoadAmount || 100) / 100));
-    const maxRoutes = Math.min(Math.max(2, Math.round(18 * amountScale)), anchors.length - 1);
-    const backboneTarget = Math.min(
-      maxRoutes,
-      Math.max(1, Math.round(Math.min(6, anchors.length - 1) * Math.min(1.25, amountScale)))
-    );
-    const connectedAnchors = [anchors[0]];
-    const remainingAnchors = anchors.slice(1);
-    const usedNames = new Set();
+    const lengthScale = Math.max(0.5, Math.min(2, Number(renderer.drawing.generationRoadLength || 100) / 100));
+    const includePaths = renderer.drawing.generationIncludePaths !== false;
+    if (renderer.drawing.generationIncludeTradeRoutes) {
+      routes.push(...buildGeneratedTradeRoutes(campaignId));
+    }
+    const anchorPressureBonus = Math.round(Math.max(0, anchors.length - 28) * 0.28);
+    const maxRoadRoutes = Math.min(Math.max(3, Math.round((20 + anchorPressureBonus) * amountScale)), Math.max(2, anchors.length - 1));
+    const maxPathRoutes = includePaths ? Math.max(2, Math.round(maxRoadRoutes * 0.85)) : 0;
+    const roadAnchors = anchors.filter(anchor => anchor.routeClass === "seat" || anchor.routeClass === "road" || anchor.routeClass === "detour");
+    const seatAnchors = roadAnchors.filter(anchor => anchor.routeClass === "seat");
+    const primaryAnchors = seatAnchors.length >= 2
+      ? seatAnchors
+      : roadAnchors.slice(0, Math.min(8, roadAnchors.length));
+    if (primaryAnchors.length < 2) return [];
+
+    const connectedAnchors = [primaryAnchors[0]];
+    const connectedRoadIds = new Set([primaryAnchors[0].hex.id]);
+    const remainingPrimaryAnchors = primaryAnchors.slice(1);
+    const usedDetourIds = new Set();
+    const crossingAnchorHexIds = getGeneratedCrossingAnchorHexIds(anchors);
     let step = 0;
 
-    while (remainingAnchors.length && routes.length < backboneTarget) {
+    while (remainingPrimaryAnchors.length && routes.length < maxRoadRoutes) {
       const candidates = [];
       connectedAnchors.forEach(fromAnchor => {
-        remainingAnchors.forEach(toAnchor => {
+        remainingPrimaryAnchors.forEach(toAnchor => {
           candidates.push({
             fromAnchor,
             toAnchor,
-            score: getGeneratedRoadBackboneScore(fromAnchor, toAnchor, seedBase, step)
+            score: getGeneratedRoadBackboneScore(fromAnchor, toAnchor, seedBase, step, lengthScale)
           });
         });
       });
 
       const candidatePool = candidates
         .sort((a, b) => a.score - b.score)
-        .slice(0, Math.min(10, candidates.length));
+        .slice(0, Math.min(14, candidates.length));
       const best = candidatePool.find(candidate => {
-        const sequence = getPathOverlaySequence("road", candidate.fromAnchor.hex.id, candidate.toAnchor.hex.id, "", { majorRoute: true });
+        const detours = chooseGeneratedRoadDetours(candidate.fromAnchor, candidate.toAnchor, anchors, usedDetourIds, seedBase, step, lengthScale);
+        const sequence = buildGeneratedAnchorRouteSequence("road", candidate.fromAnchor, candidate.toAnchor, detours, {
+          majorRoute: false,
+          generatedRoadMode: true,
+          pathSalt: `${seedBase}:road-path:${step}`
+        });
         if (!sequence?.length || sequence.length < 2) return false;
-        const routeName = buildGeneratedRoadRouteName(candidate.fromAnchor, candidate.toAnchor, seedBase, routes.length, usedNames);
+        if (wouldGeneratedRouteOverloadCrossings(sequence, routes, crossingAnchorHexIds)) return false;
         routes.push({
+          tool: "road",
           sequence,
           routeMetadata: {
-            isMajorRoute: true,
-            routeName
+            isMajorRoute: false,
+            routeName: ""
           }
         });
+        detours.forEach(anchor => {
+          usedDetourIds.add(anchor.hex.id);
+          connectedRoadIds.add(anchor.hex.id);
+        });
         connectedAnchors.push(candidate.toAnchor);
-        remainingAnchors.splice(remainingAnchors.findIndex(anchor => anchor.hex.id === candidate.toAnchor.hex.id), 1);
+        connectedRoadIds.add(candidate.toAnchor.hex.id);
+        remainingPrimaryAnchors.splice(remainingPrimaryAnchors.findIndex(anchor => anchor.hex.id === candidate.toAnchor.hex.id), 1);
         return true;
       });
       if (!best) break;
       step += 1;
     }
 
-    while (remainingAnchors.length && routes.length < maxRoutes) {
-      const best = remainingAnchors
+    const roadTargets = roadAnchors
+      .filter(anchor => !connectedRoadIds.has(anchor.hex.id) && anchor.routeClass === "road")
+      .sort((left, right) => right.priority - left.priority || left.hex.id.localeCompare(right.hex.id));
+    while (roadTargets.length && routes.length < maxRoadRoutes) {
+      const best = roadTargets
         .map(anchor => ({
           anchor,
-          target: connectedAnchors
-            .map(connectedAnchor => ({
-              anchor: connectedAnchor,
-              score: getGeneratedRoadFeederScore(anchor, connectedAnchor, seedBase)
-            }))
-            .sort((a, b) => a.score - b.score)[0]
-        }))
-        .filter(candidate => candidate.target?.anchor)
-        .sort((a, b) => a.target.score - b.target.score)[0];
+          target: getNearestGeneratedConnectedRoadAnchor(anchor, connectedAnchors, seedBase, lengthScale)
+      }))
+      .filter(candidate => candidate.target?.anchor)
+      .sort((a, b) => a.target.score - b.target.score)[0];
       if (!best?.target?.anchor) break;
 
-      const sequence = getPathOverlaySequence("road", best.anchor.hex.id, best.target.anchor.hex.id, "", { majorRoute: false });
-      remainingAnchors.splice(remainingAnchors.findIndex(anchor => anchor.hex.id === best.anchor.hex.id), 1);
+      const detours = chooseGeneratedRoadDetours(best.anchor, best.target.anchor, anchors, usedDetourIds, seedBase, step, lengthScale, { maxDetours: 1 });
+      const sequence = buildGeneratedAnchorRouteSequence("road", best.anchor, best.target.anchor, detours, {
+        majorRoute: false,
+        generatedRoadMode: true,
+        pathSalt: `${seedBase}:road-spur:${step}`
+      });
+      roadTargets.splice(roadTargets.findIndex(anchor => anchor.hex.id === best.anchor.hex.id), 1);
       if (!sequence?.length || sequence.length < 2) continue;
+      if (wouldGeneratedRouteOverloadCrossings(sequence, routes, crossingAnchorHexIds)) continue;
       routes.push({
+        tool: "road",
         sequence,
         routeMetadata: {
           isMajorRoute: false,
           routeName: ""
         }
       });
+      detours.forEach(anchor => {
+        usedDetourIds.add(anchor.hex.id);
+        connectedRoadIds.add(anchor.hex.id);
+      });
       connectedAnchors.push(best.anchor);
+      connectedRoadIds.add(best.anchor.hex.id);
+      step += 1;
     }
 
+    if (includePaths) {
+      const pathTargets = anchors
+        .filter(anchor => !connectedRoadIds.has(anchor.hex.id) && anchor.routeClass === "path")
+        .sort((left, right) => right.priority - left.priority || left.hex.id.localeCompare(right.hex.id));
+      let pathCount = 0;
+      while (pathTargets.length && pathCount < maxPathRoutes) {
+        const best = pathTargets
+          .map(anchor => ({
+            anchor,
+            target: connectedAnchors
+              .map(connectedAnchor => ({
+                anchor: connectedAnchor,
+                score: getGeneratedPathFeederScore(anchor, connectedAnchor, seedBase, lengthScale)
+              }))
+              .sort((a, b) => a.score - b.score)[0]
+          }))
+          .filter(candidate => candidate.target?.anchor)
+          .sort((a, b) => a.target.score - b.target.score)[0];
+        if (!best?.target?.anchor) break;
+        pathTargets.splice(pathTargets.findIndex(anchor => anchor.hex.id === best.anchor.hex.id), 1);
+        const sequence = buildGeneratedAnchorRouteSequence("path", best.target.anchor, best.anchor, [], {
+          generatedPathMode: true,
+          pathSalt: `${seedBase}:path-spur:${pathCount}`
+        });
+        const finalSequence = best.anchor.stopShort ? trimGeneratedPathBeforeTarget(sequence) : sequence;
+        if (!finalSequence?.length || finalSequence.length < 2) continue;
+        routes.push({
+          tool: "path",
+          sequence: finalSequence,
+          routeMetadata: {
+            isMajorRoute: false,
+            routeName: ""
+          }
+        });
+        pathCount += 1;
+      }
+    }
+
+    addGeneratedNetworkCompletionSpurs({
+      routes,
+      anchors,
+      seedBase,
+      lengthScale,
+      includePaths,
+      crossingAnchorHexIds,
+      maxCount: Math.max(5, Math.round((16 + anchorPressureBonus) * amountScale))
+    });
+    addGeneratedCrossingContinuationRoutes({
+      routes,
+      anchors,
+      seedBase,
+      lengthScale,
+      crossingAnchorHexIds,
+      maxCount: Math.max(2, Math.round((4 + Math.round(anchorPressureBonus * 0.35)) * amountScale))
+    });
+    addGeneratedLocalConnectorRoutes({
+      routes,
+      anchors,
+      seedBase,
+      lengthScale,
+      includePaths,
+      crossingAnchorHexIds,
+      maxCount: Math.max(2, Math.round((5 + Math.round(anchorPressureBonus * 0.4)) * amountScale))
+    });
+    addGeneratedCoastalVillagePaths({
+      routes,
+      anchors,
+      seedBase,
+      lengthScale,
+      includePaths,
+      maxCount: Math.max(1, Math.round((4 + Math.round(anchorPressureBonus * 0.25)) * amountScale))
+    });
+
     return routes;
+  }
+
+  function getNearestGeneratedConnectedRoadAnchor(anchor, connectedAnchors, seedBase, lengthScale = 1) {
+    return connectedAnchors
+      .map(connectedAnchor => ({
+        anchor: connectedAnchor,
+        score: getGeneratedRoadFeederScore(anchor, connectedAnchor, seedBase, lengthScale)
+      }))
+      .sort((a, b) => a.score - b.score)[0] || null;
+  }
+
+  function buildGeneratedAnchorRouteSequence(tool, fromAnchor, toAnchor, detours = [], options = {}) {
+    const stops = [fromAnchor, ...detours, toAnchor].filter(anchor => anchor?.hex?.id);
+    const sequence = [];
+    for (let index = 0; index < stops.length - 1; index += 1) {
+      const fromHexId = stops[index].hex.id;
+      const toHexId = stops[index + 1].hex.id;
+      const leg = tool === "path"
+        ? getGeneratedPathSequence(fromHexId, toHexId, options)
+        : getPathOverlaySequence("road", fromHexId, toHexId, "", options);
+      if (!leg?.length || leg.length < 2) return [];
+      if (!sequence.length) sequence.push(...leg);
+      else sequence.push(...leg.slice(1));
+    }
+    return sequence;
+  }
+
+  function chooseGeneratedRoadDetours(fromAnchor, toAnchor, anchors, usedDetourIds, seedBase, step = 0, lengthScale = 1, options = {}) {
+    const directDistance = roadPathHeuristic(fromAnchor.hex, toAnchor.hex);
+    const maxDetours = Math.max(0, Math.min(2, Number(options.maxDetours ?? 2)));
+    if (!maxDetours || directDistance < 5) return [];
+    const maxExtraDistance = Math.max(3, directDistance * (0.18 + lengthScale * 0.08));
+    const candidates = anchors
+      .filter(anchor => isGeneratedRoadDetourAnchor(anchor) && !usedDetourIds.has(anchor.hex.id))
+      .filter(anchor => anchor.hex.id !== fromAnchor.hex.id && anchor.hex.id !== toAnchor.hex.id)
+      .map(anchor => {
+        const viaDistance = roadPathHeuristic(fromAnchor.hex, anchor.hex) + roadPathHeuristic(anchor.hex, toAnchor.hex);
+        const extraDistance = viaDistance - directDistance;
+        return {
+          anchor,
+          extraDistance,
+          score: extraDistance
+            - getGeneratedRoadDetourValue(anchor)
+            + seededUnit(`${seedBase}:road-detour:${step}:${fromAnchor.hex.id}:${toAnchor.hex.id}:${anchor.hex.id}`) * 1.2
+        };
+      })
+      .filter(candidate => candidate.extraDistance >= 0 && candidate.extraDistance <= maxExtraDistance)
+      .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id));
+    const chosen = [];
+    candidates.forEach(candidate => {
+      if (chosen.length >= maxDetours) return;
+      if (chosen.some(existing => roadPathHeuristic(existing.hex, candidate.anchor.hex) <= 2)) return;
+      chosen.push(candidate.anchor);
+    });
+    return chosen;
+  }
+
+  function getGeneratedRoadDetourValue(anchor) {
+    if (anchor.anchorKind === "crossing") return 4.2;
+    if (anchor.anchorKind === "pass") return 3.8;
+    if (anchor.anchorKind === "roadstop") return 2.4;
+    if (anchor.anchorKind === "soft_crossing") return 2.2;
+    return 1.4;
+  }
+
+  function trimGeneratedPathBeforeTarget(sequence) {
+    if (!Array.isArray(sequence) || sequence.length <= 4) return sequence;
+    return sequence.slice(0, -1);
+  }
+
+  function getGeneratedCrossingAnchorHexIds(anchors = []) {
+    return new Set((anchors || [])
+      .filter(anchor => anchor?.anchorKind === "crossing")
+      .map(anchor => anchor.hex?.id)
+      .filter(Boolean));
+  }
+
+  function wouldGeneratedRouteOverloadCrossings(sequence, routes, crossingAnchorHexIds, maxDegree = 2) {
+    if (!Array.isArray(sequence) || !crossingAnchorHexIds?.size) return false;
+    const degrees = getGeneratedCrossingDegrees(routes, crossingAnchorHexIds);
+    for (let index = 0; index < sequence.length; index += 1) {
+      const hexId = sequence[index];
+      if (!crossingAnchorHexIds.has(hexId)) continue;
+      const neighbors = degrees.get(hexId) || new Set();
+      if (sequence[index - 1]) neighbors.add(sequence[index - 1]);
+      if (sequence[index + 1]) neighbors.add(sequence[index + 1]);
+      if (neighbors.size > maxDegree) return true;
+    }
+    return false;
+  }
+
+  function getGeneratedCrossingDegrees(routes, crossingAnchorHexIds) {
+    const degrees = new Map();
+    (routes || []).forEach(route => {
+      if (route?.tool && route.tool !== "road") return;
+      const sequence = route?.sequence || [];
+      sequence.forEach((hexId, index) => {
+        if (!crossingAnchorHexIds.has(hexId)) return;
+        if (!degrees.has(hexId)) degrees.set(hexId, new Set());
+        const neighbors = degrees.get(hexId);
+        if (sequence[index - 1]) neighbors.add(sequence[index - 1]);
+        if (sequence[index + 1]) neighbors.add(sequence[index + 1]);
+      });
+    });
+    return degrees;
+  }
+
+  function addGeneratedNetworkCompletionSpurs({ routes, anchors, seedBase, lengthScale = 1, includePaths = true, crossingAnchorHexIds = new Set(), maxCount = 6 }) {
+    if (!Array.isArray(routes) || !Array.isArray(anchors) || maxCount <= 0) return;
+    const networkHexIds = getGeneratedRouteHexIdSet(routes);
+    const candidates = anchors
+      .filter(anchor => anchor?.hex?.id && !networkHexIds.has(anchor.hex.id))
+      .filter(anchor => shouldAddGeneratedNetworkCompletionSpur(anchor, includePaths, seedBase))
+      .map(anchor => {
+        const tool = getGeneratedCompletionSpurTool(anchor, includePaths);
+        const target = getNearestGeneratedRouteHexAnchor(anchor, networkHexIds, tool, seedBase, lengthScale);
+        return {
+          anchor,
+          tool,
+          target,
+          score: target
+            ? target.score - getGeneratedCompletionSpurPriority(anchor) + seededUnit(`${seedBase}:completion-spur:${anchor.hex.id}`) * 1.8
+            : Infinity
+        };
+      })
+      .filter(candidate => candidate.target?.anchor)
+      .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id));
+
+    let added = 0;
+    candidates.forEach(candidate => {
+      if (added >= maxCount) return;
+      const maxDistance = getGeneratedCompletionSpurMaxDistance(candidate.anchor, candidate.tool, lengthScale);
+      if (candidate.target.distance > maxDistance) return;
+      const sequence = buildGeneratedAnchorRouteSequence(candidate.tool, candidate.target.anchor, candidate.anchor, [], {
+        generatedRoadMode: candidate.tool === "road",
+        generatedPathMode: candidate.tool === "path",
+        pathSalt: `${seedBase}:completion-route:${candidate.tool}:${candidate.anchor.hex.id}`
+      });
+      const finalSequence = candidate.anchor.stopShort ? trimGeneratedPathBeforeTarget(sequence) : sequence;
+      if (!finalSequence?.length || finalSequence.length < 2) return;
+      if (candidate.tool === "road" && wouldGeneratedRouteOverloadCrossings(finalSequence, routes, crossingAnchorHexIds)) return;
+      routes.push({
+        tool: candidate.tool,
+        sequence: finalSequence,
+        routeMetadata: {
+          isMajorRoute: false,
+          routeName: ""
+        }
+      });
+      finalSequence.forEach(hexId => networkHexIds.add(hexId));
+      added += 1;
+    });
+  }
+
+  function getGeneratedRouteHexIdSet(routes) {
+    const hexIds = new Set();
+    (routes || []).forEach(route => {
+      (route?.sequence || []).forEach(hexId => {
+        if (hexId) hexIds.add(hexId);
+      });
+    });
+    return hexIds;
+  }
+
+  function addGeneratedCrossingContinuationRoutes({ routes, anchors, seedBase, lengthScale = 1, crossingAnchorHexIds = new Set(), maxCount = 4 }) {
+    if (!Array.isArray(routes) || !Array.isArray(anchors) || !crossingAnchorHexIds?.size || maxCount <= 0) return;
+    const networkHexIds = getGeneratedRouteHexIdSet(routes);
+    const degrees = getGeneratedCrossingDegrees(routes, crossingAnchorHexIds);
+    const crossingAnchors = anchors
+      .filter(anchor => anchor?.anchorKind === "crossing" && networkHexIds.has(anchor.hex?.id))
+      .filter(anchor => (degrees.get(anchor.hex.id)?.size || 0) < 2);
+    const targetAnchors = anchors
+      .filter(anchor => anchor?.hex?.id && anchor.routeClass !== "path" && anchor.anchorKind !== "crossing")
+      .filter(anchor => networkHexIds.has(anchor.hex.id));
+    let added = 0;
+    crossingAnchors.forEach(crossingAnchor => {
+      if (added >= maxCount) return;
+      const existingNeighbors = degrees.get(crossingAnchor.hex.id) || new Set();
+      const target = targetAnchors
+        .map(anchor => {
+          const sequence = getPathOverlaySequence("road", crossingAnchor.hex.id, anchor.hex.id, "", {
+            majorRoute: false,
+            generatedRoadMode: true,
+            pathSalt: `${seedBase}:crossing-continuation-probe:${crossingAnchor.hex.id}:${anchor.hex.id}`
+          });
+          const firstStep = sequence?.[1] || "";
+          if (!sequence?.length || sequence.length < 2 || existingNeighbors.has(firstStep)) return null;
+          const distance = roadPathHeuristic(crossingAnchor.hex, anchor.hex);
+          return {
+            anchor,
+            sequence,
+            score: distance
+              - Math.min(2.2, anchor.priority / 45)
+              + seededUnit(`${seedBase}:crossing-continuation:${crossingAnchor.hex.id}:${anchor.hex.id}`) * 1.2
+          };
+        })
+        .filter(Boolean)
+        .filter(candidate => candidate.sequence.length <= Math.max(4, Math.round(7 + lengthScale * 5)))
+        .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id))[0];
+      if (!target) return;
+      if (wouldGeneratedRouteOverloadCrossings(target.sequence, routes, crossingAnchorHexIds)) return;
+      routes.push({
+        tool: "road",
+        sequence: target.sequence,
+        routeMetadata: {
+          isMajorRoute: false,
+          routeName: ""
+        }
+      });
+      added += 1;
+    });
+  }
+
+  function shouldAddGeneratedNetworkCompletionSpur(anchor, includePaths, seedBase = "") {
+    if (!anchor?.hex?.id) return false;
+    if (anchor.routeClass === "detour") return true;
+    if (anchor.anchorKind === "resource" || anchor.anchorKind === "soft_crossing" || anchor.anchorKind === "roadstop" || anchor.anchorKind === "stronghold") return true;
+    if (anchor.anchorKind === "settlement") return true;
+    if (includePaths && anchor.routeClass === "path" && anchor.anchorKind === "site") return true;
+    if (includePaths && anchor.routeClass === "path" && anchor.anchorKind === "camp") return seededUnit(`${seedBase}:camp-completion:${anchor.hex.id}`) < 0.28;
+    if (includePaths && anchor.routeClass === "path" && anchor.anchorKind === "hazard") return true;
+    return false;
+  }
+
+  function getGeneratedCompletionSpurTool(anchor, includePaths) {
+    if (anchor.routeClass === "road" || anchor.anchorKind === "crossing" || anchor.anchorKind === "pass" || anchor.anchorKind === "roadstop") return "road";
+    if (!includePaths) return "road";
+    if (anchor.anchorKind === "soft_crossing" && anchor.priority >= 64) return "road";
+    if (anchor.anchorKind === "resource" && anchor.priority >= 70) return "road";
+    return "path";
+  }
+
+  function getGeneratedCompletionSpurPriority(anchor) {
+    if (anchor.anchorKind === "crossing") return 7.2;
+    if (anchor.anchorKind === "stronghold") return 7.1;
+    if (anchor.anchorKind === "roadstop") return 7;
+    if (anchor.anchorKind === "soft_crossing") return 6.2;
+    if (anchor.anchorKind === "resource") return 6;
+    if (anchor.anchorKind === "settlement") return 5.2;
+    if (anchor.anchorKind === "site") return 3.6;
+    if (anchor.anchorKind === "hazard") return 2.4;
+    return 2.8;
+  }
+
+  function getGeneratedCompletionSpurMaxDistance(anchor, tool, lengthScale = 1) {
+    const base = tool === "road" ? 5 : 7;
+    const scale = tool === "road" ? 4 : 5;
+    const anchorBonus = anchor.anchorKind === "crossing" || anchor.anchorKind === "roadstop" || anchor.anchorKind === "stronghold" ? 4 : anchor.anchorKind === "resource" || anchor.anchorKind === "soft_crossing" ? 3 : 0;
+    return base + lengthScale * scale + anchorBonus;
+  }
+
+  function getNearestGeneratedRouteHexAnchor(anchor, networkHexIds, tool, seedBase, lengthScale = 1) {
+    const candidates = [...(networkHexIds || [])]
+      .map(hexId => hexForPathPoint(hexId))
+      .filter(hex => hex && hex.id !== anchor.hex.id)
+      .map(hex => {
+        const distance = roadPathHeuristic(anchor.hex, hex);
+        const reachPenalty = Math.max(0, distance - (tool === "road" ? 8 + lengthScale * 8 : 5 + lengthScale * 8));
+        return {
+          anchor: {
+            hex,
+            name: "",
+            priority: 0,
+            tier: "minor",
+            routeClass: tool,
+            anchorKind: "network"
+          },
+          distance,
+          score: distance + reachPenalty + seededUnit(`${seedBase}:nearest-network:${tool}:${anchor.hex.id}:${hex.id}`) * 0.8
+        };
+      })
+      .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id));
+    return candidates[0] || null;
+  }
+
+  function addGeneratedLocalConnectorRoutes({ routes, anchors, seedBase, lengthScale = 1, includePaths = true, crossingAnchorHexIds = new Set(), maxCount = 3 }) {
+    if (!Array.isArray(routes) || !Array.isArray(anchors) || maxCount <= 0) return;
+    const networkHexIds = getGeneratedRouteHexIdSet(routes);
+    const localAnchors = anchors
+      .filter(anchor => anchor?.hex?.id && networkHexIds.has(anchor.hex.id))
+      .filter(anchor => !anchor.stopShort)
+      .filter(anchor => ["settlement", "stronghold", "resource", "soft_crossing", "site", "roadstop"].includes(anchor.anchorKind));
+    const candidates = [];
+    localAnchors.forEach((fromAnchor, fromIndex) => {
+      localAnchors.slice(fromIndex + 1).forEach(toAnchor => {
+        if (fromAnchor.hex.id === toAnchor.hex.id) return;
+        const distance = roadPathHeuristic(fromAnchor.hex, toAnchor.hex);
+        const maxDistance = 5 + lengthScale * 7;
+        if (distance > maxDistance) return;
+        const seed = `${seedBase}:local-connector:${fromAnchor.hex.id}:${toAnchor.hex.id}`;
+        const roll = seededUnit(seed);
+        const affinity = getGeneratedLocalConnectorAffinity(fromAnchor, toAnchor);
+        if (roll > affinity) return;
+        candidates.push({
+          fromAnchor,
+          toAnchor,
+          tool: getGeneratedLocalConnectorTool(fromAnchor, toAnchor, includePaths),
+          score: distance - affinity * 4 + roll * 2
+        });
+      });
+    });
+
+    let added = 0;
+    candidates
+      .sort((left, right) => left.score - right.score || left.fromAnchor.hex.id.localeCompare(right.fromAnchor.hex.id))
+      .forEach(candidate => {
+        if (added >= maxCount) return;
+        if (generatedRouteAlreadyHasConnection(routes, candidate.fromAnchor.hex.id, candidate.toAnchor.hex.id)) return;
+        const sequence = buildGeneratedAnchorRouteSequence(candidate.tool, candidate.fromAnchor, candidate.toAnchor, [], {
+          generatedRoadMode: candidate.tool === "road",
+          generatedPathMode: candidate.tool === "path",
+          pathSalt: `${seedBase}:local-route:${candidate.fromAnchor.hex.id}:${candidate.toAnchor.hex.id}`
+        });
+        if (!sequence?.length || sequence.length < 2) return;
+        if (candidate.tool === "road" && wouldGeneratedRouteOverloadCrossings(sequence, routes, crossingAnchorHexIds)) return;
+        routes.push({
+          tool: candidate.tool,
+          sequence,
+          routeMetadata: {
+            isMajorRoute: false,
+            routeName: ""
+          }
+        });
+        added += 1;
+      });
+  }
+
+  function getGeneratedLocalConnectorAffinity(fromAnchor, toAnchor) {
+    const kinds = new Set([fromAnchor.anchorKind, toAnchor.anchorKind]);
+    if (kinds.has("stronghold") && kinds.has("settlement")) return 0.52;
+    if (kinds.has("roadstop")) return 0.48;
+    if (kinds.has("resource") || kinds.has("soft_crossing")) return 0.44;
+    if (kinds.has("site")) return 0.34;
+    return 0.28;
+  }
+
+  function getGeneratedLocalConnectorTool(fromAnchor, toAnchor, includePaths) {
+    if (!includePaths) return "road";
+    const kinds = new Set([fromAnchor.anchorKind, toAnchor.anchorKind]);
+    if (kinds.has("stronghold")) return "road";
+    if (fromAnchor.routeClass === "road" && toAnchor.routeClass === "road") return "road";
+    return "path";
+  }
+
+  function generatedRouteAlreadyHasConnection(routes, fromHexId, toHexId) {
+    return (routes || []).some(route => {
+      const sequence = route?.sequence || [];
+      for (let index = 0; index < sequence.length - 1; index += 1) {
+        const left = sequence[index];
+        const right = sequence[index + 1];
+        if ((left === fromHexId && right === toHexId) || (left === toHexId && right === fromHexId)) return true;
+      }
+      return false;
+    });
+  }
+
+  function addGeneratedCoastalVillagePaths({ routes, anchors, seedBase, lengthScale = 1, includePaths = true, maxCount = 3 }) {
+    if (!includePaths || !Array.isArray(routes) || !Array.isArray(anchors) || maxCount <= 0) return;
+    const candidates = anchors
+      .filter(anchor => anchor?.anchorKind === "settlement" && anchor.routeClass !== "seat")
+      .filter(anchor => anchor.priority < 86)
+      .filter(anchor => !hasNearbyCoastalServicePoiForRoads(anchor.hex, 2))
+      .map(anchor => {
+        const target = getGeneratedCoastalPathTarget(anchor.hex, seedBase, lengthScale);
+        if (!target) return null;
+        const chance = 0.22 + Math.min(0.16, lengthScale * 0.08);
+        const roll = seededUnit(`${seedBase}:coastal-village-path-roll:${anchor.hex.id}:${target.id}`);
+        if (roll > chance) return null;
+        return {
+          anchor,
+          target,
+          score: roadPathHeuristic(anchor.hex, target)
+            + seededUnit(`${seedBase}:coastal-village-path-score:${anchor.hex.id}:${target.id}`) * 1.4
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id));
+
+    let added = 0;
+    candidates.forEach(candidate => {
+      if (added >= maxCount) return;
+      const sequence = getGeneratedPathSequence(candidate.anchor.hex.id, candidate.target.id, {
+        generatedPathMode: true,
+        pathSalt: `${seedBase}:coastal-village-route:${candidate.anchor.hex.id}:${candidate.target.id}`
+      });
+      if (!sequence?.length || sequence.length < 2) return;
+      routes.push({
+        tool: "path",
+        sequence,
+        routeMetadata: {
+          isMajorRoute: false,
+          routeName: ""
+        }
+      });
+      added += 1;
+    });
+  }
+
+  function getGeneratedCoastalPathTarget(hex, seedBase, lengthScale = 1) {
+    if (!hex?.id) return null;
+    const maxRadius = Math.max(2, Math.min(6, Math.round(3 + lengthScale * 2)));
+    return nearbyHexesWithin(hex, maxRadius)
+      .filter(isGeneratedCoastalLandingHex)
+      .map(candidate => ({
+        hex: candidate,
+        score: roadPathHeuristic(hex, candidate)
+          + getRoadLandAnchorScore(candidate) * 0.22
+          + seededUnit(`${seedBase}:coastal-path-target:${hex.id}:${candidate.id}`) * 1.1
+      }))
+      .sort((left, right) => left.score - right.score || left.hex.id.localeCompare(right.hex.id))[0]?.hex || null;
+  }
+
+  function isGeneratedCoastalLandingHex(hex) {
+    if (!hex || WATER_TERRAINS.has(hex.baseTerrain)) return false;
+    return EDGE_NAMES
+      .map(edgeName => getNeighborHex(hex, edgeName))
+      .some(isCoastalTravelWaterHex);
+  }
+
+  function isCoastalTravelWaterHex(hex) {
+    return Boolean(hex && ["coastal_water", "sea", "deep_sea"].includes(hex.baseTerrain));
+  }
+
+  function hasNearbyCoastalServicePoiForRoads(hex, radius = 2) {
+    if (!hex?.id) return false;
+    return [hex, ...nearbyHexesWithin(hex, radius)].some(candidate => (
+      getPoisAtRoadHex(candidate).some(poi => {
+        const icon = String(poi?.POI_Icon || "").toLowerCase();
+        return ["port_town", "docks", "harbor", "fishing_camp", "sea_fort", "lighthouse"].includes(icon);
+      })
+    ));
   }
 
   function getGeneratedRoadAnchors(campaignId) {
@@ -10325,12 +11889,15 @@
 
     const poiAnchors = [...bestPoiByHex.values()]
       .sort((a, b) => b.priority - a.priority || a.hex.id.localeCompare(b.hex.id))
-      .slice(0, 24)
+      .slice(0, 140)
       .map(entry => ({
         hex: entry.hex,
         name: entry.name,
         priority: entry.priority,
-        tier: entry.tier
+        tier: entry.tier,
+        routeClass: entry.routeClass,
+        anchorKind: entry.anchorKind,
+        stopShort: entry.stopShort
       }));
     return [...poiAnchors, ...getFallbackRoadAnchors(campaignId, new Set(poiAnchors.map(anchor => anchor.hex.id)))]
       .filter((anchor, index, list) => anchor?.hex && list.findIndex(candidate => candidate.hex.id === anchor.hex.id) === index);
@@ -10377,6 +11944,9 @@
     const traitSet = new Set(iconMeta?.traits || []);
     const family = iconMeta?.family || "";
     const tagSet = new Set(Array.isArray(poi?.POI_Tags) ? poi.POI_Tags.map(tag => String(tag || "").toLowerCase()) : []);
+    const type = window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || "")
+      || String(poi?.POI_Type_Value || poi?.POI_Type || "").trim().toLowerCase();
+    const population = parseRoadPoiPopulation(poi);
     const nearSettlement = hasSettlementPoiNearRoadHex(hex, 1);
     let priority = 10;
     let tier = "minor";
@@ -10447,7 +12017,106 @@
     }
     priority -= getRoadLandAnchorScore(hex) * 1.5;
     priority += seededUnit(`${seedBase}:road-anchor:${poi.POI_ID || name || hex.id}`) * 6;
-    return { hex, name, priority, tier };
+    const routeProfile = getGeneratedRoadAnchorRouteProfile({
+      type,
+      family,
+      icon,
+      traitSet,
+      tagSet,
+      priority,
+      tier,
+      population,
+      text
+    });
+    return { hex, name, priority, tier, ...routeProfile };
+  }
+
+  function parseRoadPoiPopulation(poi) {
+    const value = String(poi?.Population || "").replace(/[^\d]/g, "");
+    return value ? Number(value) || 0 : 0;
+  }
+
+  function getGeneratedRoadAnchorRouteProfile({ type, family, icon, traitSet, tagSet, priority, tier, population, text }) {
+    const isSettlement = type === "settlement" || family === "settlement";
+    const isStronghold = type === "stronghold" || family === "stronghold";
+    const isResource = type === "resource_site" || family === "resource_site";
+    const isWaypoint = type === "waypoint" || family === "waypoint";
+    const isDungeonOrHazard = ["dungeon", "dungeon_complex", "hazard"].includes(type) || ["dungeon", "hazard"].includes(family);
+    const isSite = ["ruin", "holy_site", "arcane_site", "wilderness_site", "landmark"].includes(type) || ["ruin", "holy_site", "arcane_site", "wilderness_site", "landmark"].includes(family);
+    const isCrossing = traitSet.has("river_crossing_anchor") || icon === "bridge_gate" || icon === "ford" || icon === "bridge" || icon === "ferry" || tagSet.has("river_crossing");
+    const isPass = traitSet.has("pass_anchor") || icon === "mountain_pass" || icon === "canyon_pass" || icon === "mountain_gate";
+    const isCampsite = icon === "campsite";
+    const isRoadstop = isWaypoint && !isCampsite && (traitSet.has("roadside") || traitSet.has("rest") || traitSet.has("crossroads") || tagSet.has("crossroads"));
+    const isSoftCrossing = isResource && (traitSet.has("river_or_coastal") || traitSet.has("fishing") || traitSet.has("farming") || traitSet.has("settlement_adjacent") || /mill|dock|fish|farm|ford|bridge/.test(text || ""));
+
+    if (isCrossing) return { routeClass: "detour", anchorKind: "crossing", stopShort: false };
+    if (isPass) return { routeClass: icon === "mountain_gate" ? "road" : "detour", anchorKind: "pass", stopShort: false };
+    if (isSettlement) {
+      const seat = traitSet.has("major")
+        || traitSet.has("urban")
+        || ["city", "walled_city", "port_town", "mountain_city"].includes(icon)
+        || population >= 9000
+        || priority >= 92;
+      return {
+        routeClass: seat ? "seat" : priority >= 72 || tier === "major" ? "road" : "path",
+        anchorKind: seat ? "province_seat" : "settlement",
+        stopShort: false
+      };
+    }
+    if (isStronghold) return { routeClass: "road", anchorKind: "stronghold", stopShort: false };
+    if (isRoadstop) return { routeClass: "road", anchorKind: "roadstop", stopShort: false };
+    if (isCampsite) return { routeClass: "path", anchorKind: "camp", stopShort: false };
+    if (isResource) {
+      return {
+        routeClass: priority >= 58 || traitSet.has("trade") || traitSet.has("settlement_adjacent") ? "road" : "path",
+        anchorKind: isSoftCrossing ? "soft_crossing" : "resource",
+        stopShort: false
+      };
+    }
+    if (isDungeonOrHazard) return { routeClass: "path", anchorKind: "hazard", stopShort: true };
+    if (isSite) return { routeClass: "path", anchorKind: "site", stopShort: false };
+    return { routeClass: priority >= 70 ? "road" : "path", anchorKind: "minor", stopShort: false };
+  }
+
+  function isGeneratedRoadDetourAnchor(anchor) {
+    return ["crossing", "pass", "roadstop", "soft_crossing"].includes(anchor?.anchorKind || "");
+  }
+
+  function getRoadVisualAnchorBreakHexIds(segments = []) {
+    const touchedHexIds = new Set();
+    (segments || []).forEach(segment => {
+      if (segment?.From_Hex_ID_Ref) touchedHexIds.add(segment.From_Hex_ID_Ref);
+      if (segment?.To_Hex_ID_Ref) touchedHexIds.add(segment.To_Hex_ID_Ref);
+    });
+    const breakHexIds = new Set();
+    touchedHexIds.forEach(hexId => {
+      const hex = hexForPathPoint(hexId);
+      if (!hex) return;
+      if (getPoisAtRoadHex(hex).some(isRoadVisualAnchorPoi)) breakHexIds.add(hex.id);
+    });
+    return breakHexIds;
+  }
+
+  function isRoadVisualAnchorPoi(poi) {
+    const icon = String(poi?.POI_Icon || "").toLowerCase();
+    const iconMeta = getPoiIconMetaForRoads(poi);
+    const traits = new Set(iconMeta?.traits || []);
+    const family = iconMeta?.family || "";
+    const type = window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || "")
+      || String(poi?.POI_Type_Value || poi?.POI_Type || "").trim().toLowerCase();
+    return traits.has("river_crossing_anchor")
+      || traits.has("pass_anchor")
+      || traits.has("roadside")
+      || traits.has("settlement_adjacent")
+      || icon === "bridge"
+      || icon === "bridge_gate"
+      || icon === "ford"
+      || icon === "ferry"
+      || icon === "inn"
+      || icon === "tavern"
+      || icon === "lodge"
+      || type === "resource_site"
+      || family === "resource_site";
   }
 
   function getRoadCrossingPoiBias(hex) {
@@ -10503,7 +12172,9 @@
         hex: regionHex,
         name: "",
         priority: 28 + seededUnit(`${seedBase}:road-fallback-region:${regionId}`) * 4,
-        tier: "minor"
+        tier: "minor",
+        routeClass: "path",
+        anchorKind: "fallback"
       } : null;
     }).filter(Boolean);
 
@@ -10518,7 +12189,9 @@
         hex,
         name: "",
         priority: 20 - getRoadLandAnchorScore(hex),
-        tier: "minor"
+        tier: "minor",
+        routeClass: "path",
+        anchorKind: "fallback"
       }));
 
     return [...regionCenters, ...broadLand]
@@ -10530,18 +12203,33 @@
       .slice(0, 12);
   }
 
-  function getGeneratedRoadBackboneScore(fromAnchor, toAnchor, seedBase, step = 0) {
+  function getGeneratedRoadBackboneScore(fromAnchor, toAnchor, seedBase, step = 0, lengthScale = 1) {
     const distance = roadPathHeuristic(fromAnchor.hex, toAnchor.hex);
     const importanceBonus = (fromAnchor.priority + toAnchor.priority) / 55;
     const majorBias = fromAnchor.tier === "major" && toAnchor.tier === "major" ? -1.2 : 0;
+    const reachPenalty = Math.max(0, distance - (12 + lengthScale * 15)) * (0.9 / Math.max(0.5, lengthScale));
     const roll = seededUnit(`${seedBase}:road-backbone:${step}:${fromAnchor.hex.id}:${toAnchor.hex.id}`) * 1.8;
-    return distance * 1.45 - importanceBonus + majorBias + roll;
+    return distance * 1.35 + reachPenalty - importanceBonus + majorBias + roll;
   }
 
-  function getGeneratedRoadFeederScore(anchor, connectedAnchor, seedBase) {
-    return roadPathHeuristic(anchor.hex, connectedAnchor.hex)
+  function getGeneratedRoadFeederScore(anchor, connectedAnchor, seedBase, lengthScale = 1) {
+    const distance = roadPathHeuristic(anchor.hex, connectedAnchor.hex);
+    const reachPenalty = Math.max(0, distance - (8 + lengthScale * 10)) * (1.25 / Math.max(0.5, lengthScale));
+    return distance
+      + reachPenalty
       + Math.max(0, connectedAnchor.priority - anchor.priority) * 0.015
       + seededUnit(`${seedBase}:road-feeder:${anchor.hex.id}:${connectedAnchor.hex.id}`) * 0.9;
+  }
+
+  function getGeneratedPathFeederScore(anchor, connectedAnchor, seedBase, lengthScale = 1) {
+    const distance = roadPathHeuristic(anchor.hex, connectedAnchor.hex);
+    const reachPenalty = Math.max(0, distance - (5 + lengthScale * 8)) * (0.85 / Math.max(0.5, lengthScale));
+    const hazardPenalty = anchor.stopShort ? -0.6 : 0;
+    return distance
+      + reachPenalty
+      + hazardPenalty
+      - Math.min(1.2, anchor.priority / 90)
+      + seededUnit(`${seedBase}:path-feeder:${anchor.hex.id}:${connectedAnchor.hex.id}`) * 1.1;
   }
 
   function buildGeneratedRoadRouteName(fromAnchor, toAnchor, seedBase, routeIndex, usedNames = new Set()) {
@@ -12423,7 +14111,7 @@
   async function persistMistBrush(centerHex) {
     const hexIds = getMistBrushHexIds(centerHex, "mist");
     if (!hexIds.length) return;
-    await persistHexStyleOverlays("mist", hexIds, "mist");
+    queueHexStyleOverlayBrush("mist", hexIds, "mist");
   }
 
   async function persistMistOverlays(hexIds) {
@@ -12433,7 +14121,70 @@
   async function persistFarmlandBrush(centerHex) {
     const hexIds = getMistBrushHexIds(centerHex, "farmland");
     if (!hexIds.length) return;
-    await persistHexStyleOverlays("farmland", hexIds, "farmland");
+    queueHexStyleOverlayBrush("farmland", hexIds, "farmland");
+  }
+
+  function queueHexStyleOverlayBrush(overlayType, hexIds, style) {
+    const startedBatch = !renderer.drawing.dragActionBatch;
+    if (startedBatch) beginDragActionBatch();
+    const queuedHexIds = queueHexStyleBrushPreview(overlayType, hexIds);
+    if (!queuedHexIds.length) {
+      if (startedBatch) scheduleDragActionBatchCommit();
+      return;
+    }
+    renderSvgOnly();
+    if (startedBatch) scheduleDragActionBatchCommit();
+  }
+
+  function queuePendingHexStyleOverlaySaves(batch) {
+    const campaign = getActiveCampaign?.();
+    if (!batch || !campaign) return;
+    ["mist", "farmland"].forEach(overlayType => {
+      const state = getHexStyleBrushPreviewState(overlayType);
+      if (!state?.pending?.size) return;
+      const hexIds = [...state.pending];
+      state.pending.clear();
+      hexIds.forEach(hexId => state.inflight.add(hexId));
+      batch.pending.push(persistQueuedHexStyleOverlays(campaign.id, overlayType, hexIds, overlayType, batch));
+    });
+  }
+
+  async function persistQueuedHexStyleOverlays(campaignId, overlayType, hexIds, style, batch = null) {
+    const state = getHexStyleBrushPreviewState(overlayType);
+    const targetHexIds = [...new Set(hexIds || [])].filter(Boolean);
+    if (!targetHexIds.length) return [];
+
+    let saved = [];
+    let failure = null;
+
+    try {
+      const results = await Promise.allSettled(targetHexIds.map(hexId => (
+        savePathOverlaySegment(campaignId, overlayType, hexId, null, style, null, {})
+      )));
+      failure = results.find(result => result.status === "rejected")?.reason || null;
+      saved = results
+        .filter(result => result.status === "fulfilled" && result.value)
+        .map(result => result.value);
+
+      if (saved.length) {
+        upsertLocalOverlays(saved);
+        const action = { type: "overlay", overlays: saved };
+        if (batch?.actions) batch.actions.push(action);
+        else pushMapEditAction(action, { force: true });
+      }
+
+      if (failure) throw failure;
+      return saved;
+    } catch (error) {
+      console.error(`Unable to save generated map ${overlayType}:`, error);
+      window.alert?.(error?.message || `Unable to save ${overlayType}.`);
+      return saved;
+    } finally {
+      targetHexIds.forEach(hexId => state?.inflight?.delete(hexId));
+      if (!state?.pending?.size && !state?.inflight?.size) clearHexStyleBrushPreview(overlayType);
+      if (saved.length) render();
+      else renderSvgOnly();
+    }
   }
 
   async function persistHexStyleOverlays(overlayType, hexIds, style) {
@@ -12737,9 +14488,9 @@
 
   async function applyPoiHistoryAction(campaignId, action, direction) {
     const removeLocalPoi = window.CampaignCodexPoiMutations?.removePoiByUuidFromLocalDb || removePoiFromLocalDbFallback;
-    const registerCreatedPois = window.CampaignCodexPoiMutations?.registerCreatedPoiRowsInLocalDb || registerGeneratedPoiRowsInLocalDb;
     const removeLocalPoiGroup = window.CampaignCodexPoiMutations?.removePoiGroupByUuidFromLocalDb || removePoiGroupFromLocalDbFallback;
     const refreshPoiViews = window.CampaignCodexPoiMutations?.refreshPoiViewsAfterPurge || refreshPoiViewsAfterPurgeFallback;
+    const registerRestoredPois = registerGeneratedPoiRowsInLocalDb;
     const deletePois = [];
     const restorePois = [];
     const deleteGroups = [];
@@ -12790,19 +14541,20 @@
 
       const { data, error } = await campaignSupabase.rpc("restore_generated_poi_snapshots", {
         target_campaign_id: campaignId,
-        delete_poi_ids: deletePois.map(poi => poi?.__uuid).filter(Boolean),
+        delete_poi_ids: deletePois.map(resolvePoiHistoryUuid).filter(Boolean),
         poi_snapshot: serializePoiSnapshot(restorePois.map(entry => entry.poi))
       });
       if (error) throw error;
 
       deletePois.forEach(poi => {
-        if (poi?.__uuid) removeLocalPoi?.(poi.__uuid);
+        const poiUuid = resolvePoiHistoryUuid(poi);
+        if (poiUuid) removeLocalPoi?.(poiUuid);
       });
 
       const restoredRows = (Array.isArray(data) ? data : [data])
         .filter(Boolean)
         .sort((left, right) => Number(left?.snapshot_order || 0) - Number(right?.snapshot_order || 0));
-      const registeredRestoredPois = registerCreatedPois(restoredRows, { refresh: false });
+      const registeredRestoredPois = registerRestoredPois(restoredRows);
       const restoredPois = (Array.isArray(registeredRestoredPois)
         ? registeredRestoredPois
         : [registeredRestoredPois])
@@ -12822,18 +14574,19 @@
     }
 
     for (const poi of deletePois) {
-      if (!poi?.__uuid) continue;
+      const poiUuid = resolvePoiHistoryUuid(poi);
+      if (!poiUuid) continue;
       const { error } = await campaignSupabase.rpc("delete_campaign_record", {
         target_campaign_id: campaignId,
         target_record_type: "poi",
-        target_record_id: poi.__uuid
+        target_record_id: poiUuid
       });
       if (error && !isMissingPersistedDeleteError(error)) throw error;
-      removeLocalPoi?.(poi.__uuid);
+      removeLocalPoi?.(poiUuid);
     }
 
     for (const entry of restorePois) {
-      const restored = await recreatePoiFromHistoryRecord(campaignId, entry.poi, registerCreatedPois);
+      const restored = await recreatePoiFromHistoryRecord(campaignId, entry.poi, registerRestoredPois);
       if (!restored) continue;
       action.pois[entry.index] = {
         ...buildPoiHistoryRecord(restored, { undoDeleted: Boolean(entry.poi.__undoDeleted) }),
@@ -14089,7 +15842,7 @@
         : directSequence;
     }
     if (tool === "sea_route" && !exitEdge && fromHexId !== toHexId) {
-      return getSeaRoutePathSequence(fromHexId, toHexId) || getHexLineSequence(fromHexId, toHexId);
+      return getSeaRoutePathSequence(fromHexId, toHexId, options) || getHexLineSequence(fromHexId, toHexId);
     }
     return getHexLineSequence(fromHexId, toHexId);
   }
@@ -14101,15 +15854,22 @@
     return getWeightedHexPathSequence(fromHexId, toHexId, getRoadPathStepCost, roadPathHeuristic, options);
   }
 
-  function getSeaRoutePathSequence(fromHexId, toHexId) {
-    const directRoute = getWeightedHexPathSequence(fromHexId, toHexId, getSeaRouteStepCost, roadPathHeuristic);
+  function getGeneratedPathSequence(fromHexId, toHexId, options = {}) {
+    const fromHex = hexForPathPoint(fromHexId);
+    const toHex = hexForPathPoint(toHexId);
+    if (ROAD_IMPASSABLE_WATER_TERRAINS.has(fromHex?.baseTerrain) || ROAD_IMPASSABLE_WATER_TERRAINS.has(toHex?.baseTerrain)) return null;
+    return getWeightedHexPathSequence(fromHexId, toHexId, getGeneratedPathStepCost, roadPathHeuristic, options);
+  }
+
+  function getSeaRoutePathSequence(fromHexId, toHexId, options = {}) {
+    const directRoute = getWeightedHexPathSequence(fromHexId, toHexId, getSeaRouteStepCost, roadPathHeuristic, options);
     if (!directRoute?.length) return directRoute;
 
     const anchor = chooseSeaRouteIslandAnchor(fromHexId, toHexId, directRoute);
     if (!anchor) return directRoute;
 
-    const firstLeg = getWeightedHexPathSequence(fromHexId, anchor.id, getSeaRouteStepCost, roadPathHeuristic);
-    const secondLeg = getWeightedHexPathSequence(anchor.id, toHexId, getSeaRouteStepCost, roadPathHeuristic);
+    const firstLeg = getWeightedHexPathSequence(fromHexId, anchor.id, getSeaRouteStepCost, roadPathHeuristic, options);
+    const secondLeg = getWeightedHexPathSequence(anchor.id, toHexId, getSeaRouteStepCost, roadPathHeuristic, options);
     if (!firstLeg?.length || !secondLeg?.length) return directRoute;
 
     const anchoredRoute = firstLeg.concat(secondLeg.slice(1));
@@ -14483,15 +16243,40 @@
       if (!canRoadUseOneHexWaterCrossing(fromHex, toHex, goalHex)) return Infinity;
       cost += isMajorRoute ? MAJOR_ROAD_WATER_PATH_COST : ROAD_WATER_PATH_COST;
       cost -= getRoadCrossingPoiBias(fromHex) * 0.65;
+      cost -= getAdjacentRoadSoftCrossingBias(toHex) * 0.5;
+      cost -= getAdjacentRoadCrossingAnchorBias(toHex) * 0.85;
     }
 
     cost += getRoadFeaturePathCost(toHex);
-    cost += getRoadElevationPathCost(fromHex, toHex);
+    cost += getRoadElevationPathCost(fromHex, toHex, options);
+    if (options.generatedRoadMode && options.pathSalt) {
+      cost += seededUnit(`${options.pathSalt}:${fromHex.id}:${toHex.id}`) * 0.55;
+    }
     if (!canRoadCrossWaterHex(toHex)) {
       cost -= getRoadCrossingPoiBias(toHex);
     }
     if (hasExistingRoadSegment(fromHex.id, toHex.id)) cost *= 0.42;
     return Math.max(0.2, cost);
+  }
+
+  function getGeneratedPathStepCost(fromHex, toHex, goalHex, startHex, options = {}) {
+    if (ROAD_IMPASSABLE_WATER_TERRAINS.has(toHex.baseTerrain) && toHex.id !== goalHex.id) return Infinity;
+    if (canRoadCrossWaterHex(fromHex) && canRoadCrossWaterHex(toHex) && toHex.id !== goalHex.id) return Infinity;
+
+    let cost = (ROAD_BASE_TERRAIN_COSTS[toHex.baseTerrain] ?? 3) * 0.78;
+    if (canRoadCrossWaterHex(toHex)) {
+      if (!canRoadUseOneHexWaterCrossing(fromHex, toHex, goalHex)) return Infinity;
+      cost += ROAD_WATER_PATH_COST * 0.7;
+      cost -= Math.max(getRoadCrossingPoiBias(fromHex), getAdjacentRoadSoftCrossingBias(toHex)) * 0.35;
+      cost -= getAdjacentRoadCrossingAnchorBias(toHex) * 0.45;
+    }
+    cost += getRoadFeaturePathCost(toHex) * 0.58;
+    cost += getRoadElevationPathCost(fromHex, toHex, { generatedPathMode: true }) * 0.62;
+    if (options.pathSalt) {
+      cost += seededUnit(`${options.pathSalt}:${fromHex.id}:${toHex.id}`) * 0.78;
+    }
+    if (hasExistingRoadSegment(fromHex.id, toHex.id) || hasExistingPathSegment(fromHex.id, toHex.id)) cost *= 0.52;
+    return Math.max(0.25, cost);
   }
 
   function getManualRiverLandStepCost(fromHex, toHex, goalHex, options = {}) {
@@ -14685,11 +16470,16 @@
     return Math.max(0.45, cost);
   }
 
-  function getSeaRouteStepCost(fromHex, toHex, goalHex, startHex) {
-    if (isWaterHex(toHex)) return getSeaRouteWaterStepCost(toHex);
+  function getSeaRouteStepCost(fromHex, toHex, goalHex, startHex, options = {}) {
+    if (isWaterHex(toHex)) return getSeaRouteWaterStepCost(toHex) + getSeaTradeDangerPathCost(toHex, goalHex, options);
     if (toHex.id === goalHex.id && canSeaRouteUseHex(toHex)) return 1.25;
-    if (fromHex.id === startHex.id && isWaterHex(toHex)) return getSeaRouteWaterStepCost(toHex);
+    if (fromHex.id === startHex.id && isWaterHex(toHex)) return getSeaRouteWaterStepCost(toHex) + getSeaTradeDangerPathCost(toHex, goalHex, options);
     return Infinity;
+  }
+
+  function getSeaTradeDangerPathCost(hex, goalHex, options = {}) {
+    if (!hex?.id || hex.id === goalHex?.id || !(options.seaDangerHexIds instanceof Set)) return 0;
+    return options.seaDangerHexIds.has(hex.id) ? 9 : 0;
   }
 
   function getSeaRouteWaterStepCost(hex) {
@@ -14735,11 +16525,18 @@
     }, 0);
   }
 
-  function getRoadElevationPathCost(fromHex, toHex) {
+  function getRoadElevationPathCost(fromHex, toHex, options = {}) {
     const delta = Math.abs(Number(toHex.elevation || 0) - Number(fromHex.elevation || 0));
     if (delta <= 0) return 0;
     const passDiscount = isRoadPassHex(fromHex) || isRoadPassHex(toHex) ? 0.45 : 1;
-    return (delta * 0.8 + Math.max(0, delta - 1) * 1.35) * passDiscount;
+    const fromElevation = Number(fromHex.elevation || 0);
+    const toElevation = Number(toHex.elevation || 0);
+    const highMountainStep = Math.max(fromElevation, toElevation) >= 4 && Math.min(fromElevation, toElevation) <= 2;
+    const generatedRoadPenalty = options.generatedRoadMode && highMountainStep && passDiscount >= 1
+      ? delta * 3.4 + Math.max(0, delta - 2) * 4.2
+      : 0;
+    const generatedPathRelief = options.generatedPathMode ? 0.76 : 1;
+    return ((delta * 0.8 + Math.max(0, delta - 1) * 1.35) * generatedPathRelief + generatedRoadPenalty) * passDiscount;
   }
 
   function hasExistingRoadSegment(fromHexId, toHexId) {
@@ -14751,6 +16548,58 @@
         overlay.From_Hex_ID_Ref === toHexId && overlay.To_Hex_ID_Ref === fromHexId
       )
     ));
+  }
+
+  function hasExistingPathSegment(fromHexId, toHexId) {
+    return (renderer.mapOverlays || []).some(overlay => (
+      overlay.Overlay_Type === "path" &&
+      overlay.To_Hex_ID_Ref &&
+      (
+        overlay.From_Hex_ID_Ref === fromHexId && overlay.To_Hex_ID_Ref === toHexId ||
+        overlay.From_Hex_ID_Ref === toHexId && overlay.To_Hex_ID_Ref === fromHexId
+      )
+    ));
+  }
+
+  function getAdjacentRoadSoftCrossingBias(hex) {
+    if (!hex?.id) return 0;
+    return nearbyHexesWithin(hex, 1).reduce((best, nearbyHex) => {
+      const value = getPoisAtRoadHex(nearbyHex).reduce((poiBest, poi) => {
+        const iconMeta = getPoiIconMetaForRoads(poi);
+        const family = iconMeta?.family || "";
+        const traits = new Set(iconMeta?.traits || []);
+        const icon = String(poi?.POI_Icon || "").toLowerCase();
+        const type = window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || "")
+          || String(poi?.POI_Type_Value || poi?.POI_Type || "").trim().toLowerCase();
+        if (type !== "resource_site" && family !== "resource_site") return poiBest;
+        if (traits.has("river_or_coastal") || traits.has("settlement_adjacent") || ["docks", "fishing_camp", "lumber_mill", "farmstead", "windmill"].includes(icon)) {
+          return Math.max(poiBest, 1.35);
+        }
+        return poiBest;
+      }, 0);
+      return Math.max(best, value);
+    }, 0);
+  }
+
+  function getAdjacentRoadCrossingAnchorBias(hex) {
+    if (!hex?.id) return 0;
+    return nearbyHexesWithin(hex, 1).reduce((best, nearbyHex) => {
+      const value = getPoisAtRoadHex(nearbyHex).reduce((poiBest, poi) => {
+        const icon = String(poi?.POI_Icon || "").toLowerCase();
+        const iconMeta = getPoiIconMetaForRoads(poi);
+        const traits = new Set(iconMeta?.traits || []);
+        const tags = Array.isArray(poi?.POI_Tags) ? poi.POI_Tags.map(tag => String(tag || "").toLowerCase()) : [];
+        if (traits.has("river_crossing_anchor") || tags.includes("river_crossing")) {
+          if (icon === "bridge_gate") return Math.max(poiBest, 2.8);
+          if (icon === "bridge") return Math.max(poiBest, 2.6);
+          if (icon === "ford") return Math.max(poiBest, 2.2);
+          if (icon === "ferry") return Math.max(poiBest, 1.9);
+          return Math.max(poiBest, 1.6);
+        }
+        return poiBest;
+      }, 0);
+      return Math.max(best, value);
+    }, 0);
   }
 
   function selectGeneratedHex(hexId, options = {}) {

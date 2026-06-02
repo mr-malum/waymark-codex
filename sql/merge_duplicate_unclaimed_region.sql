@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Merge duplicate Unclaimed Lands/Wilderness region into REG-0000
 -- =========================================================
 --

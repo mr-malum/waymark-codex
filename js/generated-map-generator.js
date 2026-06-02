@@ -22,6 +22,7 @@
   const CANYON_FEATURES = new Set(["cliffs", "ridges"]);
   const WATERWAY_TERRAINS = new Set(["coastal_water", "sea", "deep_sea", "inland_water"]);
   const COASTAL_TERRAINS = new Set(["coastal_water", "sea", "deep_sea"]);
+  const OPEN_SEA_TERRAINS = new Set(["sea", "deep_sea"]);
   const ARABLE_TERRAINS = new Set(["plains", "grassland", "lush_grassland"]);
   const MARSH_TERRAINS = new Set(["wetland"]);
   const DESERT_TERRAINS = new Set(["desert", "deep_desert"]);
@@ -31,6 +32,9 @@
   const HARSH_TERRAINS = new Set(["deep_desert", "wastes"]);
   const BARREN_TERRAINS = new Set(["desert", "deep_desert", "barrens", "bleak_barrens", "wastes"]);
   const SITE_POI_TYPES = Object.freeze(["ruin", "holy_site", "arcane_site", "wilderness_site", "hazard", "landmark"]);
+  const DUNGEON_SITE_HOST_TYPES = new Set(["ruin", "holy_site", "arcane_site", "wilderness_site", "hazard", "landmark"]);
+  const DUNGEON_RESOURCE_HOST_ICONS = new Set(["farmstead", "windmill"]);
+  const WATER_DANGER_ICONS = new Set(["pirate_flag", "lair", "dragon_lair", "kraken", "whirlpool", "reef", "evil_temple"]);
   const SITE_FAMILY_RATIO_BANDS = Object.freeze({
     holy_site: Object.freeze({ minimum: 0.16, soft: 0.24 }),
     landmark: Object.freeze({ minimum: 0.15, soft: 0.22 }),
@@ -90,7 +94,7 @@
 
   function normalizePoiOptions(options = {}) {
     return {
-      seed: String(options.seed || "campaign-codex-pois"),
+      seed: String(options.seed || "waymark-codex-pois"),
       settlementDensity: clamp(options.settlementDensity, 0, 1, 0.5),
       populationConcentration: clamp(options.populationConcentration, 0.5, 1.5, 1),
       resourceAmount: clamp(options.resourceAmount, 0, 1, 0.5),
@@ -248,47 +252,7 @@
         ...strongholdDrafts.map((draft, index) => makeGeneratedStrongholdAnchor(draft, index, byId))
       ];
 
-      const dungeonComplexDrafts = buildDungeonDrafts({
-        candidateHexes: hexes.filter(hex => !occupiedHexIds.has(hex.id) && isPoiLandHex(hex)),
-        settlementAnchors,
-        strongholdAnchors,
-        corridorStats,
-        occupiedHexIds,
-        byCoord,
-        riverData,
-        dimensions,
-        signalCache,
-        settings,
-        usedNames,
-        targetCount: getTargetDungeonComplexCount(candidateHexes, settings, existingCounts.dungeon_complex),
-        complex: true,
-        placedPoiRefs
-      });
-      dungeonComplexDrafts.forEach(draft => {
-        occupiedHexIds.add(draft.hexId);
-        placedPoiRefs.push(makePlacedPoiRef(draft, byId));
-      });
-
-      const dungeonDrafts = buildDungeonDrafts({
-        candidateHexes: hexes.filter(hex => !occupiedHexIds.has(hex.id) && isPoiLandHex(hex)),
-        settlementAnchors,
-        strongholdAnchors,
-        corridorStats,
-        occupiedHexIds,
-        byCoord,
-        riverData,
-        dimensions,
-        signalCache,
-        settings,
-        usedNames,
-        targetCount: getTargetDungeonCount(candidateHexes, settings, existingCounts.dungeon),
-        complex: false,
-        placedPoiRefs
-      });
-      dungeonDrafts.forEach(draft => {
-        occupiedHexIds.add(draft.hexId);
-        placedPoiRefs.push(makePlacedPoiRef(draft, byId));
-      });
+      const existingSiteHosts = getExistingDungeonSiteHosts(existingPois, byId);
 
       const siteDrafts = buildSiteDrafts({
         candidateHexes: hexes.filter(hex => !occupiedHexIds.has(hex.id) && isPoiLandHex(hex)),
@@ -305,15 +269,70 @@
         targetCount: getTargetSiteCount(candidateHexes, settings, existingCounts.site),
         placedPoiRefs
       });
+      siteDrafts.forEach(draft => {
+        occupiedHexIds.add(draft.hexId);
+        placedPoiRefs.push(makePlacedPoiRef(draft, byId));
+      });
+
+      const siteHosts = [
+        ...existingSiteHosts,
+        ...resourceDrafts.map((draft, index) => makeGeneratedSiteHostAnchor(draft, index, byId)).filter(Boolean),
+        ...siteDrafts.map((draft, index) => makeGeneratedSiteHostAnchor(draft, index, byId)).filter(Boolean)
+      ];
+
+      const dungeonDrafts = buildDungeonDrafts({
+        allHexes: hexes.filter(isPoiLandHex),
+        candidateHexes: hexes.filter(hex => !occupiedHexIds.has(hex.id) && isPoiLandHex(hex)),
+        settlementAnchors,
+        strongholdAnchors,
+        siteHosts,
+        corridorStats,
+        occupiedHexIds,
+        byCoord,
+        riverData,
+        dimensions,
+        signalCache,
+        settings,
+        usedNames,
+        existingCounts,
+        placedPoiRefs
+      });
+      dungeonDrafts.forEach(draft => {
+        occupiedHexIds.add(draft.hexId);
+        placedPoiRefs.push(makePlacedPoiRef(draft, byId));
+      });
+
+      const waterSummary = buildWaterPoiSummary({
+        hexes,
+        byCoord,
+        dimensions,
+        settlementAnchors,
+        placedPoiRefs,
+        settings
+      });
+      const waterDrafts = buildWaterPoiDrafts({
+        waterSummary,
+        settlementAnchors,
+        occupiedHexIds,
+        byCoord,
+        dimensions,
+        settings,
+        usedNames,
+        placedPoiRefs
+      });
+      waterDrafts.forEach(draft => {
+        occupiedHexIds.add(draft.hexId);
+        placedPoiRefs.push(makePlacedPoiRef(draft, byId));
+      });
 
       return [
         ...settlementDrafts,
         ...resourceDrafts,
         ...waypointDrafts,
         ...strongholdDrafts,
-        ...dungeonComplexDrafts,
+        ...siteDrafts,
         ...dungeonDrafts,
-        ...siteDrafts
+        ...waterDrafts
       ].map(({ meta, ...draft }) => draft);
     } finally {
       activeGeneratedNameUsage = null;
@@ -390,6 +409,7 @@
         id: poi?.POI_ID || `existing-settlement-${index}`,
         hex,
         name: String(poi?.Name || "").trim() || "Settlement",
+        icon,
         importance,
         population: poi?.Population || "",
         notoriety: window.CampaignPoiTypes?.getStoredNotorietyValue?.(poi?.["Notoriety Tier_Value"] || poi?.["Notoriety Tier"] || "") || "7",
@@ -733,9 +753,20 @@
 
       [...seedMap.values()].forEach(province => {
         province.candidates.sort((left, right) => right.score - left.score || left.hex.id.localeCompare(right.hex.id));
+        const riverCandidates = province.candidates
+          .filter(isRiverSettlementCandidate)
+          .sort((left, right) => (
+            right.score - left.score ||
+            (right.roleScores?.[right.primaryRole] || 0) - (left.roleScores?.[left.primaryRole] || 0) ||
+            left.hex.id.localeCompare(right.hex.id)
+          ));
+        const riverLaneSize = Math.max(2, Math.min(5, Math.ceil(province.candidates.length * 0.08)));
         const topScores = province.candidates.slice(0, 4).map(candidate => candidate.score);
         const averageTopScore = topScores.reduce((sum, value) => sum + value, 0) / Math.max(1, topScores.length);
         province.hexCount = province.candidates.length;
+        province.bestOverallCandidateScore = province.candidates[0]?.score || 0;
+        province.bestRiverCandidateScore = riverCandidates[0]?.score || 0;
+        province.riverSeatCandidateIds = new Set(riverCandidates.slice(0, riverLaneSize).map(candidate => candidate.hex.id));
         province.weight = province.candidates[0].score * 0.56
           + averageTopScore * 0.28
           + Math.min(0.32, Math.sqrt(province.hexCount) * 0.032)
@@ -785,10 +816,16 @@
 
   function chooseSettlementProvinceSeeds(candidates, count, settings) {
     if (!Array.isArray(candidates) || !candidates.length || count <= 0) return [];
-    const sorted = [...candidates].sort((left, right) => (
-      right.score - left.score ||
-      seededUnit(`${settings.seed}:province-seed:${left.hex.id}`) - seededUnit(`${settings.seed}:province-seed:${right.hex.id}`)
-    ));
+    const sorted = [...candidates]
+      .map(candidate => ({
+        candidate,
+        score: candidate.score + seededNoise(`${settings.seed}:province-seed:${candidate.hex.id}`, -0.24, 0.24)
+      }))
+      .sort((left, right) => (
+        right.score - left.score ||
+        left.candidate.hex.id.localeCompare(right.candidate.hex.id)
+      ))
+      .map(entry => entry.candidate);
     const seeds = [sorted[0]];
     const maxCoastalSeeds = count >= 6 ? 2 : 1;
     const maxWarmSeeds = Math.max(1, Math.round(count * 0.4));
@@ -814,6 +851,7 @@
           const duplicateRolePenalty = duplicateRoleCount > 0
             ? duplicateRoleCount * (candidate.primaryRole === "coastal_harbor" ? 3.4 : 1.2)
             : 0;
+          const seededJitter = seededNoise(`${settings.seed}:province-spread:${candidate.hex.id}:${seeds.length}`, -0.62, 0.62);
           return {
             candidate,
             score: minDistance * 0.7
@@ -823,6 +861,7 @@
               - preferencePenalty * 3.2
               - coastalSeedPenalty
               - duplicateRolePenalty
+              + seededJitter
           };
         })
         .sort((left, right) => right.score - left.score || left.candidate.hex.id.localeCompare(right.candidate.hex.id))[0];
@@ -893,10 +932,11 @@
           const roleDiversity = usedRoles.has(candidate.primaryRole) ? -0.05 : 0.07;
           const spacingPenalty = getSettlementSpacingPenalty(candidate.hex, [...globalSelections, ...selections], existingAnchors);
           const preferencePenalty = getSettlementPreferencePenalty(candidate, [...globalSelections, ...selections]);
-          const seededBias = seededNoise(`${settings.seed}:settlement-pick:${province.id}:${candidate.hex.id}:${selections.length}`, -0.02, 0.03);
+          const seededBias = seededNoise(`${settings.seed}:settlement-pick:${province.id}:${candidate.hex.id}:${selections.length}`, -0.2, 0.22);
+          const riverSeatBonus = getProvinceRiverSeatBonus(province, candidate, selections.length);
           return {
             candidate,
-            score: candidate.score + roleScore * 0.22 + seatBias + roleDiversity + seededBias - seedDistancePenalty - spacingPenalty - preferencePenalty
+            score: candidate.score + roleScore * 0.22 + seatBias + roleDiversity + seededBias + riverSeatBonus - seedDistancePenalty - spacingPenalty - preferencePenalty
           };
         })
         .filter(entry => entry.score >= 0.18)
@@ -940,11 +980,13 @@
       }))
       .sort((left, right) => right.hierarchyScore - left.hierarchyScore || left.candidate.hex.id.localeCompare(right.candidate.hex.id));
     const totalCombined = Math.max(1, placements.length + existingAnchors.length);
-    const grandHubSlots = totalCombined >= 10
-      ? Math.min(getScaledPoiCap(1, settings, 1), Math.max(1, Math.round(totalCombined / 18)))
+    const grandHubSlots = totalCombined >= 16
+      ? Math.min(getScaledPoiCap(1, settings, 1), Math.max(1, Math.round(totalCombined / 22)))
       : 0;
-    const citySlots = Math.max(1, Math.min(getScaledPoiCap(4, settings, 1), Math.round(Math.max(1, placements.length) * 0.18)));
-    const townSlots = Math.max(2, Math.min(placements.length, Math.round(Math.max(1, placements.length) * 0.52)));
+    const citySlots = placements.length >= 7
+      ? Math.min(getScaledPoiCap(3, settings, 1), Math.round(Math.max(1, placements.length) * 0.12))
+      : 0;
+    const townSlots = Math.max(1, Math.min(placements.length, Math.round(Math.max(1, placements.length) * 0.34)));
     let cityUsed = 0;
     let townUsed = 0;
     let grandHubUsed = 0;
@@ -955,7 +997,7 @@
         ? (grandHubUsed += 1, "grand_hub")
         : candidate.provinceSeat && cityUsed < citySlots
           ? (cityUsed += 1, "city")
-          : candidate.provinceSeat || townUsed < townSlots
+          : townUsed < townSlots && (candidate.provinceSeat || entry.hierarchyScore >= 0.42)
             ? (townUsed += 1, "town")
             : "village";
       const populationValue = generateSettlementPopulation(sizeTier, candidate, settings, entry.hierarchyScore);
@@ -1005,6 +1047,7 @@
       hex: draft.meta?.hex ? { ...draft.meta.hex } : { id: draft.hexId },
       importance: draft.meta?.importance || 0.55,
       name: draft.name,
+      icon: draft.icon || "",
       population: draft.population,
       role: draft.meta?.role || "inland_node",
       provinceId: draft.meta?.provinceId || ""
@@ -1231,7 +1274,7 @@
     } else if ((signals.riverAccess || signals.lakeAccess || signals.coastal) && distance <= 2 && signals.routeability >= 0.46) {
       options.push({ kind: "docks", icon: "docks", score: 0.82 + (majorSettlement ? 0.06 : 0) });
     }
-    if (signals.fishPotential >= 0.55) {
+    if (signals.fishPotential >= 0.55 && (signals.coastal || signals.lakeAccess || signals.riverHex)) {
       options.push({ kind: "fishing", icon: "fishing_camp", score: 0.78 + signals.fishPotential * 0.18 });
     }
     if (signals.stonePotential >= 0.68 || signals.mountainAffinity >= 0.74) {
@@ -1500,7 +1543,7 @@
     if (!targetCount || !Array.isArray(settlementAnchors) || !settlementAnchors.length) return [];
     const variantUsage = new Map();
     const candidates = (candidateHexes || [])
-      .map(hex => buildStrongholdCandidate(hex, settlementAnchors, corridors, corridorStats, byCoord, riverData, dimensions, signalCache))
+      .map(hex => buildStrongholdCandidate(hex, settlementAnchors, corridors, corridorStats, byCoord, riverData, dimensions, signalCache, settings))
       .filter(Boolean)
       .filter(candidate => !occupiedHexIds.has(candidate.hex.id))
       .reduce((lookup, candidate) => {
@@ -1534,7 +1577,7 @@
     });
   }
 
-  function buildStrongholdCandidate(hex, settlementAnchors, corridors, corridorStats, byCoord, riverData, dimensions, signalCache) {
+  function buildStrongholdCandidate(hex, settlementAnchors, corridors, corridorStats, byCoord, riverData, dimensions, signalCache, settings) {
     const signals = getHexSignals(hex, byCoord, riverData, dimensions, signalCache);
     const nearestSettlement = findNearestSettlementAnchor(hex, settlementAnchors);
     const independentMountainGate = signals.mountainCore
@@ -1561,7 +1604,7 @@
       + (frontier ? 0.06 : 0);
     if (score < 0.34) return null;
     const icon = chooseStrongholdIcon(signals, nearestSettlement, corridorPressure, frontier);
-    const tags = getStrongholdTags(signals, icon, frontier);
+    const tags = getStrongholdTags(signals, icon, frontier, settings);
     return {
       hex,
       score,
@@ -1585,7 +1628,6 @@
     const settlementImportance = Number(nearestSettlement?.anchor?.importance || 0);
     const nearestSettlementMountain = hasAnyFeature(nearestSettlement?.anchor?.hex, MOUNTAIN_FEATURES);
     const actualMountainHex = hasAnyFeature(signals?.hex, MOUNTAIN_FEATURES);
-    if (signals.coastal && corridorPressure >= 0.45) return "sea_fort";
     if (
       actualMountainHex
       && signals.passStrength >= 0.58
@@ -1599,12 +1641,21 @@
     return "fort";
   }
 
-  function getStrongholdTags(signals, icon, frontier) {
+  function getStrongholdTags(signals, icon, frontier, settings) {
     const tags = ["occupied"];
     if (frontier || ["watchtower", "walled_encampment", "mountain_gate"].includes(icon)) tags.push("frontier");
     if (signals.passStrength >= 0.6 || signals.crossingPotential >= 0.62 || icon === "sea_fort") tags.push("contested");
     if (icon === "mountain_gate" || signals.passStrength >= 0.64) tags.push("crossroads");
+    if (shouldStrongholdBeLawless(signals, icon, frontier, settings)) tags.push("lawless");
     return mergeGeneratedTagsForIcon(tags, icon);
+  }
+
+  function shouldStrongholdBeLawless(signals, icon, frontier, settings) {
+    if (icon !== "walled_encampment" && icon !== "fort") return false;
+    const seed = `${settings?.seed || ""}:lawless-stronghold:${icon}:${signals?.hex?.id || ""}`;
+    const frontierBonus = frontier ? 0.08 : 0;
+    const baseChance = icon === "walled_encampment" ? 0.28 : 0.12;
+    return seededUnit(seed) < baseChance + frontierBonus;
   }
 
   function getStrongholdNotoriety(icon, nearestSettlement, frontier) {
@@ -1624,33 +1675,174 @@
     };
   }
 
-  function buildDungeonDrafts({ candidateHexes, settlementAnchors, strongholdAnchors, corridorStats, occupiedHexIds, byCoord, riverData, dimensions, signalCache, settings, usedNames, targetCount, complex, placedPoiRefs }) {
+  function canPoiActAsDungeonSiteHost(type, icon) {
+    const normalizedType = String(type || "").trim();
+    const normalizedIcon = String(icon || "").trim();
+    return DUNGEON_SITE_HOST_TYPES.has(normalizedType)
+      || (normalizedType === "resource_site" && DUNGEON_RESOURCE_HOST_ICONS.has(normalizedIcon));
+  }
+
+  function getExistingDungeonSiteHosts(existingPois, byId) {
+    const hosts = [];
+    (existingPois || []).forEach((poi, index) => {
+      const type = window.CampaignPoiTypes?.getStoredTypeValue?.(poi?.POI_Type_Value || poi?.POI_Type || "") || "";
+      const icon = window.CampaignPoiIcons?.getStoredIconValue?.(poi?.POI_Icon || "") || "";
+      if (!canPoiActAsDungeonSiteHost(type, icon)) return;
+      const hex = byId.get(poi?.Hex_ID_Ref || "");
+      if (!hex) return;
+      hosts.push({
+        id: poi?.POI_ID || `existing-site-host-${index}:${hex.id}`,
+        hex,
+        type,
+        icon,
+        name: String(poi?.Name || "").trim() || "Site",
+        importance: getDungeonSiteHostImportance(type, icon)
+      });
+    });
+    return hosts;
+  }
+
+  function makeGeneratedSiteHostAnchor(draft, index, byId) {
+    if (!draft?.type || !canPoiActAsDungeonSiteHost(draft.type, draft.icon)) return null;
+    return {
+      id: `generated-site-host-${index}:${draft.hexId}`,
+      hex: draft.meta?.hex ? { ...draft.meta.hex } : byId.get(draft.hexId) || { id: draft.hexId },
+      type: draft.type,
+      icon: draft.icon || "",
+      name: draft.name || "Site",
+      importance: getDungeonSiteHostImportance(draft.type, draft.icon)
+    };
+  }
+
+  function getDungeonSiteHostImportance(type, icon) {
+    if (type === "arcane_site") return 1.04;
+    if (type === "ruin") return icon === "pyramid" ? 1 : 0.92;
+    if (type === "holy_site") return 0.88;
+    if (type === "landmark") return 0.82;
+    if (type === "wilderness_site") return 0.78;
+    if (type === "hazard") return 0.8;
+    if (type === "resource_site" && DUNGEON_RESOURCE_HOST_ICONS.has(String(icon || "").trim())) return 0.76;
+    return 0.82;
+  }
+
+  function buildDungeonDrafts({ allHexes, candidateHexes, settlementAnchors, strongholdAnchors, siteHosts, corridorStats, occupiedHexIds, byCoord, riverData, dimensions, signalCache, settings, usedNames, existingCounts, placedPoiRefs }) {
+    const existingDungeonTotal = Math.max(0, Number(existingCounts?.dungeon || 0)) + Math.max(0, Number(existingCounts?.dungeon_complex || 0));
+    const targetCount = getTargetDungeonTotalCount(allHexes, settlementAnchors, settings, existingDungeonTotal);
     if (!targetCount) return [];
+
+    const contextCache = new Map();
+    const settlementCandidates = buildSettlementHaloDungeonCandidates({
+      allHexes,
+      settlementAnchors,
+      strongholdAnchors,
+      corridorStats,
+      occupiedHexIds,
+      byCoord,
+      riverData,
+      dimensions,
+      signalCache,
+      contextCache,
+      settings
+    });
+    const siteCandidates = buildSiteHostedDungeonCandidates({
+      allHexes,
+      siteHosts,
+      settlementAnchors,
+      strongholdAnchors,
+      corridorStats,
+      occupiedHexIds,
+      byCoord,
+      riverData,
+      dimensions,
+      signalCache,
+      contextCache
+    });
+    const corridorCandidates = buildCorridorShadowDungeonCandidates({
+      candidateHexes,
+      settlementAnchors,
+      strongholdAnchors,
+      corridorStats,
+      byCoord,
+      riverData,
+      dimensions,
+      signalCache,
+      contextCache
+    });
+    const frontierCandidates = buildFrontierDeepDungeonCandidates({
+      candidateHexes,
+      settlementAnchors,
+      strongholdAnchors,
+      corridorStats,
+      byCoord,
+      riverData,
+      dimensions,
+      signalCache,
+      contextCache
+    });
+
+    const pools = {
+      settlement: settlementCandidates,
+      site: siteCandidates,
+      corridor: corridorCandidates,
+      frontier: frontierCandidates
+    };
+    const quotas = getDungeonBucketQuotas(targetCount, pools);
+    const chosen = [];
+    const chosenKeys = new Set();
     const variantUsage = new Map();
-    const candidates = (candidateHexes || [])
-      .map(hex => buildDungeonCandidate(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, complex))
-      .filter(Boolean)
-      .filter(candidate => !occupiedHexIds.has(candidate.hex.id))
-      .sort((left, right) => right.score - left.score || left.hex.id.localeCompare(right.hex.id));
-    return selectRankedCandidates(candidates, targetCount, 5, placedPoiRefs, {
-      variantUsage,
-      variantSoftCap: candidate => candidate.icon === "cave" ? 2 : 1,
-      variantPenaltyBase: 0.06,
-      variantPenaltyStep: 0.1
-    }).map(candidate => {
+
+    ["settlement", "site", "corridor", "frontier"].forEach(bucket => {
+      const selections = selectDungeonCandidatesFromPool(
+        pools[bucket],
+        quotas[bucket] || 0,
+        chosen,
+        chosenKeys,
+        placedPoiRefs,
+        variantUsage
+      );
+      selections.forEach(candidate => {
+        chosen.push(candidate);
+        chosenKeys.add(candidate.key);
+      });
+    });
+
+    if (chosen.length < targetCount) {
+      const leftovers = Object.values(pools)
+        .flat()
+        .filter(candidate => !chosenKeys.has(candidate.key));
+      const fallbackSelections = selectDungeonCandidatesFromPool(
+        leftovers,
+        targetCount - chosen.length,
+        chosen,
+        chosenKeys,
+        placedPoiRefs,
+        variantUsage
+      );
+      fallbackSelections.forEach(candidate => {
+        chosen.push(candidate);
+        chosenKeys.add(candidate.key);
+      });
+    }
+
+    const finalDungeonCandidates = chosen.slice(0, targetCount);
+    const complexTarget = getTargetDungeonComplexSelectionCount(finalDungeonCandidates.length, settings);
+    const complexKeys = chooseDungeonComplexKeys(finalDungeonCandidates, complexTarget);
+
+    return finalDungeonCandidates.map(candidate => {
+      const complex = complexKeys.has(candidate.key);
       const name = reserveGeneratedName(
         generateDungeonName(candidate, settings),
         usedNames,
-        buildDungeonFallbackName(candidate),
-        { seed: `${settings.seed}:dungeon-name:${candidate.hex.id}` }
+        buildDungeonFallbackName(candidate, complex),
+        { seed: `${settings.seed}:dungeon-name:${candidate.hex.id}:${candidate.icon}` }
       );
       return {
         name,
         type: complex ? "dungeon_complex" : "dungeon",
         icon: candidate.icon,
         hexId: candidate.hex.id,
-        tags: candidate.tags,
-        notoriety: candidate.notoriety,
+        tags: getDungeonTags(candidate, complex),
+        notoriety: getDungeonNotoriety(candidate, complex),
         population: "",
         lore: "",
         meta: candidate.meta
@@ -1658,7 +1850,426 @@
     });
   }
 
-  function buildDungeonCandidate(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, complex) {
+  function getTargetDungeonTotalCount(allHexes, settlementAnchors, settings, existingDungeonCount = 0) {
+    const settlementTarget = Array.isArray(settlementAnchors) && settlementAnchors.length
+      ? Math.round(settlementAnchors.length * (0.55 + settings.dungeonAmount * 0.9))
+      : 0;
+    const terrainFallback = !settlementTarget
+      ? Math.round(((allHexes || []).length / 300) * (0.4 + settings.dungeonAmount * 1.2) * POI_BASELINE_SCALE)
+      : 0;
+    const totalTarget = Math.max(settlementTarget, terrainFallback);
+    const capBase = settlementAnchors?.length
+      ? Math.max(12, Math.round(settlementAnchors.length * 1.7))
+      : 10;
+    return Math.max(0, Math.min(getScaledPoiCap(capBase, settings, 0), totalTarget) - Math.max(0, existingDungeonCount));
+  }
+
+  function getTargetDungeonComplexSelectionCount(totalNewDungeons, settings) {
+    const complexRatio = 0.2 + settings.dungeonComplexAmount * 0.15;
+    return Math.max(0, Math.min(totalNewDungeons, Math.round(totalNewDungeons * complexRatio)));
+  }
+
+  function getDungeonBucketQuotas(targetCount, pools) {
+    const desired = {
+      settlement: Math.round(targetCount * 0.5),
+      site: Math.round(targetCount * 0.18),
+      corridor: Math.round(targetCount * 0.22)
+    };
+    desired.frontier = Math.max(0, targetCount - desired.settlement - desired.site - desired.corridor);
+    return {
+      settlement: Math.min(desired.settlement, pools.settlement.length),
+      site: Math.min(desired.site, pools.site.length),
+      corridor: Math.min(desired.corridor, pools.corridor.length),
+      frontier: Math.min(desired.frontier, pools.frontier.length)
+    };
+  }
+
+  function buildSettlementHaloDungeonCandidates({ allHexes, settlementAnchors, strongholdAnchors, corridorStats, occupiedHexIds, byCoord, riverData, dimensions, signalCache, contextCache, settings }) {
+    return (settlementAnchors || [])
+      .map(anchor => chooseBestSettlementHaloDungeonCandidate(anchor, settlementAnchors, allHexes, strongholdAnchors, corridorStats, occupiedHexIds, byCoord, riverData, dimensions, signalCache, contextCache, settings))
+      .filter(Boolean);
+  }
+
+  function chooseBestSettlementHaloDungeonCandidate(anchor, settlementAnchors, allHexes, strongholdAnchors, corridorStats, occupiedHexIds, byCoord, riverData, dimensions, signalCache, contextCache, settings) {
+    if (!anchor?.hex?.id) return null;
+    const tier = getSettlementDungeonTier(anchor);
+    const radius = tier === "major" ? 3 : 4;
+    const nearby = nearbyWithin(anchor.hex, byCoord, radius);
+    const pool = [anchor.hex, ...nearby]
+      .filter((hex, index, values) => hex?.id && values.findIndex(candidate => candidate.id === hex.id) === index)
+      .filter(hex => isPoiLandHex(hex))
+      .filter(hex => {
+        if (hex.id === anchor.hex.id) return true;
+        return !occupiedHexIds.has(hex.id);
+      });
+
+    const scored = pool
+      .map(hex => buildSettlementHaloDungeonCandidate(anchor, settlementAnchors, tier, hex, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache, settings))
+      .filter(Boolean)
+      .sort((left, right) => right.score - left.score || left.hex.id.localeCompare(right.hex.id));
+    return scored[0] || null;
+  }
+
+  function buildSettlementHaloDungeonCandidate(anchor, settlementAnchors, tier, hex, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache, settings) {
+    const distance = hexDistance(anchor.hex, hex);
+    const context = getDungeonContext(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache);
+    if (!context) return null;
+    if (context.signals.edgeDistance <= 0 && distance > 0) return null;
+    const distanceFit = getSettlementHaloDistanceFit(tier, distance);
+    if (distanceFit <= 0.08) return null;
+    const iconChoice = chooseSettlementHaloDungeonIcon(anchor, tier, distance, context, settings);
+    if (!iconChoice) return null;
+    const urbanWeight = tier === "major" ? 0.18 : tier === "town" ? 0.12 : 0.06;
+    const sameHexHostBonus = distance === 0
+      ? (tier === "major" ? 0.26 : tier === "town" ? 0.08 : 0)
+      : 0;
+    const score = distanceFit * 0.3
+      + context.settlementUnsuitability * 0.22
+      + context.oldCivilization * 0.12
+      + context.concealment * 0.1
+      + iconChoice.score * 0.22
+      + urbanWeight
+      + sameHexHostBonus
+      + Math.min(0.14, Number(anchor.importance || 0.5) * 0.1)
+      - context.edgePenalty;
+    if (score < 0.42) return null;
+    return makeDungeonCandidate(hex, iconChoice.icon, "settlement", score, iconChoice.complexBias, context, {
+      hostId: anchor.id || "",
+      hostName: anchor.name || "",
+      hostType: "settlement",
+      nearestSettlement: anchor.name || context.nearestSettlement?.anchor?.name || "",
+      nearestSettlementId: anchor.id || "",
+      supportDistance: distance
+    });
+  }
+
+  function getSettlementHaloDistanceFit(tier, distance) {
+    if (tier === "major") {
+      if (distance === 0) return 0.92;
+      if (distance === 1) return 1;
+      if (distance === 2) return 0.82;
+      if (distance === 3) return 0.5;
+      return 0;
+    }
+    if (tier === "town") {
+      if (distance === 0) return 0.34;
+      if (distance === 1) return 0.82;
+      if (distance === 2) return 1;
+      if (distance === 3) return 0.84;
+      if (distance === 4) return 0.44;
+      return 0;
+    }
+    if (distance === 0) return 0.04;
+    if (distance === 1) return 0.24;
+    if (distance === 2) return 0.9;
+    if (distance === 3) return 1;
+    if (distance === 4) return 0.72;
+    return 0;
+  }
+
+  function chooseSettlementHaloDungeonIcon(anchor, tier, distance, context, settings) {
+    const options = [];
+    const sameHex = distance === 0;
+    const mountainSettlement = isMountainSettlementAnchor(anchor);
+    const urbanSettlement = tier === "major" || (tier === "town" && ["city", "walled_city", "port_town", "mountain_city"].includes(String(anchor?.icon || "").trim()));
+
+    if (urbanSettlement && (sameHex || distance <= 1)) {
+      return pickUrbanSettlementDungeonIcon(anchor, distance, context, settings);
+    }
+
+    pushDungeonIconOption(options, "dungeon", 0.5 + context.oldCivilization * 0.08 + (tier !== "village" ? 0.05 : 0), 0.05, anchor, context.hex);
+    pushDungeonIconOption(options, "buried_ruins", 0.62 + context.oldCivilization * 0.2 + (distance <= 1 ? 0.06 : 0) - (sameHex && urbanSettlement ? 0.04 : 0), 0.16, anchor, context.hex);
+    pushDungeonIconOption(options, "crypt", 0.48 + context.oldCivilization * 0.16 + (context.signals.snowAffinity >= 0.3 || context.signals.wasteAffinity >= 0.34 ? 0.04 : 0), 0.1, anchor, context.hex);
+    pushDungeonIconOption(options, "tomb", 0.46 + context.oldCivilization * 0.12 + (context.signals.aridAffinity >= 0.44 ? 0.04 : 0), 0.1, anchor, context.hex);
+    if (!sameHex && (tier !== "major" || context.signals.routeability < 0.68)) {
+      pushDungeonIconOption(options, "lair", 0.42 + context.concealment * 0.16 + (tier === "village" ? 0.06 : 0), -0.02, anchor, context.hex);
+    }
+    if (!sameHex && context.ruggedAccess) {
+      pushDungeonIconOption(options, "cave", 0.54 + context.signals.mountainAffinity * 0.18, 0.02, anchor, context.hex);
+    }
+    if (!sameHex && context.mineable) {
+      pushDungeonIconOption(options, "abandoned_mine", 0.6 + context.signals.stonePotential * 0.18 + (mountainSettlement ? 0.05 : 0), 0.08, anchor, context.hex);
+    }
+    if (!sameHex && (context.signals.snowAffinity >= 0.44 || context.signals.wasteAffinity >= 0.42 || context.signals.fertility <= 0.42)) {
+      pushDungeonIconOption(options, "barrow", 0.44 + context.oldCivilization * 0.08 + (tier === "village" ? 0.06 : 0), -0.04, anchor, context.hex);
+    }
+    if (!sameHex && context.mountainAnchor && context.remoteness >= 0.42) {
+      pushDungeonIconOption(options, "dragon_lair", 0.36 + context.signals.mountainAffinity * 0.18 + context.remoteness * 0.08, 0.24, anchor, context.hex);
+    }
+    if (sameHex || distance <= 1) {
+      if (urbanSettlement) {
+        pushDungeonIconOption(options, "vault", 0.54 + context.oldCivilization * 0.12 + (mountainSettlement ? 0.16 : 0), 0.18, anchor, context.hex);
+        pushDungeonIconOption(options, "catacombs", 0.56 + context.oldCivilization * 0.18 + (sameHex ? 0.04 : 0), 0.16, anchor, context.hex);
+        pushDungeonIconOption(options, "crypt", 0.52 + context.oldCivilization * 0.14 + (sameHex ? 0.04 : 0), 0.1, anchor, context.hex);
+        pushDungeonIconOption(options, "tomb", 0.48 + context.oldCivilization * 0.12 + (sameHex ? 0.02 : 0), 0.08, anchor, context.hex);
+        pushDungeonIconOption(options, "buried_ruins", 0.48 + context.oldCivilization * 0.14 + (sameHex ? 0.04 : 0), 0.14, anchor, context.hex);
+        pushDungeonIconOption(options, "sewer", 0.34 + context.signals.waterAccess * 0.2 + (sameHex ? 0.06 : 0) + (tier === "major" ? 0.05 : 0) + (!mountainSettlement ? 0.02 : 0), 0.02, anchor, context.hex);
+        pushDungeonIconOption(options, "evil_temple", 0.34 + context.oldCivilization * 0.08 + context.signals.anomalyPotential * 0.12, 0.28, anchor, context.hex);
+      } else if (tier === "town") {
+        if (sameHex) {
+          pushDungeonIconOption(options, "vault", 0.54 + context.oldCivilization * 0.14 + (mountainSettlement ? 0.08 : 0), 0.18, anchor, context.hex);
+          pushDungeonIconOption(options, "buried_ruins", 0.58 + context.oldCivilization * 0.14, 0.16, anchor, context.hex);
+        }
+        pushDungeonIconOption(options, "evil_temple", 0.38 + context.signals.anomalyPotential * 0.1 + context.oldCivilization * 0.08, 0.28, anchor, context.hex);
+      }
+    }
+
+    return pickBestDungeonIconOption(options);
+  }
+
+  function pickUrbanSettlementDungeonIcon(anchor, distance, context, settings) {
+    const urbanIcons = ["vault", "catacombs", "crypt", "tomb", "buried_ruins", "sewer", "evil_temple"];
+    const icon = seededPick(urbanIcons, `${settings?.seed || ""}:urban-dungeon-icon:${anchor?.id || ""}:${context?.hex?.id || ""}:${distance}`);
+    return {
+      icon,
+      score: 0.58 + (context?.oldCivilization || 0) * 0.08 + (distance === 0 ? 0.04 : 0),
+      complexBias: getUrbanDungeonIconComplexBias(icon)
+    };
+  }
+
+  function getUrbanDungeonIconComplexBias(icon) {
+    if (icon === "evil_temple") return 0.28;
+    if (icon === "vault" || icon === "catacombs" || icon === "buried_ruins") return 0.16;
+    if (icon === "crypt" || icon === "tomb") return 0.1;
+    return 0.02;
+  }
+
+  function buildSiteHostedDungeonCandidates({ allHexes, siteHosts, settlementAnchors, strongholdAnchors, corridorStats, occupiedHexIds, byCoord, riverData, dimensions, signalCache, contextCache }) {
+    return (siteHosts || [])
+      .map(host => chooseBestSiteHostedDungeonCandidate(host, allHexes, settlementAnchors, strongholdAnchors, corridorStats, occupiedHexIds, byCoord, riverData, dimensions, signalCache, contextCache))
+      .filter(Boolean);
+  }
+
+  function chooseBestSiteHostedDungeonCandidate(host, allHexes, settlementAnchors, strongholdAnchors, corridorStats, occupiedHexIds, byCoord, riverData, dimensions, signalCache, contextCache) {
+    if (!host?.hex?.id || !host?.type) return null;
+    const radius = host.type === "arcane_site" || host.type === "wilderness_site" || host.type === "landmark" || host.type === "resource_site" ? 2 : 1;
+    const pool = [host.hex, ...nearbyWithin(host.hex, byCoord, radius)]
+      .filter((hex, index, values) => hex?.id && values.findIndex(candidate => candidate.id === hex.id) === index)
+      .filter(hex => isPoiLandHex(hex))
+      .filter(hex => {
+        if (hex.id === host.hex.id) return true;
+        return !occupiedHexIds.has(hex.id);
+      });
+    const scored = pool
+      .map(hex => buildSiteHostedDungeonCandidate(host, hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache))
+      .filter(Boolean)
+      .sort((left, right) => right.score - left.score || left.hex.id.localeCompare(right.hex.id));
+    return scored[0] || null;
+  }
+
+  function buildSiteHostedDungeonCandidate(host, hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache) {
+    const distance = hexDistance(host.hex, hex);
+    const context = getDungeonContext(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache);
+    if (!context) return null;
+    const iconChoice = chooseSiteHostedDungeonIcon(host, distance, context);
+    if (!iconChoice) return null;
+    const hostedBonus = distance === 0 ? 0.24 : distance === 1 ? 0.12 : 0.04;
+    const score = iconChoice.score * 0.38
+      + hostedBonus
+      + context.oldCivilization * 0.16
+      + context.concealment * 0.08
+      + context.settlementUnsuitability * 0.1
+      + Math.min(0.1, Number(host.importance || 0.8) * 0.08)
+      - context.edgePenalty;
+    if (score < 0.44) return null;
+    return makeDungeonCandidate(hex, iconChoice.icon, "site", score, iconChoice.complexBias, context, {
+      hostId: host.id || "",
+      hostName: host.name || "",
+      hostType: host.type || "",
+      nearestSettlement: context.nearestSettlement?.anchor?.name || "",
+      nearestSettlementId: context.nearestSettlement?.anchor?.id || "",
+      supportDistance: context.settlementDistance
+    });
+  }
+
+  function chooseSiteHostedDungeonIcon(host, distance, context) {
+    const options = [];
+    const sameHex = distance === 0;
+    const type = String(host?.type || "").trim();
+    if (type === "ruin") {
+      pushDungeonIconOption(options, "buried_ruins", 0.86 + (sameHex ? 0.08 : 0) + context.oldCivilization * 0.16, 0.18, host, context.hex);
+      pushDungeonIconOption(options, "vault", 0.72 + context.oldCivilization * 0.16, 0.22, host, context.hex);
+      pushDungeonIconOption(options, "crypt", 0.64 + context.oldCivilization * 0.14, 0.1, host, context.hex);
+      pushDungeonIconOption(options, "catacombs", 0.62 + context.oldCivilization * 0.16, 0.18, host, context.hex);
+      pushDungeonIconOption(options, "tomb", 0.6 + context.oldCivilization * 0.12 + (context.signals.aridAffinity >= 0.42 ? 0.04 : 0), 0.1, host, context.hex);
+      pushDungeonIconOption(options, "evil_temple", 0.54 + context.signals.anomalyPotential * 0.1 + context.remoteness * 0.06, 0.32, host, context.hex);
+      pushDungeonIconOption(options, "dungeon", 0.5 + context.oldCivilization * 0.08, 0.06, host, context.hex);
+    } else if (type === "holy_site") {
+      pushDungeonIconOption(options, "tomb", 0.84 + (sameHex ? 0.08 : 0), 0.12, host, context.hex);
+      pushDungeonIconOption(options, "crypt", 0.76 + context.oldCivilization * 0.1, 0.12, host, context.hex);
+      pushDungeonIconOption(options, "catacombs", 0.72 + context.oldCivilization * 0.12, 0.18, host, context.hex);
+      pushDungeonIconOption(options, "evil_temple", 0.38 + context.signals.anomalyPotential * 0.12 + context.remoteness * 0.08, 0.34, host, context.hex);
+      if (!sameHex && (context.signals.snowAffinity >= 0.42 || context.signals.fertility <= 0.4)) {
+        pushDungeonIconOption(options, "barrow", 0.42 + context.oldCivilization * 0.08, -0.02, host, context.hex);
+      }
+    } else if (type === "arcane_site") {
+      pushDungeonIconOption(options, "vault", 0.9 + (sameHex ? 0.08 : 0) + context.oldCivilization * 0.1, 0.24, host, context.hex);
+      pushDungeonIconOption(options, "buried_ruins", 0.68 + context.oldCivilization * 0.12, 0.18, host, context.hex);
+      pushDungeonIconOption(options, "dungeon", 0.6 + context.signals.anomalyPotential * 0.08, 0.08, host, context.hex);
+      pushDungeonIconOption(options, "catacombs", 0.58 + context.oldCivilization * 0.12, 0.18, host, context.hex);
+      pushDungeonIconOption(options, "crypt", 0.54 + context.oldCivilization * 0.1, 0.1, host, context.hex);
+      pushDungeonIconOption(options, "tomb", 0.5 + context.oldCivilization * 0.08, 0.1, host, context.hex);
+      pushDungeonIconOption(options, "evil_temple", 0.56 + context.signals.anomalyPotential * 0.08, 0.32, host, context.hex);
+      if (sameHex && context.nearestSettlement?.anchor && getSettlementDungeonTier(context.nearestSettlement.anchor) === "major") {
+        pushDungeonIconOption(options, "sewer", 0.44 + context.oldCivilization * 0.08, 0.14, host, context.hex);
+      }
+      if (!sameHex && context.ruggedAccess) {
+        pushDungeonIconOption(options, "cave", 0.4 + context.signals.mountainAffinity * 0.12, 0.04, host, context.hex);
+      }
+      if (!sameHex && context.concealment >= 0.46) {
+        pushDungeonIconOption(options, "lair", 0.34 + context.concealment * 0.12, -0.04, host, context.hex);
+      }
+    } else if (type === "hazard") {
+      pushDungeonIconOption(options, "evil_temple", 0.76 + context.signals.anomalyPotential * 0.08, 0.34, host, context.hex);
+      pushDungeonIconOption(options, "lair", 0.68 + context.concealment * 0.1 + context.remoteness * 0.08, 0, host, context.hex);
+      pushDungeonIconOption(options, "cave", 0.62 + (context.ruggedAccess ? 0.08 : 0), 0.04, host, context.hex);
+      pushDungeonIconOption(options, "buried_ruins", 0.56 + context.oldCivilization * 0.08, 0.18, host, context.hex);
+      pushDungeonIconOption(options, "dungeon", 0.5 + context.concealment * 0.08, 0.08, host, context.hex);
+      if (context.mountainAnchor) {
+        pushDungeonIconOption(options, "dragon_lair", 0.74 + context.signals.mountainAffinity * 0.08 + context.remoteness * 0.08, 0.28, host, context.hex);
+      }
+    } else if (type === "wilderness_site") {
+      if (!sameHex) {
+        pushDungeonIconOption(options, "barrow", 0.66 + context.oldCivilization * 0.08 + context.concealment * 0.06, -0.02, host, context.hex);
+        pushDungeonIconOption(options, "tomb", 0.42 + context.oldCivilization * 0.08, 0.08, host, context.hex);
+      }
+      pushDungeonIconOption(options, "lair", 0.48 + context.concealment * 0.08 + context.remoteness * 0.06, -0.02, host, context.hex);
+    } else if (type === "landmark") {
+      if (!sameHex) {
+        pushDungeonIconOption(options, "barrow", 0.7 + context.oldCivilization * 0.08 + context.signals.prominence * 0.06, -0.02, host, context.hex);
+        pushDungeonIconOption(options, "buried_ruins", 0.46 + context.oldCivilization * 0.1, 0.18, host, context.hex);
+      }
+      pushDungeonIconOption(options, "tomb", 0.44 + context.oldCivilization * 0.08, 0.1, host, context.hex);
+    } else if (type === "resource_site" && DUNGEON_RESOURCE_HOST_ICONS.has(String(host?.icon || "").trim())) {
+      if (!sameHex) {
+        pushDungeonIconOption(options, "barrow", 0.64 + context.oldCivilization * 0.08 + (context.signals.fertility >= 0.56 ? 0.06 : 0), -0.02, host, context.hex);
+        pushDungeonIconOption(options, "tomb", 0.36 + context.oldCivilization * 0.06, 0.08, host, context.hex);
+      }
+    }
+    return pickBestDungeonIconOption(options);
+  }
+
+  function buildCorridorShadowDungeonCandidates({ candidateHexes, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache }) {
+    return (candidateHexes || [])
+      .map(hex => buildCorridorShadowDungeonCandidate(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache))
+      .filter(Boolean);
+  }
+
+  function buildCorridorShadowDungeonCandidate(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache) {
+    const context = getDungeonContext(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache);
+    if (!context) return null;
+    if (context.settlementDistance < 2 || context.settlementDistance > 8) return null;
+    const corridorShadow = getCorridorShadowScore(context.corridorPressure);
+    if (corridorShadow < 0.24) return null;
+    const iconChoice = chooseCorridorShadowDungeonIcon(context);
+    if (!iconChoice) return null;
+    const score = corridorShadow * 0.3
+      + context.settlementUnsuitability * 0.22
+      + context.concealment * 0.14
+      + context.oldCivilization * 0.16
+      + iconChoice.score * 0.22
+      - context.edgePenalty
+      - (context.corridorPressure >= 0.62 ? 0.12 : 0);
+    if (score < 0.4) return null;
+    return makeDungeonCandidate(hex, iconChoice.icon, "corridor", score, iconChoice.complexBias, context, {
+      hostId: context.nearestSettlement?.anchor?.id || "",
+      hostName: context.nearestSettlement?.anchor?.name || "",
+      hostType: "corridor_shadow",
+      nearestSettlement: context.nearestSettlement?.anchor?.name || "",
+      nearestSettlementId: context.nearestSettlement?.anchor?.id || "",
+      supportDistance: context.settlementDistance
+    });
+  }
+
+  function getCorridorShadowScore(corridorPressure) {
+    if (corridorPressure < 0.12) return corridorPressure * 1.2;
+    if (corridorPressure <= 0.36) return 0.84 + (0.36 - Math.abs(corridorPressure - 0.26)) * 0.22;
+    if (corridorPressure <= 0.58) return 0.76 - (corridorPressure - 0.36) * 1.28;
+    if (corridorPressure <= 0.7) return 0.22;
+    return 0;
+  }
+
+  function chooseCorridorShadowDungeonIcon(context) {
+    const options = [];
+    pushDungeonIconOption(options, "buried_ruins", 0.66 + context.oldCivilization * 0.14, 0.18, context.nearestSettlement?.anchor, context.hex);
+    pushDungeonIconOption(options, "dungeon", 0.56 + context.oldCivilization * 0.1, 0.08, context.nearestSettlement?.anchor, context.hex);
+    pushDungeonIconOption(options, "crypt", 0.5 + context.oldCivilization * 0.12, 0.12, context.nearestSettlement?.anchor, context.hex);
+    pushDungeonIconOption(options, "tomb", 0.48 + context.oldCivilization * 0.08 + (context.signals.aridAffinity >= 0.4 ? 0.04 : 0), 0.12, context.nearestSettlement?.anchor, context.hex);
+    pushDungeonIconOption(options, "evil_temple", 0.54 + context.signals.anomalyPotential * 0.08 + context.remoteness * 0.06, 0.32, context.nearestSettlement?.anchor, context.hex);
+    if (context.ruggedAccess) {
+      pushDungeonIconOption(options, "cave", 0.56 + context.signals.mountainAffinity * 0.16, 0.04, context.nearestSettlement?.anchor, context.hex);
+    }
+    if (context.mineable) {
+      pushDungeonIconOption(options, "abandoned_mine", 0.64 + context.signals.stonePotential * 0.16, 0.08, context.nearestSettlement?.anchor, context.hex);
+    }
+    if (context.concealment >= 0.4) {
+      pushDungeonIconOption(options, "lair", 0.46 + context.concealment * 0.14, 0, context.nearestSettlement?.anchor, context.hex);
+    }
+    if (context.mountainAnchor && context.remoteness >= 0.48) {
+      pushDungeonIconOption(options, "dragon_lair", 0.42 + context.signals.mountainAffinity * 0.14, 0.28, context.nearestSettlement?.anchor, context.hex);
+    }
+    if (context.signals.snowAffinity >= 0.42 || context.signals.wasteAffinity >= 0.42 || context.signals.fertility <= 0.42) {
+      pushDungeonIconOption(options, "barrow", 0.4 + context.oldCivilization * 0.08, -0.02, context.nearestSettlement?.anchor, context.hex);
+    }
+    return pickBestDungeonIconOption(options);
+  }
+
+  function buildFrontierDeepDungeonCandidates({ candidateHexes, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache }) {
+    return (candidateHexes || [])
+      .map(hex => buildFrontierDeepDungeonCandidate(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache))
+      .filter(Boolean);
+  }
+
+  function buildFrontierDeepDungeonCandidate(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache) {
+    const context = getDungeonContext(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache);
+    if (!context) return null;
+    if (context.settlementDistance < 4 || context.signals.edgeDistance <= 0) return null;
+    const iconChoice = chooseFrontierDeepDungeonIcon(context);
+    if (!iconChoice) return null;
+    const score = context.remoteness * 0.28
+      + context.concealment * 0.18
+      + Math.max(context.signals.mountainAffinity, context.signals.wasteAffinity, context.signals.snowAffinity) * 0.18
+      + context.settlementUnsuitability * 0.16
+      + iconChoice.score * 0.2
+      - context.edgePenalty;
+    if (score < 0.42) return null;
+    return makeDungeonCandidate(hex, iconChoice.icon, "frontier", score, iconChoice.complexBias, context, {
+      hostId: context.nearestSettlement?.anchor?.id || "",
+      hostName: context.nearestSettlement?.anchor?.name || "",
+      hostType: "frontier_deep",
+      nearestSettlement: context.nearestSettlement?.anchor?.name || "",
+      nearestSettlementId: context.nearestSettlement?.anchor?.id || "",
+      supportDistance: context.settlementDistance
+    });
+  }
+
+  function chooseFrontierDeepDungeonIcon(context) {
+    const options = [];
+    pushDungeonIconOption(options, "lair", 0.64 + context.concealment * 0.14 + context.remoteness * 0.08, 0, context.nearestSettlement?.anchor, context.hex);
+    pushDungeonIconOption(options, "dungeon", 0.4 + context.oldCivilization * 0.08 + context.remoteness * 0.06, 0.08, context.nearestSettlement?.anchor, context.hex);
+    pushDungeonIconOption(options, "evil_temple", 0.46 + context.signals.anomalyPotential * 0.12 + context.remoteness * 0.08, 0.34, context.nearestSettlement?.anchor, context.hex);
+    if (context.ruggedAccess) {
+      pushDungeonIconOption(options, "cave", 0.66 + context.signals.mountainAffinity * 0.12, 0.06, context.nearestSettlement?.anchor, context.hex);
+    }
+    if (context.mountainAnchor) {
+      pushDungeonIconOption(options, "dragon_lair", 0.76 + context.signals.mountainAffinity * 0.1 + context.remoteness * 0.08, 0.3, context.nearestSettlement?.anchor, context.hex);
+    }
+    if (context.mineable) {
+      pushDungeonIconOption(options, "abandoned_mine", 0.52 + context.signals.stonePotential * 0.14, 0.1, context.nearestSettlement?.anchor, context.hex);
+    }
+    if (context.signals.snowAffinity >= 0.46 || context.signals.wasteAffinity >= 0.44 || context.signals.fertility <= 0.42) {
+      pushDungeonIconOption(options, "barrow", 0.5 + context.remoteness * 0.08 + context.oldCivilization * 0.04, -0.02, context.nearestSettlement?.anchor, context.hex);
+    }
+    if (context.oldCivilization >= 0.42) {
+      pushDungeonIconOption(options, "buried_ruins", 0.44 + context.oldCivilization * 0.14, 0.18, context.nearestSettlement?.anchor, context.hex);
+      pushDungeonIconOption(options, "tomb", 0.42 + context.oldCivilization * 0.1, 0.12, context.nearestSettlement?.anchor, context.hex);
+    }
+    return pickBestDungeonIconOption(options);
+  }
+
+  function getDungeonContext(hex, settlementAnchors, strongholdAnchors, corridorStats, byCoord, riverData, dimensions, signalCache, contextCache) {
+    if (!hex?.id) return null;
+    if (contextCache?.has(hex.id)) return contextCache.get(hex.id);
     const signals = getHexSignals(hex, byCoord, riverData, dimensions, signalCache);
     const nearestSettlement = findNearestSettlementAnchor(hex, settlementAnchors);
     const nearestStronghold = findNearestPoiAnchor(hex, strongholdAnchors);
@@ -1666,61 +2277,235 @@
     const strongholdDistance = nearestStronghold?.distance ?? 99;
     const corridorPressure = getCorridorPressure(hex, corridorStats, byCoord);
     const remoteness = clamp(
-      (settlementDistance >= 8 ? 0.9 : settlementDistance >= 6 ? 0.72 : settlementDistance >= 4 ? 0.5 : 0.24)
-      + signals.roughness * 0.12
-      + (signals.edgeDistance <= 2 ? 0.05 : 0),
+      (settlementDistance >= 10 ? 0.96 : settlementDistance >= 8 ? 0.82 : settlementDistance >= 6 ? 0.66 : settlementDistance >= 4 ? 0.48 : 0.2)
+      + signals.roughness * 0.08
+      + signals.wasteAffinity * 0.06
+      + signals.snowAffinity * 0.04
+      - corridorPressure * 0.08,
       0,
       1,
-      0.4
+      0.28
     );
-    const oldCivilization = clamp(corridorPressure * 0.42 + (settlementDistance >= 4 && settlementDistance <= 8 ? 0.18 : 0) + (strongholdDistance <= 4 ? 0.08 : 0), 0, 1, 0.18);
-    const concealment = clamp(signals.forestPotential * 0.32 + signals.roughness * 0.18 + signals.wasteAffinity * 0.12 + signals.snowAffinity * 0.08, 0, 1, 0.28);
-    const strongholdLink = strongholdDistance >= 2 && strongholdDistance <= 4 ? 0.24 : 0;
-    const score = complex
-      ? remoteness * 0.34 + oldCivilization * 0.2 + concealment * 0.14 + strongholdLink + signals.mountainAffinity * 0.08 + signals.wasteAffinity * 0.08
-      : remoteness * 0.38 + oldCivilization * 0.16 + concealment * 0.16 + strongholdLink * 0.7 + signals.mountainAffinity * 0.08 + signals.wasteAffinity * 0.08;
-    if (score < (complex ? 0.46 : 0.34)) return null;
-    const icon = chooseDungeonIcon(signals, oldCivilization, strongholdLink, complex);
-    const tags = getDungeonTags(icon, remoteness, oldCivilization, strongholdLink, complex);
-    return {
+    const oldCivilization = clamp(
+      corridorPressure * 0.44
+      + (settlementDistance >= 2 && settlementDistance <= 6 ? 0.1 : 0)
+      + (strongholdDistance >= 1 && strongholdDistance <= 4 ? 0.08 : 0),
+      0,
+      1,
+      0.16
+    );
+    const concealment = clamp(
+      signals.forestPotential * 0.3
+      + signals.roughness * 0.18
+      + signals.wasteAffinity * 0.1
+      + signals.snowAffinity * 0.08,
+      0,
+      1,
+      0.24
+    );
+    const settlementUnsuitability = clamp(
+      (1 - signals.fertility) * 0.32
+      + (1 - signals.waterAccess) * 0.14
+      + (1 - signals.routeability) * 0.14
+      + signals.roughness * 0.12
+      + signals.harshness * 0.08,
+      0,
+      1,
+      0.28
+    );
+    const edgePenalty = signals.edgeDistance <= 0 ? 0.14 : signals.edgeDistance === 1 ? 0.06 : signals.edgeDistance === 2 ? 0.025 : 0;
+    const context = {
       hex,
-      score,
+      signals,
+      nearestSettlement,
+      nearestStronghold,
+      settlementDistance,
+      strongholdDistance,
+      corridorPressure,
+      remoteness,
+      oldCivilization,
+      concealment,
+      settlementUnsuitability,
+      edgePenalty,
+      mineable: signals.stonePotential >= 0.68 || signals.mountainAffinity >= 0.74,
+      ruggedAccess: signals.mountainAffinity >= 0.7 || signals.passStrength >= 0.56 || hasAnyFeature(hex, RUGGED_FEATURES),
+      mountainAnchor: signals.mountainAffinity >= 0.74 || hasAnyFeature(hex, MOUNTAIN_FEATURES)
+    };
+    if (contextCache) contextCache.set(hex.id, context);
+    return context;
+  }
+
+  function getSettlementDungeonTier(anchor) {
+    const population = parsePopulationNumber(anchor?.population);
+    const importance = Number(anchor?.importance || 0.5);
+    const icon = String(anchor?.icon || "").trim();
+    if (population >= 9000 || importance >= 1.08 || ["city", "walled_city", "port_town", "mountain_city"].includes(icon)) return "major";
+    if (population >= 2200 || importance >= 0.78 || ["mountain_hold"].includes(icon)) return "town";
+    return "village";
+  }
+
+  function isMountainSettlementAnchor(anchor) {
+    const icon = String(anchor?.icon || "").trim();
+    return icon === "mountain_city" || icon === "mountain_hold";
+  }
+
+  function pushDungeonIconOption(options, icon, score, complexBias, anchorOrHost, hex) {
+    if (!Array.isArray(options) || !icon || score <= 0) return;
+    const anchorId = String(anchorOrHost?.id || "");
+    const hexId = String(hex?.id || "");
+    options.push({
       icon,
-      tags,
-      notoriety: getDungeonNotoriety(icon, remoteness, strongholdLink, complex),
-      type: complex ? "dungeon_complex" : "dungeon",
+      score: score + seededNoise(`dungeon-icon:${anchorId}:${hexId}:${icon}`, 0, 0.03),
+      complexBias,
+      pickSeed: `dungeon-icon-pick:${anchorId}:${hexId}`
+    });
+  }
+
+  function pickBestDungeonIconOption(options) {
+    if (!Array.isArray(options) || !options.length) return null;
+    const ranked = [...options].sort((left, right) => right.score - left.score || left.icon.localeCompare(right.icon));
+    const best = ranked[0];
+    const cutoff = best.score - 0.22;
+    const shortlist = ranked.filter(option => option.score >= cutoff);
+    if (shortlist.length === 1) return shortlist[0];
+
+    const weighted = shortlist.map(option => ({
+      option,
+      weight: Math.max(0.04, option.score - cutoff)
+    }));
+    const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+    if (totalWeight <= 0) return best;
+
+    const roll = seededUnit(String(best.pickSeed || best.icon)) * totalWeight;
+    let cursor = 0;
+    for (const entry of weighted) {
+      cursor += entry.weight;
+      if (roll <= cursor) return entry.option;
+    }
+    return weighted[weighted.length - 1]?.option || best;
+  }
+
+  function makeDungeonCandidate(hex, icon, bucket, score, complexBias, context, meta = {}) {
+    return {
+      key: `${bucket}:${meta.hostId || ""}:${hex.id}:${icon}`,
+      hex,
+      icon,
+      bucket,
+      score,
+      complexBias: Number(complexBias || 0),
+      context,
       meta: {
-        nearestSettlement: nearestSettlement?.anchor?.name || "",
-        supportDistance: settlementDistance,
-        strongholdName: nearestStronghold?.anchor?.name || "",
-        strongholdDistance
+        hex,
+        nearestSettlement: meta.nearestSettlement || context.nearestSettlement?.anchor?.name || "",
+        nearestSettlementId: meta.nearestSettlementId || context.nearestSettlement?.anchor?.id || "",
+        supportDistance: Number.isFinite(Number(meta.supportDistance)) ? Number(meta.supportDistance) : context.settlementDistance,
+        strongholdName: context.nearestStronghold?.anchor?.name || "",
+        strongholdDistance: context.strongholdDistance,
+        hostId: meta.hostId || "",
+        hostName: meta.hostName || "",
+        hostType: meta.hostType || ""
       }
     };
   }
 
-  function chooseDungeonIcon(signals, oldCivilization, strongholdLink, complex) {
-    if (oldCivilization >= 0.62) return complex ? "catacombs" : "crypt";
-    if (signals.mountainAffinity >= 0.72 || signals.passStrength >= 0.62) return "cave";
-    if (signals.wasteAffinity >= 0.6 && complex) return "dragon_lair";
-    if (signals.wasteAffinity >= 0.52 || signals.forestPotential >= 0.64) return "lair";
-    return complex ? "dungeon" : (strongholdLink ? "dungeon" : "cave");
+  function selectDungeonCandidatesFromPool(pool, targetCount, chosen, chosenKeys, placedPoiRefs, variantUsage) {
+    if (!Array.isArray(pool) || !pool.length || targetCount <= 0) return [];
+    const selected = [];
+    const working = [...pool];
+    while (selected.length < targetCount) {
+      const best = working
+        .filter(candidate => !chosenKeys.has(candidate.key))
+        .filter(candidate => !chosen.some(entry => entry.hex.id === candidate.hex.id) && !selected.some(entry => entry.hex.id === candidate.hex.id))
+        .map(candidate => ({
+          candidate,
+          score: getDungeonSelectionScore(candidate, [...chosen, ...selected], placedPoiRefs, variantUsage)
+        }))
+        .filter(entry => entry.score >= 0.26)
+        .sort((left, right) => right.score - left.score || left.candidate.hex.id.localeCompare(right.candidate.hex.id))[0];
+      if (!best) break;
+      selected.push(best.candidate);
+      registerVariantUsage(best.candidate, variantUsage);
+      chosenKeys.add(best.candidate.key);
+      working.splice(working.findIndex(candidate => candidate.key === best.candidate.key), 1);
+    }
+    selected.forEach(candidate => chosenKeys.delete(candidate.key));
+    return selected;
   }
 
-  function getDungeonTags(icon, remoteness, oldCivilization, strongholdLink, complex) {
+  function getDungeonSelectionScore(candidate, chosen, placedPoiRefs, variantUsage) {
+    const spacingRadius = candidate.bucket === "frontier" ? 5 : candidate.bucket === "corridor" ? 4 : 3;
+    return candidate.score
+      - getSelectedSpacingPenalty(candidate.hex, chosen, spacingRadius)
+      - getRecentVariantRepeatPenalty(candidate, chosen)
+      - getPlacedPoiClusterPenalty(candidate.hex, placedPoiRefs, Math.max(3, spacingRadius), { ignoreTypes: ["settlement"] })
+      - getVariantUsagePenalty(candidate, variantUsage, {
+        variantSoftCap: variantCandidate => variantCandidate.icon === "sewer"
+          ? 0
+          : ["dungeon", "lair", "cave", "crypt", "tomb", "buried_ruins"].includes(variantCandidate.icon)
+            ? 2
+            : 1,
+        variantPenaltyBase: 0.06,
+        variantPenaltyStep: 0.1
+      });
+  }
+
+  function getRecentVariantRepeatPenalty(candidate, chosen) {
+    if (!candidate?.icon || !Array.isArray(chosen) || !chosen.length) return 0;
+    const icon = String(candidate.icon).trim().toLowerCase();
+    let penalty = 0;
+    const last = chosen[chosen.length - 1];
+    const secondLast = chosen[chosen.length - 2];
+    if (String(last?.icon || "").trim().toLowerCase() === icon) penalty += 0.26;
+    if (String(secondLast?.icon || "").trim().toLowerCase() === icon) penalty += 0.14;
+    return penalty;
+  }
+
+  function chooseDungeonComplexKeys(candidates, targetCount) {
+    if (!Array.isArray(candidates) || !candidates.length || targetCount <= 0) return new Set();
+    return new Set(
+      [...candidates]
+        .map(candidate => ({
+          key: candidate.key,
+          score: candidate.score
+            + candidate.complexBias
+            + (candidate.bucket === "site" ? 0.04 : 0)
+            + (candidate.context?.oldCivilization || 0) * 0.1
+            + (candidate.context?.mountainAnchor ? 0.03 : 0)
+            - getUrbanDungeonComplexPenalty(candidate)
+        }))
+        .sort((left, right) => right.score - left.score || left.key.localeCompare(right.key))
+        .slice(0, targetCount)
+        .map(entry => entry.key)
+    );
+  }
+
+  function getUrbanDungeonComplexPenalty(candidate) {
+    const supportDistance = Number(candidate?.meta?.supportDistance || 99);
+    if (candidate?.meta?.hostType !== "settlement" || supportDistance > 1) return 0;
+    if (candidate?.icon === "evil_temple") return 0.04;
+    if (candidate?.icon === "vault") return 0.08;
+    if (candidate?.icon === "sewer") return 0.14;
+    return 0.12;
+  }
+
+  function getDungeonTags(candidate, complex) {
+    const context = candidate?.context || {};
     const tags = complex ? ["sealed", "underground"] : ["hidden", "underground"];
-    if (remoteness >= 0.7) tags.push("remote");
-    if (oldCivilization >= 0.58 || ["catacombs", "crypt"].includes(icon)) tags.push("ancient");
-    if (strongholdLink) tags.push("contested");
-    if (["lair", "dragon_lair"].includes(icon)) tags.push("monster_lair");
-    if (complex && !tags.includes("forbidden")) tags.push("forbidden");
-    return mergeGeneratedTagsForIcon(tags, icon);
+    if ((context.remoteness || 0) >= 0.68) tags.push("remote");
+    if ((context.oldCivilization || 0) >= 0.54 || ["catacombs", "crypt", "tomb", "buried_ruins", "barrow", "vault"].includes(candidate?.icon)) tags.push("ancient");
+    if ((context.strongholdDistance || 99) <= 4) tags.push("contested");
+    if (["lair", "dragon_lair"].includes(candidate?.icon)) tags.push("monster_lair");
+    if (candidate?.icon === "evil_temple") tags.push("forbidden");
+    if (candidate?.meta?.hostType === "corridor_shadow") tags.push("roadside");
+    return mergeGeneratedTagsForIcon(tags, candidate?.icon || "");
   }
 
-  function getDungeonNotoriety(icon, remoteness, strongholdLink, complex) {
+  function getDungeonNotoriety(candidate, complex) {
+    const context = candidate?.context || {};
     let value = complex ? 3 : 5;
-    if (remoteness >= 0.76) value += 1;
-    if (strongholdLink) value -= 1;
-    if (icon === "dragon_lair") value -= 1;
+    if ((context.remoteness || 0) >= 0.76) value += 1;
+    if ((context.strongholdDistance || 99) <= 4) value -= 1;
+    if (candidate?.icon === "dragon_lair" || candidate?.icon === "evil_temple") value -= 1;
     return String(Math.max(2, Math.min(9, value)));
   }
 
@@ -1830,7 +2615,6 @@
       let icon = "tree";
       if (signals.freshwaterAffinity >= 0.78 && signals.prominence >= 0.52) icon = "waterfall";
       else if (signals.freshwaterAffinity >= 0.7) icon = "spring";
-      else if (signals.coastal && remoteness >= 0.58) icon = "island";
       else if (signals.forestPotential >= 0.72 && signals.snowAffinity < 0.42) icon = "tree";
       else if (signals.snowAffinity >= 0.56 || signals.wasteAffinity >= 0.54) icon = "dead_tree";
       candidates.push(makeSiteCandidate(hex, "wilderness_site", icon, wildernessScore, [], settlementDistance, oldCivilization, remoteness));
@@ -1862,6 +2646,595 @@
     }
 
     return candidates;
+  }
+
+  function buildWaterPoiSummary({ hexes, byCoord, dimensions, settlementAnchors, placedPoiRefs, settings }) {
+    const waterHexes = (hexes || []).filter(isWaterPoiHex);
+    const waterBodies = buildLandmasses(waterHexes, byCoord);
+    const waterBodySizeByHexId = new Map();
+    waterBodies.forEach((body, index) => {
+      body.id = `water-${index}`;
+      (body.hexes || []).forEach(hex => waterBodySizeByHexId.set(hex.id, body.hexes.length));
+    });
+
+    const countsByBase = waterHexes.reduce((counts, hex) => {
+      counts[hex.baseTerrain] = (counts[hex.baseTerrain] || 0) + 1;
+      return counts;
+    }, {});
+    const portAnchors = (settlementAnchors || []).filter(anchor => isSeaRouteSettlementAnchor(anchor, byCoord));
+    const seaLaneScoreByHexId = new Map();
+    waterHexes.forEach(hex => {
+      seaLaneScoreByHexId.set(hex.id, getLikelySeaLaneScore(hex, portAnchors, dimensions));
+    });
+
+    return {
+      waterHexes,
+      waterBodies,
+      seed: String(settings?.seed || ""),
+      waterBodySizeByHexId,
+      countsByBase,
+      portAnchors,
+      seaLaneScoreByHexId,
+      placedPoiRefs: (placedPoiRefs || []).filter(Boolean)
+    };
+  }
+
+  function buildWaterPoiDrafts({ waterSummary, settlementAnchors, occupiedHexIds, byCoord, dimensions, settings, usedNames, placedPoiRefs }) {
+    if (!waterSummary?.waterHexes?.length) return [];
+    const targets = getWaterPoiTargetCounts(waterSummary, settings);
+    if (!targets.total) return [];
+
+    const baseRefs = [...(placedPoiRefs || [])];
+    const waterSiteCandidates = waterSummary.waterHexes
+      .flatMap(hex => buildWaterSiteCandidatesForHex(hex, waterSummary, byCoord, dimensions));
+    const waterStrongholdCandidates = waterSummary.waterHexes
+      .map(hex => buildWaterStrongholdCandidate(hex, waterSummary, byCoord, dimensions))
+      .filter(Boolean);
+    const waterLawlessCandidates = getCoastalLandHexesForWaterSummary(waterSummary, byCoord)
+      .map(hex => buildCoastalLawlessSettlementCandidate(hex, waterSummary, byCoord, dimensions))
+      .filter(Boolean);
+    const portLawlessCandidates = buildPortLawlessDenCandidates(waterSummary);
+    const dangerRefs = baseRefs.filter(ref => WATER_DANGER_ICONS.has(String(ref?.icon || "")));
+    const waterDungeonCandidates = waterSummary.waterHexes
+      .flatMap(hex => buildWaterDungeonCandidatesForHex(hex, waterSummary, settlementAnchors, byCoord, dimensions, dangerRefs));
+    const waterShipCandidates = waterSummary.waterHexes
+      .map(hex => buildWaterShipCandidate(hex, waterSummary, byCoord, dimensions, [...dangerRefs, ...waterLawlessCandidates.map(makeWaterPoiRef), ...waterDungeonCandidates.map(makeWaterPoiRef)]))
+      .filter(Boolean);
+
+    const selected = selectBalancedWaterPoiCandidates({
+      candidates: [
+        ...waterSiteCandidates,
+        ...waterStrongholdCandidates,
+        ...waterLawlessCandidates,
+        ...portLawlessCandidates,
+        ...waterDungeonCandidates,
+        ...waterShipCandidates
+      ],
+      targetCount: targets.total,
+      occupiedHexIds,
+      placedPoiRefs: baseRefs,
+      targets,
+      settings
+    });
+    return selected.map(candidate => makeWaterPoiDraft(candidate, settings, usedNames));
+  }
+
+  function getWaterPoiTargetCounts(summary, settings) {
+    const waterCount = summary.waterHexes.length;
+    const oceanCount = (summary.countsByBase.deep_sea || 0) + (summary.countsByBase.sea || 0) + (summary.countsByBase.coastal_water || 0);
+    const coastalCount = summary.countsByBase.coastal_water || 0;
+    const portCount = summary.portAnchors.length;
+    if (waterCount < 18) return { site: 0, dungeon: 0, ship: 0, stronghold: 0, lawless: 0, total: 0 };
+
+    const siteScale = 0.45 + settings.siteAmount * 1.35;
+    const dungeonScale = 0.2 + settings.dungeonAmount * 1.6;
+    const shipScale = 0.25 + settings.waypointAmount * 1.45;
+    const strongholdScale = 0.25 + settings.strongholdAmount * 1.45;
+    const lawlessScale = 0.25 + Math.max(settings.settlementDensity, settings.siteAmount) * 1.35;
+    const site = settings.siteAmount > 0
+      ? Math.min(16, Math.max(2, Math.round((waterCount / 240) * siteScale)))
+      : 0;
+    const dungeon = settings.dungeonAmount > 0 && oceanCount >= 90
+      ? Math.min(6, Math.round((oceanCount / 580) * dungeonScale))
+      : 0;
+    const ship = settings.waypointAmount > 0 && portCount && oceanCount >= 80
+      ? Math.min(7, Math.max(1, Math.round((portCount * 0.36 + oceanCount / 820) * shipScale)))
+      : 0;
+    const stronghold = settings.strongholdAmount > 0 && portCount >= 2 && coastalCount >= 45
+      ? Math.min(5, Math.max(1, Math.round((portCount + coastalCount / 160) * 0.22 * strongholdScale)))
+      : 0;
+    const lawless = (settings.settlementDensity > 0 || settings.siteAmount > 0) && oceanCount >= 80 && portCount
+      ? Math.min(6, Math.max(1, Math.round(((portCount * 0.24) + (oceanCount / 980)) * lawlessScale)))
+      : 0;
+
+    return {
+      site,
+      dungeon,
+      ship,
+      stronghold,
+      lawless,
+      total: site + dungeon + ship + stronghold + lawless
+    };
+  }
+
+  function selectBalancedWaterPoiCandidates({ candidates, targetCount, occupiedHexIds, placedPoiRefs, targets, settings }) {
+    const chosen = [];
+    const pool = Array.isArray(candidates) ? [...candidates] : [];
+    const familyUsage = new Map();
+    const iconUsage = new Map();
+    const maxByFamily = getWaterPoiFamilyMaximums(targets);
+    while (chosen.length < targetCount) {
+      const best = pool
+        .filter(candidate => candidate.meta?.allowOccupiedHex || !occupiedHexIds?.has(candidate.hex.id))
+        .filter(candidate => !chosen.some(entry => entry.hex.id === candidate.hex.id))
+        .map(candidate => {
+          const family = getWaterPoiFamily(candidate);
+          const familyCount = familyUsage.get(family) || 0;
+          const familyMax = maxByFamily[family] ?? Math.max(1, Math.ceil(targetCount * 0.42));
+          if (familyCount >= familyMax) return null;
+          return {
+            candidate,
+            score: candidate.score * getWaterPoiFamilyCapFactor(family, familyCount, targetCount)
+              + getWaterPoiSeedBias(candidate, settings, chosen.length)
+              - getSelectedSpacingPenalty(candidate.hex, chosen, getWaterPoiSpacingRadius(candidate))
+              - getPlacedPoiClusterPenalty(candidate.hex, placedPoiRefs, getWaterPoiSpacingRadius(candidate) + 1, { ignoreTypes: ["settlement"] })
+              - getVariantUsagePenalty(candidate, iconUsage, {
+                variantSoftCap: variantCandidate => ["island", "island_2", "shipwreck", "sloop"].includes(variantCandidate.icon) ? 2 : 1,
+                variantPenaltyBase: 0.07,
+                variantPenaltyStep: 0.12
+              })
+          };
+        })
+        .filter(Boolean)
+        .filter(entry => entry.score >= 0.28)
+        .sort((left, right) => (
+          right.score - left.score ||
+          seededUnit(`${settings?.seed || ""}:water-poi-tie:${left.candidate.icon}:${left.candidate.hex.id}`) - seededUnit(`${settings?.seed || ""}:water-poi-tie:${right.candidate.icon}:${right.candidate.hex.id}`) ||
+          left.candidate.hex.id.localeCompare(right.candidate.hex.id)
+        ))[0];
+      if (!best) break;
+      chosen.push(best.candidate);
+      familyUsage.set(getWaterPoiFamily(best.candidate), (familyUsage.get(getWaterPoiFamily(best.candidate)) || 0) + 1);
+      registerVariantUsage(best.candidate, iconUsage);
+      pool.splice(pool.findIndex(candidate => candidate.hex.id === best.candidate.hex.id && candidate.icon === best.candidate.icon), 1);
+    }
+    return chosen;
+  }
+
+  function getWaterPoiFamilyMaximums(targets) {
+    const total = Math.max(1, Number(targets?.total || 1));
+    return {
+      island: Math.max(1, Math.ceil(total * 0.3)),
+      wreck: Math.max(1, Math.ceil(total * 0.28)),
+      hazard: Math.max(1, Math.ceil(total * 0.24)),
+      landmark: Math.max(1, Math.ceil(total * 0.2)),
+      stronghold: Math.max(0, Number(targets?.stronghold || 0)),
+      lawless: Math.max(0, Number(targets?.lawless || 0)),
+      dungeon: Math.max(0, Number(targets?.dungeon || 0)),
+      ship: Math.max(0, Number(targets?.ship || 0))
+    };
+  }
+
+  function getWaterPoiFamilyCapFactor(family, count, targetCount) {
+    const bands = {
+      island: { minimum: 0.16, soft: 0.26 },
+      wreck: { minimum: 0.14, soft: 0.24 },
+      hazard: { minimum: 0.12, soft: 0.2 },
+      landmark: { minimum: 0.08, soft: 0.16 },
+      stronghold: { minimum: 0.04, soft: 0.12 },
+      lawless: { minimum: 0.08, soft: 0.18 },
+      dungeon: { minimum: 0.08, soft: 0.18 },
+      ship: { minimum: 0.1, soft: 0.2 }
+    }[family] || { minimum: 0.08, soft: 0.18 };
+    const floor = Math.max(1, Math.round(Math.max(1, targetCount) * bands.minimum));
+    const softCap = Math.max(floor, Math.round(Math.max(1, targetCount) * bands.soft));
+    if (count < floor) return 1.22 - (count / Math.max(1, floor)) * 0.12;
+    if (count >= softCap + 1) return 0.42;
+    if (count >= softCap) return 0.68;
+    return 1;
+  }
+
+  function getWaterPoiFamily(candidate) {
+    return String(candidate?.waterFamily || candidate?.meta?.waterFamily || candidate?.type || "site");
+  }
+
+  function getWaterPoiSeedBias(candidate, settings, selectionIndex = 0) {
+    const seed = String(settings?.seed || "");
+    const family = getWaterPoiFamily(candidate);
+    return seededNoise(`${seed}:water-poi-select:${family}:${candidate?.icon || ""}:${candidate?.hex?.id || ""}:${selectionIndex}`, -0.22, 0.24);
+  }
+
+  function getWaterPoiSpacingRadius(candidate) {
+    const family = getWaterPoiFamily(candidate);
+    if (family === "stronghold" || family === "dungeon") return 6;
+    if (family === "ship" || family === "lawless") return 5;
+    return 4;
+  }
+
+  function buildWaterSiteCandidatesForHex(hex, summary, byCoord, dimensions) {
+    const context = getWaterPoiContext(hex, summary, byCoord, dimensions);
+    if (!context) return [];
+    const candidates = [];
+
+    if (isIslandWaterCandidate(context)) {
+      const clusterBonus = Math.min(0.18, context.openWaterNeighborCount * 0.035);
+      const icon = context.openWaterNeighborCount >= 3 && seededUnit(`${summary.seed}:water-island:${hex.id}`) >= 0.44 ? "island_2" : "island";
+      candidates.push(makeWaterCandidate(hex, "wilderness_site", icon, 0.62 + clusterBonus + context.bodyScale * 0.12 - context.edgePenalty, ["waterbound", "isolated"], 7, context, { waterFamily: "island" }));
+    }
+
+    if (isShipwreckWaterCandidate(context)) {
+      const wreckFeatureBonus = hasAnyFeature(hex, new Set(["reef", "shoals", "water_rocks", "waves"])) ? 0.18 : 0;
+      candidates.push(makeWaterCandidate(hex, "ruin", "shipwreck", 0.46 + context.seaLaneScore * 0.24 + wreckFeatureBonus + context.coastAccess * 0.12 - context.edgePenalty, ["maritime", "lost", "ruined"], 7, context, { waterFamily: "wreck" }));
+    }
+
+    if (hex.features?.includes("reef")) {
+      candidates.push(makeWaterCandidate(hex, "hazard", "reef", 0.52 + context.seaLaneScore * 0.16 + context.coastAccess * 0.08 - context.edgePenalty, ["maritime", "shoal"], 8, context, { waterFamily: "hazard" }));
+    }
+
+    if (hex.features?.includes("whirlpool")) {
+      candidates.push(makeWaterCandidate(hex, "hazard", "whirlpool", 0.58 + context.openWaterScore * 0.18 - context.edgePenalty, ["maritime", "deadly"], 8, context, { waterFamily: "hazard" }));
+    }
+
+    if (context.base === "deep_sea" && context.edgeDistance >= 3 && context.openWaterScore >= 0.68 && seededUnit(`${summary.seed}:water-kraken:${hex.id}`) >= 0.92) {
+      candidates.push(makeWaterCandidate(hex, "hazard", "kraken", 0.5 + context.openWaterScore * 0.22 - context.edgePenalty, ["maritime", "monster_lair"], 6, context, { waterFamily: "hazard" }));
+    }
+
+    if (context.coastAccess >= 0.72 && context.nearestPortDistance >= 3 && context.nearestPortDistance <= 9) {
+      candidates.push(makeWaterCandidate(hex, "landmark", "lighthouse", 0.46 + context.seaLaneScore * 0.2 + context.coastAccess * 0.12, ["navigation", "maritime"], 6, context, { waterFamily: "landmark" }));
+    }
+
+    return candidates;
+  }
+
+  function buildWaterStrongholdCandidate(hex, summary, byCoord, dimensions) {
+    const context = getWaterPoiContext(hex, summary, byCoord, dimensions);
+    if (!context || context.coastAccess < 0.64 || context.nearestPortDistance > 6) return null;
+    const score = 0.54
+      + context.seaLaneScore * 0.2
+      + (context.nearestPortDistance <= 3 ? 0.08 : 0)
+      + (context.base === "coastal_water" ? 0.08 : 0)
+      + seededNoise(`${summary.seed}:water-sea-fort-score:${hex.id}`, -0.16, 0.18)
+      - context.edgePenalty;
+    if (score < 0.54) return null;
+    const tags = ["fortified", "strategic", "maritime"];
+    if (seededUnit(`${summary.seed}:water-sea-fort-lawless:${hex.id}`) < 0.18 + Math.min(0.12, context.seaLaneScore * 0.12)) tags.push("lawless");
+    return makeWaterCandidate(hex, "stronghold", "sea_fort", score, tags, 6, context, { waterFamily: "stronghold" });
+  }
+
+  function buildCoastalLawlessSettlementCandidate(hex, summary, byCoord, dimensions) {
+    const context = getCoastalLandPoiContext(hex, summary, byCoord, dimensions);
+    if (!context || context.seaLaneScore < 0.28 || context.nearestPortDistance < 3 || context.nearestPortDistance > 12) return null;
+    const terrainFit = hex.baseTerrain === "sand" || hex.baseTerrain === "barrens" ? 0.12 : hex.baseTerrain === "plains" ? 0.06 : 0;
+    const score = 0.44 + context.seaLaneScore * 0.24 + terrainFit - context.edgePenalty;
+    if (score < 0.46) return null;
+    const icon = seededUnit(`${summary.seed}:water-lawless-port:${hex.id}`) >= 0.58 ? "port_town" : "pirate_flag";
+    return makeWaterCandidate(hex, "settlement", icon, score, ["lawless", "maritime", "trade"], 5, context, {
+      waterFamily: "lawless",
+      settlementFlavor: icon === "port_town" ? "smuggler_port" : "pirate_cove"
+    });
+  }
+
+  function buildPortLawlessDenCandidates(summary) {
+    return (summary?.portAnchors || [])
+      .map(anchor => {
+        const hex = anchor?.hex;
+        if (!hex?.id) return null;
+        const nearestWater = neighbors(hex, {
+          get(key) {
+            return summary.waterHexes.find(candidate => `${candidate.x}:${candidate.y}` === key);
+          }
+        }).find(isWaterPoiHex);
+        const laneScore = nearestWater ? summary.seaLaneScoreByHexId.get(nearestWater.id) || 0 : 0.18;
+        const chanceSeed = seededUnit(`${summary.seed}:port-lawless-den:${anchor.id || anchor.name || hex.id}`);
+        if (chanceSeed < 0.1) return null;
+        const context = {
+          hex,
+          nearestPort: { anchor, distance: 0 },
+          nearestPortDistance: 0,
+          seaLaneScore: laneScore,
+          edgePenalty: 0,
+          bodyScale: 0,
+          coastAccess: 1
+        };
+        return makeWaterCandidate(hex, "hazard", "pirate_flag", 0.74 + laneScore * 0.24 + Number(anchor.importance || 0.6) * 0.1, ["lawless", "maritime", "hidden"], 6, context, {
+          waterFamily: "lawless",
+          allowOccupiedHex: true,
+          hostName: anchor.name || "",
+          hostId: anchor.id || "",
+          settlementFlavor: "pirates_den"
+        });
+      })
+      .filter(Boolean);
+  }
+
+  function buildWaterDungeonCandidatesForHex(hex, summary, settlementAnchors, byCoord, dimensions, dangerRefs) {
+    const context = getWaterPoiContext(hex, summary, byCoord, dimensions);
+    if (!context) return [];
+    const candidates = [];
+    const existingDangerDistance = getNearestWaterDangerDistance(hex, dangerRefs);
+
+    if (context.coastAccess >= 0.7 && countNearbyRuggedLand(hex, byCoord) > 0) {
+      candidates.push(makeWaterCandidate(hex, "dungeon", "cave", 0.48 + context.coastAccess * 0.16 + context.seaLaneScore * 0.08, ["hidden", "maritime"], 6, context, { complexChance: 0.08, waterFamily: "dungeon" }));
+    }
+
+    if ((hex.features || []).some(feature => ["water_rocks", "shoals", "reef"].includes(feature)) && context.seaLaneScore >= 0.18) {
+      const icon = seededUnit(`${summary.seed}:water-ruin-dungeon:${hex.id}`) >= 0.55 ? "buried_ruins" : "vault";
+      candidates.push(makeWaterCandidate(hex, "dungeon", icon, 0.44 + context.seaLaneScore * 0.18 + context.bodyScale * 0.08, ["ancient", "sealed", "maritime"], 5, context, { complexChance: 0.22, waterFamily: "dungeon" }));
+    }
+
+    if (context.edgeDistance >= 3 && context.openWaterScore >= 0.62 && context.nearestPortDistance >= 8) {
+      candidates.push(makeWaterCandidate(hex, "dungeon", "lair", 0.42 + context.openWaterScore * 0.18 - Math.max(0, 5 - existingDangerDistance) * 0.08, ["monster_lair", "maritime"], 6, context, { complexChance: 0.08, waterFamily: "dungeon" }));
+    }
+
+    return candidates;
+  }
+
+  function buildWaterShipCandidate(hex, summary, byCoord, dimensions, dangerRefs) {
+    const context = getWaterPoiContext(hex, summary, byCoord, dimensions);
+    if (!context || context.seaLaneScore < 0.28 || context.nearestPortDistance > 14) return null;
+    const dangerDistance = getNearestWaterDangerDistance(hex, dangerRefs);
+    if (dangerDistance <= 2) return null;
+    const hazardPenalty = (hex.features || []).some(feature => ["reef", "whirlpool", "water_rocks"].includes(feature)) ? 0.18 : 0;
+    const icon = context.seaLaneScore >= 0.58 && context.bodyScale >= 0.42 && seededUnit(`${summary.seed}:water-ship:${hex.id}`) >= 0.58 ? "galleon" : "sloop";
+    const score = 0.38 + context.seaLaneScore * 0.38 + Math.min(0.12, dangerDistance * 0.025) - hazardPenalty - context.edgePenalty * 0.5;
+    if (score < 0.38) return null;
+    return makeWaterCandidate(hex, "waypoint", icon, score, ["maritime", "trade"], 8, context, { waterFamily: "ship" });
+  }
+
+  function makeWaterCandidate(hex, type, icon, score, tags, notoriety, context, extraMeta = {}) {
+    return {
+      hex,
+      type,
+      icon,
+      waterFamily: extraMeta.waterFamily || type,
+      score,
+      tags: mergeGeneratedTagsForIcon(tags, icon),
+      notoriety: String(Math.max(2, Math.min(9, Number(notoriety) || 7))),
+      meta: {
+        hex: { ...hex },
+        waterPoi: true,
+        nearestSettlement: context?.nearestPort?.anchor?.name || "",
+        nearestSettlementId: context?.nearestPort?.anchor?.id || "",
+        nearestSettlementRole: context?.nearestPort?.anchor?.role || "",
+        supportDistance: context?.nearestPortDistance ?? 99,
+        seaLaneScore: context?.seaLaneScore || 0,
+        waterFamily: extraMeta.waterFamily || type,
+        ...extraMeta
+      }
+    };
+  }
+
+  function makeWaterPoiDraft(candidate, settings, usedNames) {
+    const effectiveType = candidate.type === "dungeon" && seededUnit(`${settings.seed}:water-dungeon-complex:${candidate.hex.id}:${candidate.icon}`) < Number(candidate.meta?.complexChance || 0)
+      ? "dungeon_complex"
+      : candidate.type;
+    const name = reserveGeneratedName(
+      generateWaterPoiName({ ...candidate, type: effectiveType }, settings),
+      usedNames,
+      buildWaterPoiFallbackName({ ...candidate, type: effectiveType }),
+      { seed: `${settings.seed}:water-poi-name:${candidate.hex.id}:${candidate.icon}` }
+    );
+    return {
+      name,
+      type: effectiveType,
+      icon: candidate.icon,
+      hexId: candidate.hex.id,
+      tags: candidate.tags,
+      notoriety: candidate.notoriety,
+      population: effectiveType === "settlement" ? formatGeneratedPopulation(generateWaterSettlementPopulation(candidate, settings)) : "",
+      lore: "",
+      meta: candidate.meta
+    };
+  }
+
+  function generateWaterPoiName(candidate, settings) {
+    if (candidate.type === "settlement" || ["pirates_den", "smugglers_den"].includes(String(candidate.meta?.settlementFlavor || ""))) return generateWaterSettlementName(candidate, settings);
+    if (candidate.type === "stronghold") return generateStrongholdName(candidate, settings);
+    if (candidate.type === "waypoint") return generateWaypointName(candidate, settings);
+    if (candidate.type === "dungeon" || candidate.type === "dungeon_complex") return generateDungeonName(candidate, settings);
+    return generateSiteName(candidate, settings);
+  }
+
+  function buildWaterPoiFallbackName(candidate) {
+    if (candidate.meta?.settlementFlavor === "pirates_den") return "Pirates' Den";
+    if (candidate.meta?.settlementFlavor === "smugglers_den") return "Smugglers' Den";
+    if (candidate.type === "settlement") return candidate.icon === "port_town" ? "Smuggler's Haven" : "Black Cove";
+    if (candidate.type === "stronghold") return buildStrongholdFallbackName(candidate);
+    if (candidate.type === "waypoint") return buildWaypointFallbackName(candidate);
+    if (candidate.type === "dungeon" || candidate.type === "dungeon_complex") return buildDungeonFallbackName(candidate, candidate.type === "dungeon_complex");
+    return buildSiteFallbackName(candidate);
+  }
+
+  function generateWaterSettlementName(candidate, settings) {
+    const seed = `${settings.seed}:water-settlement:${candidate.hex.id}:${candidate.icon}`;
+    const hostName = String(candidate.meta?.hostName || "").trim();
+    const flavor = String(candidate.meta?.settlementFlavor || "");
+    if (hostName && flavor === "pirates_den") {
+      return buildRelatedGeneratedSiteName(seed, hostName, ["Pirates' Den", "Black Den", "Hidden Anchorage"], ["Old", "Low", "Backwater"], { qualifierChance: 0.28, qualifierAfter: true });
+    }
+    if (hostName && flavor === "smugglers_den") {
+      return buildRelatedGeneratedSiteName(seed, hostName, ["Smugglers' Den", "Hidden Cellar", "Backwater Den"], ["Old", "Low", "Hidden"], { qualifierChance: 0.3, qualifierAfter: true });
+    }
+    const suffixes = flavor === "smuggler_port"
+      ? ["Haven", "Port", "Quay", "Anchorage"]
+      : ["Cove", "Haven", "Den", "Anchorage"];
+    return buildGeneratedPatternName(seed, [{
+      prefixes: [...NAME_POOLS.coastPrefixes, "Black", "Red", "Hidden", "Low", "Rogue"],
+      suffixes,
+      forceSpace: true
+    }]);
+  }
+
+  function generateWaterSettlementPopulation(candidate, settings) {
+    const flavor = String(candidate?.meta?.settlementFlavor || "");
+    const seed = `${settings.seed}:water-settlement-population:${candidate.hex.id}:${candidate.icon}`;
+    if (flavor === "smuggler_port") return randomIntegerFromSeed(seed, 450, 2200);
+    if (flavor === "pirate_cove") return randomIntegerFromSeed(seed, 120, 900);
+    return randomIntegerFromSeed(seed, 25, 180);
+  }
+
+  function makeWaterPoiRef(candidate) {
+    return {
+      hex: candidate?.hex,
+      type: candidate?.type || "",
+      icon: candidate?.icon || ""
+    };
+  }
+
+  function getWaterPoiContext(hex, summary, byCoord, dimensions) {
+    if (!isWaterPoiHex(hex)) return null;
+    const adjacent = neighbors(hex, byCoord);
+    const nearbyTwo = nearbyWithin(hex, byCoord, 2);
+    const adjacentLandCount = adjacent.filter(isPoiLandHex).length;
+    const nearbyLandCount = nearbyTwo.filter(isPoiLandHex).length;
+    const waterNeighborCount = adjacent.filter(isWaterPoiHex).length;
+    const openWaterNeighborCount = adjacent.filter(candidate => isWaterPoiHex(candidate) && neighbors(candidate, byCoord).every(neighbor => !isPoiLandHex(neighbor))).length;
+    const bodySize = summary.waterBodySizeByHexId.get(hex.id) || 1;
+    const nearestPort = findNearestPoiAnchor(hex, summary.portAnchors);
+    const nearestPortDistance = nearestPort?.distance ?? 99;
+    const edgeDistance = distanceToMapEdge(hex, dimensions);
+    const seaLaneScore = summary.seaLaneScoreByHexId.get(hex.id) || 0;
+    const coastAccess = clamp((adjacentLandCount * 0.28) + (nearbyLandCount * 0.06) + (hex.baseTerrain === "coastal_water" ? 0.2 : 0), 0, 1, 0);
+    const bodyScale = clamp(bodySize / 180, 0, 1, 0.1);
+    const openWaterScore = clamp(
+      (hex.baseTerrain === "deep_sea" ? 0.44 : OPEN_SEA_TERRAINS.has(hex.baseTerrain) ? 0.36 : 0.08)
+      + waterNeighborCount * 0.06
+      + openWaterNeighborCount * 0.08
+      + bodyScale * 0.2
+      - adjacentLandCount * 0.12,
+      0,
+      1,
+      0.2
+    );
+    return {
+      hex,
+      base: hex.baseTerrain,
+      adjacentLandCount,
+      nearbyLandCount,
+      waterNeighborCount,
+      openWaterNeighborCount,
+      bodySize,
+      bodyScale,
+      nearestPort,
+      nearestPortDistance,
+      edgeDistance,
+      edgePenalty: edgeDistance <= 0 ? 0.55 : edgeDistance === 1 ? 0.28 : edgeDistance === 2 ? 0.12 : 0,
+      seaLaneScore,
+      coastAccess,
+      openWaterScore
+    };
+  }
+
+  function getCoastalLandHexesForWaterSummary(summary, byCoord) {
+    const byId = new Map();
+    (summary?.waterHexes || []).forEach(waterHex => {
+      neighbors(waterHex, byCoord)
+        .filter(isPoiLandHex)
+        .forEach(hex => byId.set(hex.id, hex));
+    });
+    return [...byId.values()];
+  }
+
+  function getCoastalLandPoiContext(hex, summary, byCoord, dimensions) {
+    if (!isPoiLandHex(hex)) return null;
+    const adjacentWaterContexts = neighbors(hex, byCoord)
+      .filter(isWaterPoiHex)
+      .map(waterHex => getWaterPoiContext(waterHex, summary, byCoord, dimensions))
+      .filter(Boolean)
+      .sort((left, right) => (
+        right.seaLaneScore - left.seaLaneScore ||
+        right.openWaterScore - left.openWaterScore ||
+        left.hex.id.localeCompare(right.hex.id)
+      ));
+    if (!adjacentWaterContexts.length) return null;
+    const waterContext = adjacentWaterContexts[0];
+    const nearestPort = findNearestPoiAnchor(hex, summary.portAnchors);
+    const nearestPortDistance = nearestPort?.distance ?? 99;
+    const edgeDistance = distanceToMapEdge(hex, dimensions);
+    return {
+      hex,
+      base: hex.baseTerrain,
+      adjacentLandCount: 0,
+      nearbyLandCount: 0,
+      waterNeighborCount: adjacentWaterContexts.length,
+      openWaterNeighborCount: waterContext.openWaterNeighborCount,
+      bodySize: waterContext.bodySize,
+      bodyScale: waterContext.bodyScale,
+      nearestPort,
+      nearestPortDistance,
+      edgeDistance,
+      edgePenalty: edgeDistance <= 0 ? 0.24 : edgeDistance === 1 ? 0.1 : 0,
+      seaLaneScore: waterContext.seaLaneScore,
+      coastAccess: 1,
+      openWaterScore: waterContext.openWaterScore
+    };
+  }
+
+  function isIslandWaterCandidate(context) {
+    return context
+      && context.adjacentLandCount === 0
+      && context.nearbyLandCount <= 1
+      && context.waterNeighborCount >= 3
+      && context.bodySize >= 18
+      && context.edgeDistance >= 2;
+  }
+
+  function isShipwreckWaterCandidate(context) {
+    return context
+      && context.bodySize >= 12
+      && context.edgeDistance >= 1
+      && (context.coastAccess >= 0.24 || context.seaLaneScore >= 0.24 || context.openWaterScore >= 0.48);
+  }
+
+  function isWaterPoiHex(hex) {
+    return Boolean(hex && WATERWAY_TERRAINS.has(hex.baseTerrain));
+  }
+
+  function isSeaRouteSettlementAnchor(anchor, byCoord) {
+    if (!anchor?.hex?.id) return false;
+    const icon = String(anchor.icon || "").trim();
+    if (icon === "port_town") return true;
+    if (anchor.role === "coastal_harbor") return true;
+    const adjacent = neighbors(anchor.hex, byCoord);
+    return adjacent.some(hex => COASTAL_TERRAINS.has(hex?.baseTerrain)) && Number(anchor.importance || 0) >= 0.62;
+  }
+
+  function getLikelySeaLaneScore(hex, portAnchors, dimensions) {
+    if (!isWaterPoiHex(hex)) return 0;
+    const edgeDistance = distanceToMapEdge(hex, dimensions);
+    const edgeScore = edgeDistance <= 2 ? 0.18 : edgeDistance <= 5 ? 0.08 : 0;
+    const baseScore = hex.baseTerrain === "coastal_water"
+      ? 0.2
+      : hex.baseTerrain === "sea"
+        ? 0.16
+        : hex.baseTerrain === "deep_sea"
+          ? 0.1
+          : 0.04;
+    const portScores = (portAnchors || [])
+      .map(anchor => {
+        const distance = hexDistance(hex, anchor.hex);
+        if (distance > 18) return 0;
+        return (1 - distance / 18) * (0.5 + Math.min(0.28, Number(anchor.importance || 0.6) * 0.14));
+      })
+      .sort((left, right) => right - left);
+    const primaryPortScore = portScores[0] || 0;
+    const secondaryPortScore = portScores[1] ? portScores[1] * 0.45 : 0;
+    return clamp(baseScore + edgeScore + primaryPortScore + secondaryPortScore, 0, 1, 0);
+  }
+
+  function getNearestWaterDangerDistance(hex, dangerRefs) {
+    const distances = (dangerRefs || [])
+      .filter(ref => ref?.hex?.id && WATER_DANGER_ICONS.has(String(ref.icon || "")))
+      .map(ref => hexDistance(hex, ref.hex))
+      .filter(Number.isFinite);
+    return distances.length ? Math.min(...distances) : 99;
+  }
+
+  function countNearbyRuggedLand(hex, byCoord) {
+    return nearbyWithin(hex, byCoord, 1)
+      .filter(isPoiLandHex)
+      .filter(candidate => candidate.baseTerrain === "rock" || hasAnyFeature(candidate, RUGGED_FEATURES))
+      .length;
   }
 
   function makeSiteCandidate(hex, type, icon, score, baseTags, settlementDistance, oldCivilization, remoteness) {
@@ -2545,6 +3918,22 @@
     return penalty;
   }
 
+  function isRiverSettlementCandidate(candidate) {
+    if (!candidate) return false;
+    return candidate.riverAccess
+      || candidate.primaryRole === "river_crossing"
+      || candidate.primaryRole === "river_settlement";
+  }
+
+  function getProvinceRiverSeatBonus(province, candidate, selectionIndex) {
+    if (selectionIndex !== 0 || !isRiverSettlementCandidate(candidate)) return 0;
+    if (!province?.riverSeatCandidateIds?.has(candidate.hex?.id)) return 0;
+
+    const scoreGap = Math.max(0, Number(province.bestOverallCandidateScore || 0) - Number(province.bestRiverCandidateScore || 0));
+    const roleBonus = candidate.primaryRole === "river_crossing" ? 0.08 : 0.04;
+    return Math.min(0.32, scoreGap * 0.85 + roleBonus);
+  }
+
   function isWarmPreferredSettlementCandidate(candidate) {
     if (!candidate) return false;
     return candidate.arablePotential >= 0.62
@@ -3075,13 +4464,15 @@
               ? ["Pass", "Gap", "Notch"]
               : candidate.icon === "canyon_pass"
                 ? ["Canyon", "Pass", "Cut"]
-              : candidate.icon === "lodge"
-                ? ["Lodge", "Rest"]
-                : candidate.icon === "inn"
-                  ? ["Inn", "Rest"]
-                  : candidate.icon === "campsite"
-                    ? ["Camp"]
-                    : ["Tavern", "Rest"];
+                : candidate.icon === "sloop" || candidate.icon === "galleon"
+                  ? ["Sail", "Ship", "Voyage"]
+                  : candidate.icon === "lodge"
+                    ? ["Lodge", "Rest"]
+                    : candidate.icon === "inn"
+                      ? ["Inn", "Rest"]
+                      : candidate.icon === "campsite"
+                        ? ["Camp"]
+                        : ["Tavern", "Rest"];
     const prefixes = candidate.icon === "ford" || candidate.icon === "bridge" || candidate.icon === "bridge_gate" || candidate.icon === "ferry"
       ? [...NAME_POOLS.riverPrefixes, ...NAME_POOLS.genericPrefixes]
       : candidate.icon === "mountain_pass"
@@ -3090,7 +4481,9 @@
           ? [...NAME_POOLS.stonePrefixes, ...NAME_POOLS.genericPrefixes]
       : candidate.icon === "lodge"
         ? [...NAME_POOLS.forestPrefixes, ...NAME_POOLS.coldPrefixes, ...NAME_POOLS.genericPrefixes]
-        : NAME_POOLS.genericPrefixes;
+          : candidate.icon === "sloop" || candidate.icon === "galleon"
+            ? [...NAME_POOLS.coastPrefixes, ...NAME_POOLS.genericPrefixes]
+            : NAME_POOLS.genericPrefixes;
     return buildGeneratedPatternName(seed, [{ prefixes, suffixes, forceSpace: true }]);
   }
 
@@ -3104,6 +4497,8 @@
       bridge: "Grey Bridge",
       ford: "Raven Ford",
       ferry: "River Ferry",
+      sloop: "Salt Sail",
+      galleon: "Crown Galleon",
       mountain_pass: "High Pass",
       canyon_pass: "Stone Canyon"
     }[candidate.icon] || "Roadstop";
@@ -3151,18 +4546,35 @@
 
   function generateDungeonName(candidate, settings) {
     const seed = `${settings.seed}:dungeon:${candidate.hex.id}:${candidate.icon}`;
+    const hostName = String(candidate.meta?.hostName || "").trim();
     const strongholdName = String(candidate.meta?.strongholdName || "").trim();
     const settlementName = String(candidate.meta?.nearestSettlement || "").trim();
-    const relatedBaseName = strongholdName || settlementName;
+    const relatedBaseName = hostName || strongholdName || settlementName;
     const suffixes = candidate.icon === "cave"
       ? ["Caves", "Cavern", "Hollow", "Grotto"]
       : candidate.icon === "catacombs"
-        ? ["Catacombs", "Vaults", "Tombs"]
+        ? ["Catacombs", "Ossuary", "Bone Halls"]
         : candidate.icon === "crypt"
-          ? ["Crypt", "Tomb", "Vault"]
-          : candidate.icon === "lair" || candidate.icon === "dragon_lair"
-            ? ["Lair", "Maw", "Den"]
-            : ["Dungeon", "Deeps", "Vault"];
+          ? ["Crypt", "Undercrypt", "Sepulchre"]
+          : candidate.icon === "evil_temple"
+            ? ["Temple", "Sanctum", "Shrine"]
+            : candidate.icon === "barrow"
+              ? ["Barrow", "Mound", "Barrows"]
+              : candidate.icon === "abandoned_mine"
+                ? ["Mine", "Delve", "Works"]
+                : candidate.icon === "tomb"
+                  ? ["Tomb", "Sepulchre", "Mausoleum"]
+                  : candidate.icon === "buried_ruins"
+                    ? ["Ruins", "Underhalls", "Foundations"]
+                    : candidate.icon === "vault"
+                      ? ["Vault", "Archive", "Strongroom"]
+                      : candidate.icon === "sewer"
+                        ? ["Sewers", "Drains", "Culverts"]
+                        : candidate.icon === "pirate_flag"
+                          ? ["Cove", "Haven", "Den", "Anchorage"]
+                          : candidate.icon === "lair" || candidate.icon === "dragon_lair"
+                            ? ["Lair", "Maw", "Den"]
+                            : ["Dungeon", "Deeps", "Halls"];
     if (relatedBaseName) {
       return buildRelatedGeneratedSiteName(seed, relatedBaseName, suffixes, ["Old", "Black", "Hidden", "Deep"], { qualifierChance: 0.36, qualifierAfter: true });
     }
@@ -3173,15 +4585,32 @@
     }]);
   }
 
-  function buildDungeonFallbackName(candidate) {
-    if (candidate.type === "dungeon_complex") {
-      if (candidate.icon === "catacombs" || candidate.icon === "crypt") return "The Old Vaults";
+  function buildDungeonFallbackName(candidate, complex = false) {
+    if (complex) {
+      if (candidate.icon === "pirate_flag") return "The Black Cove";
+      if (candidate.icon === "catacombs") return "The Old Catacombs";
+      if (candidate.icon === "crypt") return "The Black Crypts";
+      if (candidate.icon === "tomb") return "The Old Sepulchres";
+      if (candidate.icon === "vault") return "The Iron Vaults";
+      if (candidate.icon === "buried_ruins") return "The Buried Ruins";
+      if (candidate.icon === "evil_temple") return "The Black Temple";
+      if (candidate.icon === "abandoned_mine") return "The Lost Delve";
+      if (candidate.icon === "barrow") return "The Grey Barrows";
       if (candidate.icon === "cave") return "The Deep Caves";
       if (candidate.icon === "dragon_lair") return "The Ash Maw";
+      if (candidate.icon === "sewer") return "The Old Sewers";
       return "The Iron Deeps";
     }
     if (candidate.icon === "catacombs") return "Old Catacombs";
     if (candidate.icon === "crypt") return "Black Crypt";
+    if (candidate.icon === "pirate_flag") return "Black Cove";
+    if (candidate.icon === "evil_temple") return "Black Temple";
+    if (candidate.icon === "barrow") return "Grey Barrow";
+    if (candidate.icon === "abandoned_mine") return "Lost Mine";
+    if (candidate.icon === "tomb") return "Old Tomb";
+    if (candidate.icon === "buried_ruins") return "Buried Ruins";
+    if (candidate.icon === "vault") return "Hidden Vault";
+    if (candidate.icon === "sewer") return "Old Sewers";
     if (candidate.icon === "cave") return "Grey Caves";
     if (candidate.icon === "lair" || candidate.icon === "dragon_lair") return "Wolf Lair";
     return "Stone Delve";
@@ -3325,6 +4754,24 @@
           prefixes: [...NAME_POOLS.wastePrefixes, ...terrainPrefixes],
           suffixes: ["Camp", "Hideout", "Den"],
           fallback: "Broken Camp"
+        };
+      case "reef":
+        return {
+          prefixes: [...NAME_POOLS.coastPrefixes, ...NAME_POOLS.wildPrefixes, ...terrainPrefixes],
+          suffixes: ["Reef", "Shoals", "Rocks"],
+          fallback: "Salt Reef"
+        };
+      case "whirlpool":
+        return {
+          prefixes: [...NAME_POOLS.coastPrefixes, ...NAME_POOLS.wastePrefixes, ...terrainPrefixes],
+          suffixes: ["Whirlpool", "Maw", "Gyre"],
+          fallback: "Black Whirlpool"
+        };
+      case "kraken":
+        return {
+          prefixes: [...NAME_POOLS.coastPrefixes, ...NAME_POOLS.wastePrefixes, ...terrainPrefixes],
+          suffixes: ["Maw", "Deep", "Hunting Ground"],
+          fallback: "Kraken Deep"
         };
       case "battlefield":
         return {

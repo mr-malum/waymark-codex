@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Optional backfill for generated POI source markers
 -- =========================================================
 --

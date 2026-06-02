@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Hex Mapper import bridge
 -- =========================================================
 --
@@ -313,7 +313,7 @@ declare
   updated_count integer := 0;
   inserted_count integer := 0;
 begin
-  if coalesce(export_payload->>'mapType', '') <> 'campaign-codex-hex-map' then
+  if coalesce(export_payload->>'mapType', '') not in ('campaign-codex-hex-map', 'waymark-codex-hex-map') then
     raise exception 'unsupported Hex Mapper export';
   end if;
 
@@ -469,7 +469,7 @@ begin
   set map_mode = 'generated',
       generated_map_config = jsonb_build_object(
         'schemaVersion', export_payload->'schemaVersion',
-        'mapType', export_payload->'mapType',
+        'mapType', 'waymark-codex-hex-map',
         'grid', grid,
         'editor', coalesce(export_payload->'editor', '{}'::jsonb)
       ),

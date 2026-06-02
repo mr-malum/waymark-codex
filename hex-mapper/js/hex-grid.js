@@ -1,4 +1,4 @@
-// Coordinate and flat-top odd-column topology helpers for the Campaign Codex hex map prototype.
+// Coordinate and flat-top odd-column topology helpers for the Waymark Codex hex map prototype.
 
 function localHexId(col, row) {
   return `${col}:${row}`;

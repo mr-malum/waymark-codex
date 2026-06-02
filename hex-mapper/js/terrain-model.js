@@ -1,4 +1,4 @@
-// Terrain model and legacy terrain migration for the Campaign Codex hex map prototype.
+// Terrain model and legacy terrain migration for the Waymark Codex hex map prototype.
 
 const TERRAIN = [
   { id: "deep_sea", label: "Deep Sea", color: "#14384f", aliases: ["Deep Sea", "Ocean"] },

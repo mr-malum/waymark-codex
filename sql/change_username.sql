@@ -1,5 +1,5 @@
 -- =========================================================
--- Campaign Codex
+-- Waymark Codex
 -- Change username with case-insensitive uniqueness + cooldown
 -- =========================================================
 --
