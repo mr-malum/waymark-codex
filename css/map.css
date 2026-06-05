@@ -971,6 +971,10 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.map-generation-section-actions .map-generation-actions[data-generation-action-panel="regions"].active {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .map-generation-actions button {
   min-height: 31px;
 }
@@ -2672,10 +2676,10 @@
 
 .generated-map-geographic-region-outline {
   fill: none;
-  stroke-width: 2.1;
+  stroke-width: 4.8;
   stroke-dasharray: 5 5;
   stroke-linecap: round;
-  opacity: 0.50;
+  opacity: 0.92;
   pointer-events: none;
   vector-effect: non-scaling-stroke;
 }

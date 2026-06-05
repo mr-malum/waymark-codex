@@ -3,6 +3,10 @@ let activeSession = null;
 let campaignBootstrapPromise = null;
 let availableCampaigns = [];
 let activeProfile = null;
+let pendingPasswordRecovery = false;
+const CAMPAIGN_PASSWORD_RECOVERY_REDIRECT_URL = "https://mrmalum.github.io/waymark-codex/";
+let campaignPasswordRecoveryLinkDetected = /passwordRecovery=1|(?:type|event)=password_recovery|(?:type|event)=recovery/i
+  .test(`${window.location.search || ""}${window.location.hash || ""}`);
 const pendingMemberRoleChanges = new Map();
 
 function getCampaignAuthGate() {
@@ -25,10 +29,17 @@ function setCampaignAuthStatus(message = "") {
 }
 
 function setCampaignAuthBusy(isBusy) {
-  const submit = document.getElementById("campaign-auth-submit");
-  if (submit) {
-    submit.disabled = isBusy;
-  }
+  [
+    "campaign-auth-submit",
+    "campaign-signup-submit",
+    "campaign-recovery-submit",
+    "campaign-reset-submit",
+    "campaign-forgot-password-button",
+    "campaign-recovery-back-button"
+  ].forEach(id => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = isBusy;
+  });
 }
 
 function showCampaignAuthGate() {
@@ -221,6 +232,83 @@ function openCampaignDebugMenu() {
   document.getElementById("campaign-rename-menu")?.classList.add("hidden");
   document.getElementById("campaign-add-member-menu")?.classList.add("hidden");
   document.getElementById("campaign-user-settings-menu")?.classList.add("hidden");
+  syncCampaignDebugControls();
+}
+
+function getCampaignAuditSettings() {
+  return window.db?.auditSettings || {
+    audit_enabled: true,
+    audit_hexes_enabled: false,
+    max_entries: 5000,
+    retention_days: 90
+  };
+}
+
+function syncCampaignDebugControls() {
+  const guidesCheckbox = document.getElementById("campaign-settings-guides-checkbox");
+  const auditEnabledCheckbox = document.getElementById("campaign-settings-audit-enabled-checkbox");
+  const auditViewCheckbox = document.getElementById("campaign-settings-audit-view-checkbox");
+  const settings = getCampaignAuditSettings();
+  const canUseAuditControls = canViewCampaignDebug();
+
+  if (guidesCheckbox) {
+    guidesCheckbox.checked = Boolean(document.getElementById("codex-modal")?.classList.contains("codex-debug-guides-visible"));
+    guidesCheckbox.disabled = !canUseAuditControls;
+  }
+
+  if (auditEnabledCheckbox) {
+    auditEnabledCheckbox.checked = settings.audit_enabled !== false;
+    auditEnabledCheckbox.disabled = !canUseAuditControls;
+  }
+
+  if (auditViewCheckbox) {
+    auditViewCheckbox.checked = typeof isCodexAuditVisible === "function"
+      ? Boolean(isCodexAuditVisible())
+      : false;
+    auditViewCheckbox.disabled = !canUseAuditControls;
+  }
+}
+
+async function handleCampaignAuditEnabledChange(event) {
+  const checkbox = event.currentTarget;
+  const campaign = getActiveCampaign?.();
+  if (!checkbox || !campaign?.id || !canViewCampaignDebug()) {
+    syncCampaignDebugControls();
+    return;
+  }
+
+  const previousSettings = getCampaignAuditSettings();
+  const previousValue = previousSettings.audit_enabled !== false;
+  const nextValue = Boolean(checkbox.checked);
+  checkbox.disabled = true;
+
+  try {
+    const { data, error } = await campaignSupabase.rpc("update_campaign_audit_enabled", {
+      target_campaign_id: campaign.id,
+      next_audit_enabled: nextValue
+    });
+    if (error) throw error;
+
+    const updated = (Array.isArray(data) ? data[0] : data) || {
+      ...previousSettings,
+      audit_enabled: nextValue
+    };
+    if (window.db) {
+      window.db.auditSettings = {
+        audit_enabled: updated.audit_enabled !== false,
+        audit_hexes_enabled: updated.audit_hexes_enabled === true,
+        max_entries: Number(updated.max_entries || 5000),
+        retention_days: Number(updated.retention_days || 90)
+      };
+    }
+    syncCampaignDebugControls();
+  } catch (error) {
+    console.error("Unable to update campaign audit setting:", error);
+    checkbox.checked = previousValue;
+    window.alert?.(error?.message || "Unable to update campaign audit setting.");
+  } finally {
+    checkbox.disabled = !canViewCampaignDebug();
+  }
 }
 
 function toggleCampaignSettingsMenu() {
@@ -477,12 +565,72 @@ function returnToMainSettingsMenu() {
 }
 
 function setCampaignAuthMode(mode) {
-  const isSignup = mode === "signup";
-  document.getElementById("campaign-auth-tab-signin")?.classList.toggle("active", !isSignup);
+  const normalizedMode = ["signin", "signup", "recover", "reset"].includes(mode) ? mode : "signin";
+  const isSignup = normalizedMode === "signup";
+  const isRecover = normalizedMode === "recover";
+  const isReset = normalizedMode === "reset";
+
+  document.getElementById("campaign-auth-tabs")?.toggleAttribute("hidden", isReset);
+  document.getElementById("campaign-auth-tab-signin")?.classList.toggle("active", normalizedMode === "signin" || isRecover);
   document.getElementById("campaign-auth-tab-signup")?.classList.toggle("active", isSignup);
-  document.getElementById("campaign-auth-signin-form").hidden = isSignup;
-  document.getElementById("campaign-auth-signup-form").hidden = !isSignup;
+  document.getElementById("campaign-auth-signin-form")?.toggleAttribute("hidden", normalizedMode !== "signin");
+  document.getElementById("campaign-auth-signup-form")?.toggleAttribute("hidden", !isSignup);
+  document.getElementById("campaign-auth-recovery-form")?.toggleAttribute("hidden", !isRecover);
+  document.getElementById("campaign-auth-reset-form")?.toggleAttribute("hidden", !isReset);
+
+  if (isRecover) {
+    const signinIdentifier = document.getElementById("campaign-auth-identifier")?.value.trim() || "";
+    const recoveryIdentifier = document.getElementById("campaign-recovery-identifier");
+    if (recoveryIdentifier && !recoveryIdentifier.value.trim()) recoveryIdentifier.value = signinIdentifier;
+    recoveryIdentifier?.focus();
+  } else if (isReset) {
+    document.getElementById("campaign-reset-password")?.focus();
+  }
+
   setCampaignAuthStatus("");
+}
+
+function getCampaignPasswordRecoveryRedirectUrl() {
+  const url = new URL(CAMPAIGN_PASSWORD_RECOVERY_REDIRECT_URL);
+  url.searchParams.set("passwordRecovery", "1");
+  return url.toString();
+}
+
+function isCampaignPasswordRecoveryUrl() {
+  const currentUrlParts = `${window.location.search || ""}${window.location.hash || ""}`;
+  return campaignPasswordRecoveryLinkDetected
+    || /passwordRecovery=1|(?:type|event)=password_recovery|(?:type|event)=recovery/i.test(currentUrlParts);
+}
+
+function clearCampaignPasswordRecoveryUrl() {
+  campaignPasswordRecoveryLinkDetected = false;
+  if (!window.history?.replaceState) return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("passwordRecovery")) return;
+  url.searchParams.delete("passwordRecovery");
+  window.history.replaceState({}, document.title, url.toString());
+}
+
+async function resolveCampaignLoginEmail(identifier) {
+  const trimmed = identifier?.trim() || "";
+  if (!trimmed) return "";
+  if (trimmed.includes("@")) return trimmed;
+
+  const { data, error } = await campaignSupabase.rpc("resolve_login_email_by_username", {
+    target_username: trimmed
+  });
+
+  if (error) throw error;
+  return data || "";
+}
+
+function showCampaignPasswordResetGate() {
+  hideCampaignPickerGate();
+  hideCampaignSettings();
+  showCampaignAuthGate();
+  setCampaignAuthMode("reset");
+  document.getElementById("campaign-auth-reset-form")?.reset();
+  setCampaignAuthStatus("Choose a new password for your account.");
 }
 
 async function fetchAvailableCampaigns() {
@@ -701,6 +849,12 @@ async function bootstrapCampaignSession() {
       return null;
     }
 
+    if (pendingPasswordRecovery || isCampaignPasswordRecoveryUrl()) {
+      pendingPasswordRecovery = true;
+      showCampaignPasswordResetGate();
+      return null;
+    }
+
     if (activeCampaign) {
       return activeCampaign;
     }
@@ -728,16 +882,7 @@ async function handleCampaignAuthSubmit(event) {
   setCampaignAuthStatus("Signing in...");
 
   try {
-    let email = identifier;
-
-    if (!identifier.includes("@")) {
-      const { data, error: resolveError } = await campaignSupabase.rpc("resolve_login_email_by_username", {
-        target_username: identifier
-      });
-
-      if (resolveError) throw resolveError;
-      email = data || "";
-    }
+    const email = await resolveCampaignLoginEmail(identifier);
 
     if (!email) {
       throw new Error("Invalid login credentials");
@@ -755,6 +900,69 @@ async function handleCampaignAuthSubmit(event) {
   } catch (error) {
     console.error("Campaign sign-in failed:", error);
     setCampaignAuthStatus(error.message || "Unable to sign in.");
+  } finally {
+    setCampaignAuthBusy(false);
+  }
+}
+
+async function handleCampaignPasswordRecoverySubmit(event) {
+  event.preventDefault();
+
+  const identifier = document.getElementById("campaign-recovery-identifier")?.value.trim() || "";
+  if (!identifier) return;
+
+  setCampaignAuthBusy(true);
+  setCampaignAuthStatus("Sending recovery email...");
+
+  try {
+    const email = await resolveCampaignLoginEmail(identifier);
+    if (!email) throw new Error("Enter the email or username for the account.");
+
+    const { error } = await campaignSupabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getCampaignPasswordRecoveryRedirectUrl()
+    });
+
+    if (error) throw error;
+
+    setCampaignAuthStatus("Recovery email sent. Check your inbox, then use the link to set a new password.");
+  } catch (error) {
+    console.error("Campaign password recovery failed:", error);
+    setCampaignAuthStatus(error.message || "Unable to send recovery email.");
+  } finally {
+    setCampaignAuthBusy(false);
+  }
+}
+
+async function handleCampaignPasswordResetSubmit(event) {
+  event.preventDefault();
+
+  const password = document.getElementById("campaign-reset-password")?.value || "";
+  const confirmPassword = document.getElementById("campaign-reset-confirm-password")?.value || "";
+
+  if (password.length < 6) {
+    setCampaignAuthStatus("Password must be at least 6 characters.");
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    setCampaignAuthStatus("Passwords do not match.");
+    return;
+  }
+
+  setCampaignAuthBusy(true);
+  setCampaignAuthStatus("Saving new password...");
+
+  try {
+    const { error } = await campaignSupabase.auth.updateUser({ password });
+    if (error) throw error;
+
+    pendingPasswordRecovery = false;
+    clearCampaignPasswordRecoveryUrl();
+    document.getElementById("campaign-auth-reset-form")?.reset();
+    await showCampaignPickerForCurrentUser();
+  } catch (error) {
+    console.error("Campaign password reset failed:", error);
+    setCampaignAuthStatus(error.message || "Unable to save the new password.");
   } finally {
     setCampaignAuthBusy(false);
   }
@@ -806,6 +1014,8 @@ async function handleCampaignSignOut() {
   await campaignSupabase.auth.signOut();
   clearActiveCampaignState();
   activeSession = null;
+  pendingPasswordRecovery = false;
+  clearCampaignPasswordRecoveryUrl();
   availableCampaigns = [];
   hideCampaignPickerGate();
   showCampaignAuthGate();
@@ -813,8 +1023,12 @@ async function handleCampaignSignOut() {
   setCampaignAuthMode("signin");
   const signinForm = document.getElementById("campaign-auth-signin-form");
   const signupForm = document.getElementById("campaign-auth-signup-form");
+  const recoveryForm = document.getElementById("campaign-auth-recovery-form");
+  const resetForm = document.getElementById("campaign-auth-reset-form");
   signinForm?.reset();
   signupForm?.reset();
+  recoveryForm?.reset();
+  resetForm?.reset();
   setCampaignAuthStatus("");
 }
 
@@ -1236,10 +1450,18 @@ document.addEventListener("DOMContentLoaded", () => {
     ?.addEventListener("submit", handleCampaignAuthSubmit);
   document.getElementById("campaign-auth-signup-form")
     ?.addEventListener("submit", handleCampaignSignupSubmit);
+  document.getElementById("campaign-auth-recovery-form")
+    ?.addEventListener("submit", handleCampaignPasswordRecoverySubmit);
+  document.getElementById("campaign-auth-reset-form")
+    ?.addEventListener("submit", handleCampaignPasswordResetSubmit);
   document.getElementById("campaign-auth-tab-signin")
     ?.addEventListener("click", () => setCampaignAuthMode("signin"));
   document.getElementById("campaign-auth-tab-signup")
     ?.addEventListener("click", () => setCampaignAuthMode("signup"));
+  document.getElementById("campaign-forgot-password-button")
+    ?.addEventListener("click", () => setCampaignAuthMode("recover"));
+  document.getElementById("campaign-recovery-back-button")
+    ?.addEventListener("click", () => setCampaignAuthMode("signin"));
   document.getElementById("campaign-settings-signout-button")
     ?.addEventListener("click", handleCampaignSignOut);
   document.getElementById("campaign-signout-button")
@@ -1310,14 +1532,37 @@ document.addEventListener("DOMContentLoaded", () => {
     ?.addEventListener("click", openCampaignDebugMenu);
   document.getElementById("campaign-debug-back-button")
     ?.addEventListener("click", returnToMainSettingsMenu);
-  document.getElementById("campaign-settings-guides-button")
-    ?.addEventListener("click", () => {
+  document.getElementById("campaign-settings-guides-checkbox")
+    ?.addEventListener("change", () => {
       toggleCodexDebugGuides?.();
+      syncCampaignDebugControls();
     });
-  document.getElementById("campaign-settings-audit-button")
-    ?.addEventListener("click", toggleCodexAuditLog);
+  document.getElementById("campaign-audit-record-help-button")
+    ?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+  document.getElementById("campaign-settings-audit-enabled-checkbox")
+    ?.addEventListener("change", handleCampaignAuditEnabledChange);
+  document.getElementById("campaign-settings-audit-view-checkbox")
+    ?.addEventListener("change", event => {
+      if (typeof setCodexAuditVisible === "function") {
+        setCodexAuditVisible(event.currentTarget.checked);
+      }
+      syncCampaignDebugControls();
+    });
   document.getElementById("campaign-picker-list")
     ?.addEventListener("click", handleCampaignPickerClick);
+});
+
+window.addEventListener("campaign-database-loaded", syncCampaignDebugControls);
+
+campaignSupabase.auth.onAuthStateChange((event, session) => {
+  if (session) activeSession = session;
+  if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && isCampaignPasswordRecoveryUrl())) {
+    pendingPasswordRecovery = true;
+    window.setTimeout(showCampaignPasswordResetGate, 0);
+  }
 });
 
 window.getActiveCampaign = () => activeCampaign;

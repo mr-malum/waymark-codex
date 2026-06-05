@@ -1090,7 +1090,10 @@ function openEditRegionEditor(regionId) {
   codexEditorState = { mode: "edit-region", recordType: "region", recordId: regionId };
   setEditorMode("edit-region");
   document.getElementById("codex-edit-region-form")?.reset();
-  syncRegionEditorMode({ regionType: region.Region_ID === "REG-0000" ? "geographic" : region.Region_Type || "geographic" });
+  syncRegionEditorMode({
+    name: region.Region_Name || "",
+    regionType: region.Region_ID === "REG-0000" ? "geographic" : region.Region_Type || "geographic"
+  });
   const typeSelect = document.getElementById("codex-edit-region-type");
   if (typeSelect) {
     typeSelect.value = region.Region_ID === "REG-0000" ? "geographic" : region.Region_Type || "geographic";
@@ -1134,7 +1137,7 @@ function renderMapManagerList() {
       <label class="codex-map-manager-file">
         <span>Map File *</span>
         <input id="codex-map-add-file" type="file" accept="image/png,image/jpeg,image/webp">
-        <small>PNG, JPG, or WebP. Max 10 MB.</small>
+        <small>PNG, JPG, or WebP. Larger files are compressed to fit the 5 MB upload cap.</small>
       </label>
       <div class="codex-map-manager-actions">
         <button type="button" data-add-map="true">Add Map</button>
@@ -1170,7 +1173,7 @@ function renderMapManagerList() {
         <label class="codex-map-manager-file">
           <span>Replacement File</span>
           <input id="${escapeHtml(inputId)}" type="file" accept="image/png,image/jpeg,image/webp" data-map-file-id="${escapeHtml(mapId)}">
-          <small>PNG, JPG, or WebP. Max 10 MB.</small>
+          <small>PNG, JPG, or WebP. Larger files are compressed to fit the 5 MB upload cap.</small>
         </label>
         <div class="codex-map-manager-actions">
           <button type="button" data-save-map-id="${escapeHtml(mapId)}">Save Name</button>
@@ -1450,12 +1453,16 @@ function getHexUuidByLegacyId(hexId) {
 
 const CODEX_IMAGE_UPLOAD_BUCKET = "campaign-assets";
 const CODEX_IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const CODEX_IMAGE_SOURCE_MAX_BYTES = 30 * 1024 * 1024;
+const CODEX_IMAGE_MAX_DIMENSION = 1800;
 const CODEX_IMAGE_UPLOAD_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/webp"
 ]);
-const CODEX_MAP_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+const CODEX_MAP_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const CODEX_MAP_SOURCE_MAX_BYTES = 60 * 1024 * 1024;
+const CODEX_MAP_MAX_DIMENSION = 4096;
 const CODEX_MAP_UPLOAD_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -1466,20 +1473,158 @@ function getEditorImageFile(inputId) {
   return document.getElementById(inputId)?.files?.[0] || null;
 }
 
-function validateCodexImageUpload(file) {
+function validateCodexImageUpload(file, options = {}) {
   if (!file) return;
 
   if (!CODEX_IMAGE_UPLOAD_TYPES.has(file.type)) {
     throw new Error("Image must be a PNG, JPG, or WebP file.");
   }
 
-  if (file.size > CODEX_IMAGE_UPLOAD_MAX_BYTES) {
+  if (file.size > CODEX_IMAGE_SOURCE_MAX_BYTES) {
+    throw new Error("Image is too large to compress. Choose an image under 30 MB.");
+  }
+
+  if (options.final === true && file.size > CODEX_IMAGE_UPLOAD_MAX_BYTES) {
     throw new Error("Image must be 5 MB or smaller.");
   }
 }
 
 function getSafeUploadFileName(file) {
   return "image";
+}
+
+function getCompressedUploadFileName(file) {
+  const fallback = "image.webp";
+  const name = file?.name || fallback;
+  return name.includes(".")
+    ? name.replace(/\.[^.]+$/, ".webp")
+    : `${name}.webp`;
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise(resolve => {
+    canvas.toBlob(blob => resolve(blob), type, quality);
+  });
+}
+
+async function loadCodexUploadBitmap(file) {
+  if (typeof createImageBitmap === "function") {
+    return createImageBitmap(file);
+  }
+
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Unable to read this image file."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+async function compressCodexUploadImage(file, options) {
+  const {
+    maxBytes,
+    maxDimension,
+    label
+  } = options;
+
+  if (file.size <= maxBytes) return file;
+
+  const bitmap = await loadCodexUploadBitmap(file);
+  const width = bitmap.width || bitmap.naturalWidth;
+  const height = bitmap.height || bitmap.naturalHeight;
+  const largestSide = Math.max(width, height);
+
+  if (!width || !height || !largestSide) {
+    throw new Error(`Unable to read this ${label} image.`);
+  }
+
+  if (file.type === "image/png" && largestSide <= maxDimension) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    context.clearRect(0, 0, width, height);
+    context.drawImage(bitmap, 0, 0, width, height);
+    const pngBlob = await canvasToBlob(canvas, "image/png");
+    if (pngBlob?.size <= maxBytes) {
+      bitmap.close?.();
+      return new File([pngBlob], file.name || "image.png", {
+        type: "image/png",
+        lastModified: Date.now()
+      });
+    }
+  }
+
+  const dimensionCaps = [
+    maxDimension,
+    Math.round(maxDimension * 0.88),
+    Math.round(maxDimension * 0.76),
+    Math.round(maxDimension * 0.64),
+    Math.round(maxDimension * 0.52)
+  ];
+  const qualities = [0.95, 0.91, 0.87, 0.82, 0.76, 0.7];
+  let smallestBlob = null;
+
+  for (const dimensionCap of dimensionCaps) {
+    const scale = Math.min(1, dimensionCap / largestSide);
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const context = canvas.getContext("2d");
+    context.clearRect(0, 0, targetWidth, targetHeight);
+    context.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+
+    for (const quality of qualities) {
+      const blob = await canvasToBlob(canvas, "image/webp", quality);
+      if (!blob) continue;
+      if (!smallestBlob || blob.size < smallestBlob.size) smallestBlob = blob;
+      if (blob.size <= maxBytes) {
+        bitmap.close?.();
+        return new File([blob], getCompressedUploadFileName(file), {
+          type: "image/webp",
+          lastModified: Date.now()
+        });
+      }
+    }
+  }
+
+  bitmap.close?.();
+
+  if (smallestBlob && smallestBlob.size <= maxBytes) {
+    return new File([smallestBlob], getCompressedUploadFileName(file), {
+      type: "image/webp",
+      lastModified: Date.now()
+    });
+  }
+
+  throw new Error(`This ${label} could not be compressed under 5 MB while preserving usable quality.`);
+}
+
+async function prepareCodexRecordImageUpload(file) {
+  validateCodexImageUpload(file);
+  return compressCodexUploadImage(file, {
+    maxBytes: CODEX_IMAGE_UPLOAD_MAX_BYTES,
+    maxDimension: CODEX_IMAGE_MAX_DIMENSION,
+    label: "image"
+  });
+}
+
+async function prepareCodexMapUpload(file) {
+  validateCodexMapUpload(file);
+  return compressCodexUploadImage(file, {
+    maxBytes: CODEX_MAP_UPLOAD_MAX_BYTES,
+    maxDimension: CODEX_MAP_MAX_DIMENSION,
+    label: "map"
+  });
 }
 
 function getImageUploadRecordFolder(recordType) {
@@ -1495,14 +1640,15 @@ function getImageUploadRecordFolder(recordType) {
 async function uploadAndAttachRecordImage({ campaign, recordType, recordUuid, legacyId, file }) {
   if (!file) return "";
 
-  validateCodexImageUpload(file);
+  const uploadFile = await prepareCodexRecordImageUpload(file);
+  validateCodexImageUpload(uploadFile, { final: true });
 
   if (!campaign?.id || !recordType || !recordUuid || !legacyId) {
     throw new Error("Unable to identify the record for image upload.");
   }
 
   const folder = getImageUploadRecordFolder(recordType);
-  const safeFileName = getSafeUploadFileName(file);
+  const safeFileName = getSafeUploadFileName(uploadFile);
   const storagePath = [
     campaign.id,
     "records",
@@ -1514,8 +1660,8 @@ async function uploadAndAttachRecordImage({ campaign, recordType, recordUuid, le
   const { error: uploadError } = await campaignSupabase
     .storage
     .from(CODEX_IMAGE_UPLOAD_BUCKET)
-    .upload(storagePath, file, {
-      contentType: file.type,
+    .upload(storagePath, uploadFile, {
+      contentType: uploadFile.type,
       upsert: true
     });
 
@@ -1527,7 +1673,7 @@ async function uploadAndAttachRecordImage({ campaign, recordType, recordUuid, le
     target_record_id: recordUuid,
     asset_bucket: CODEX_IMAGE_UPLOAD_BUCKET,
     asset_path: storagePath,
-    asset_mime_type: file.type
+    asset_mime_type: uploadFile.type
   });
 
   if (attachError) throw attachError;
@@ -1542,7 +1688,7 @@ async function uploadAndAttachRecordImage({ campaign, recordType, recordUuid, le
   return signedData?.signedUrl || "";
 }
 
-function validateCodexMapUpload(file) {
+function validateCodexMapUpload(file, options = {}) {
   if (!file) {
     throw new Error("Choose a map file first.");
   }
@@ -1551,13 +1697,18 @@ function validateCodexMapUpload(file) {
     throw new Error("Map file must be PNG, JPG, or WebP.");
   }
 
-  if (file.size > CODEX_MAP_UPLOAD_MAX_BYTES) {
-    throw new Error("Map file must be 10 MB or smaller.");
+  if (file.size > CODEX_MAP_SOURCE_MAX_BYTES) {
+    throw new Error("Map file is too large to compress. Choose an image under 60 MB.");
+  }
+
+  if (options.final === true && file.size > CODEX_MAP_UPLOAD_MAX_BYTES) {
+    throw new Error("Map file must be 5 MB or smaller.");
   }
 }
 
 async function uploadAndAttachMapFile({ campaign, map, file }) {
-  validateCodexMapUpload(file);
+  const uploadFile = await prepareCodexMapUpload(file);
+  validateCodexMapUpload(uploadFile, { final: true });
 
   if (!campaign?.id || !map?.__uuid || !map?.Map_ID) {
     throw new Error("Unable to identify this map. Refresh the app and try again.");
@@ -1568,8 +1719,8 @@ async function uploadAndAttachMapFile({ campaign, map, file }) {
   const { error: uploadError } = await campaignSupabase
     .storage
     .from(CODEX_IMAGE_UPLOAD_BUCKET)
-    .upload(storagePath, file, {
-      contentType: file.type,
+    .upload(storagePath, uploadFile, {
+      contentType: uploadFile.type,
       upsert: true
     });
 
@@ -1581,7 +1732,7 @@ async function uploadAndAttachMapFile({ campaign, map, file }) {
     target_record_id: map.__uuid,
     asset_bucket: CODEX_IMAGE_UPLOAD_BUCKET,
     asset_path: storagePath,
-    asset_mime_type: file.type
+    asset_mime_type: uploadFile.type
   });
 
   if (attachError) throw attachError;
@@ -1595,8 +1746,8 @@ async function uploadAndAttachMapFile({ campaign, map, file }) {
 
   const signedUrl = signedData?.signedUrl || "";
   map.Map_File_URL = signedUrl;
-  map.Map_Mime_Type = file.type;
-  map.Image = file.type.startsWith("image/") ? signedUrl : "";
+  map.Map_Mime_Type = uploadFile.type;
+  map.Image = uploadFile.type.startsWith("image/") ? signedUrl : "";
 
   return signedUrl;
 }
@@ -1884,7 +2035,7 @@ async function addManagedMap() {
     throw new Error("Map name is required.");
   }
 
-  validateCodexMapUpload(file);
+  const uploadFile = await prepareCodexMapUpload(file);
 
   const { data, error } = await campaignSupabase.rpc("create_campaign_map", {
     target_campaign_id: campaign.id,
@@ -1898,7 +2049,7 @@ async function addManagedMap() {
 
   const createdMap = adaptCreatedMapRow(data, ownerType, ownerId);
   addMapToLocalDb(createdMap);
-  await uploadAndAttachMapFile({ campaign, map: createdMap, file });
+  await uploadAndAttachMapFile({ campaign, map: createdMap, file: uploadFile });
 }
 
 async function saveManagedMapName(map) {
@@ -2942,7 +3093,7 @@ async function handleEditRegionSubmit(event) {
     : document.getElementById("codex-edit-region-border-color")?.value || "#ffd84d";
   const imageFile = getEditorImageFile("codex-edit-region-image");
 
-  if (isCreate && !name) {
+  if (!name) {
     setCodexEditorStatus("Region name is required.");
     return;
   }
@@ -2987,6 +3138,7 @@ async function handleEditRegionSubmit(event) {
     const { data, error } = await campaignSupabase.rpc("update_region_record", {
       target_campaign_id: campaign.id,
       target_region_id: region.__uuid,
+      region_name: name,
       region_lore: lore || null,
       region_border_color: borderColor,
       new_region_type: regionType
@@ -2998,6 +3150,7 @@ async function handleEditRegionSubmit(event) {
     const previousRegionType = region.Region_Type || "geographic";
     const updatedRegionType = updated?.region_type || regionType;
     updateRegionInLocalDb(region, {
+      Region_Name: updated?.name || name,
       Lore: updated?.lore || "",
       Region_Type: updatedRegionType,
       Border_Color: region.Region_ID === "REG-0000" ? "none" : updated?.border_color || borderColor
@@ -3320,9 +3473,9 @@ function syncRegionEditorMode(options = {}) {
   const imageRow = document.getElementById("codex-edit-region-image-row");
   const submitButton = document.getElementById("codex-region-editor-submit");
 
-  if (nameRow) nameRow.hidden = !isCreate;
+  if (nameRow) nameRow.hidden = false;
   if (nameInput) {
-    nameInput.required = isCreate;
+    nameInput.required = true;
     nameInput.value = options.name || "";
   }
   if (typeSelect) {

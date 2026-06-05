@@ -64,6 +64,15 @@ drop function if exists public.update_region_record(
   text
 );
 
+drop function if exists public.update_region_record(
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text
+);
+
 create or replace function public.create_region_with_next_ref_code(
   target_campaign_id uuid,
   region_name text,
@@ -140,6 +149,7 @@ $$;
 create or replace function public.update_region_record(
   target_campaign_id uuid,
   target_region_id uuid,
+  region_name text default null,
   region_lore text default null,
   region_border_color text default null,
   new_region_type text default null
@@ -175,6 +185,10 @@ begin
     raise exception 'Invalid region type.';
   end if;
 
+  if nullif(trim(region_name), '') is null then
+    raise exception 'Region name is required.';
+  end if;
+
   select region_type into previous_region_type
   from public.regions
   where campaign_id = target_campaign_id
@@ -186,7 +200,8 @@ begin
   end if;
 
   update public.regions
-  set lore = nullif(trim(region_lore), ''),
+  set name = trim(region_name),
+      lore = nullif(trim(region_lore), ''),
       region_type = case
         when ref_code = 'REG-0000' then 'geographic'
         else normalized_region_type
@@ -242,6 +257,7 @@ $$;
 grant execute on function public.update_region_record(
   uuid,
   uuid,
+  text,
   text,
   text,
   text

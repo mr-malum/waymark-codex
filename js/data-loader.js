@@ -154,7 +154,7 @@ async function fetchCampaignRows(campaignId) {
 }
 
 async function fetchCampaignAuditRows(campaignId) {
-  if (getActiveCampaign?.()?.currentUserRole !== "owner") return [];
+  if (!["owner", "superuser"].includes(getActiveCampaign?.()?.currentUserRole || "")) return [];
 
   const { data, error } = await campaignSupabase.rpc("get_campaign_audit_log", {
     target_campaign_id: campaignId,
@@ -167,6 +167,38 @@ async function fetchCampaignAuditRows(campaignId) {
   }
 
   return data || [];
+}
+
+async function fetchCampaignAuditSettings(campaignId) {
+  if (!["owner", "superuser"].includes(getActiveCampaign?.()?.currentUserRole || "")) {
+    return {
+      audit_enabled: true,
+      audit_hexes_enabled: false,
+      max_entries: 5000,
+      retention_days: 90
+    };
+  }
+
+  const { data, error } = await campaignSupabase.rpc("get_campaign_audit_settings", {
+    target_campaign_id: campaignId
+  });
+
+  if (error) {
+    console.warn("Campaign audit settings could not be loaded:", error);
+    return {
+      audit_enabled: true,
+      audit_hexes_enabled: false,
+      max_entries: 5000,
+      retention_days: 90
+    };
+  }
+
+  return (Array.isArray(data) ? data[0] : data) || {
+    audit_enabled: true,
+    audit_hexes_enabled: false,
+    max_entries: 5000,
+    retention_days: 90
+  };
 }
 
 async function fetchCampaignAssets(campaignId) {
@@ -827,7 +859,12 @@ async function loadDatabase() {
   ]);
 
   const appData = adaptCampaignRows(rows, assetsById);
-  appData.auditLog = await fetchCampaignAuditRows(campaign.id);
+  const [auditLog, auditSettings] = await Promise.all([
+    fetchCampaignAuditRows(campaign.id),
+    fetchCampaignAuditSettings(campaign.id)
+  ]);
+  appData.auditLog = auditLog;
+  appData.auditSettings = auditSettings;
 
   const dmJournalBySourceKey = hydrateCentralJournal(appData);
 
@@ -843,6 +880,7 @@ async function loadDatabase() {
     dmJournalById: indexById(appData.dmJournal, "Entry_ID"),
     generatedMapOverlaysById: indexById(appData.generatedMapOverlays, "__uuid"),
     auditLog: appData.auditLog,
+    auditSettings: appData.auditSettings,
 
     poisByHexId: groupBy(appData.pois, "Hex_ID_Ref"),
     npcsByHomeId: groupBy(appData.npcs, "Home_ID_Ref"),

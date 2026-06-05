@@ -65,8 +65,35 @@
   <div id="campaign-debug-menu" class="campaign-settings-menu hidden" role="dialog" aria-modal="true" aria-labelledby="campaign-debug-title">
     <h2 id="campaign-debug-title">Debug</h2>
     <div class="campaign-settings-actions">
-      <button id="campaign-settings-guides-button" type="button" aria-pressed="false">Guides</button>
-      <button id="campaign-settings-audit-button" type="button" aria-pressed="false">Audit</button>
+      <label class="campaign-debug-toggle-row">
+        <input id="campaign-settings-guides-checkbox" type="checkbox">
+        <span>
+          <strong>Guides</strong>
+          <small>Show Codex layout guide boxes for tuning the book UI.</small>
+        </span>
+      </label>
+      <label class="campaign-debug-toggle-row">
+        <input id="campaign-settings-audit-enabled-checkbox" type="checkbox">
+        <span>
+          <strong>
+            Record audit log
+            <span class="campaign-debug-help-wrap">
+              <button id="campaign-audit-record-help-button" class="campaign-debug-help-button" type="button" aria-describedby="campaign-audit-record-help">?</button>
+              <span id="campaign-audit-record-help" class="campaign-debug-help-tooltip" role="tooltip">
+                Audit logs are capped at 5,000 rows per campaign and rows older than 90 days are pruned. Hex/map-write audit logging stays disabled by default to avoid generation spam.
+              </span>
+            </span>
+          </strong>
+          <small>Enable database audit logging for this campaign.</small>
+        </span>
+      </label>
+      <label class="campaign-debug-toggle-row">
+        <input id="campaign-settings-audit-view-checkbox" type="checkbox">
+        <span>
+          <strong>Show audit log</strong>
+          <small>Show audit panels in the Codex on this device.</small>
+        </span>
+      </label>
     </div>
     <button id="campaign-debug-back-button" type="button">Back</button>
   </div>
@@ -262,6 +289,7 @@
       </label>
 
       <button id="campaign-auth-submit" type="submit">Open Campaigns</button>
+      <button id="campaign-forgot-password-button" class="campaign-auth-link-button" type="button">Forgot password?</button>
     </form>
 
     <form id="campaign-auth-signup-form" hidden>
@@ -281,6 +309,30 @@
       </label>
 
       <button id="campaign-signup-submit" type="submit">Create Account</button>
+    </form>
+
+    <form id="campaign-auth-recovery-form" hidden>
+      <label>
+        <span>Email or Username</span>
+        <input id="campaign-recovery-identifier" type="text" autocomplete="username" required>
+      </label>
+
+      <button id="campaign-recovery-submit" type="submit">Send Recovery Email</button>
+      <button id="campaign-recovery-back-button" class="campaign-auth-link-button" type="button">Back to Sign In</button>
+    </form>
+
+    <form id="campaign-auth-reset-form" hidden>
+      <label>
+        <span>New Password</span>
+        <input id="campaign-reset-password" type="password" autocomplete="new-password" required minlength="6">
+      </label>
+
+      <label>
+        <span>Confirm Password</span>
+        <input id="campaign-reset-confirm-password" type="password" autocomplete="new-password" required minlength="6">
+      </label>
+
+      <button id="campaign-reset-submit" type="submit">Save New Password</button>
     </form>
 
     <p id="campaign-auth-status" class="campaign-auth-status" role="status"></p>
@@ -861,6 +913,19 @@
               <span>Refresh Existing Features</span>
             </label>
           </div>
+          <div class="map-generation-subsection" data-generation-section="regions">
+            <div class="map-draw-section-title map-draw-section-title-with-help">
+              <span>Region Pass</span>
+              <span class="map-editor-help-wrap">
+                <button class="map-editor-help-button" type="button" aria-describedby="map-generation-region-help">?</button>
+                <span id="map-generation-region-help" class="map-editor-help-tooltip" role="tooltip">
+                  <span>Generate geographic Codex regions from the current terrain and paint unclaimed land hexes into contiguous region blobs.</span>
+                  <span>This saves directly to the live map and can be undone from the Surveyor undo stack.</span>
+                </span>
+              </span>
+            </div>
+            <p class="map-edit-empty-note">First pass: creates biome-aware geographic regions only. Political regions will come later from settlements, population, and resources.</p>
+          </div>
           <div class="map-generation-subsection" data-generation-section="overlays">
             <div class="map-draw-section-title map-draw-section-title-with-help">
               <span>Overlay Pass</span>
@@ -910,6 +975,9 @@
               <button id="map-generation-run-features" class="map-draw-secondary-button" type="button">Preview Features</button>
               <button id="map-clear-features" class="map-draw-clear" type="button">Purge All Features</button>
               <button data-generation-discard-section="features" type="button">Discard</button>
+            </div>
+            <div class="map-draw-tool-row map-generation-actions" data-generation-action-panel="regions" role="group" aria-label="Region generation actions">
+              <button id="map-generation-run-geographic-regions" class="map-draw-secondary-button" type="button">Generate Geographic Regions</button>
             </div>
             <div class="map-draw-tool-row map-generation-actions" data-generation-action-panel="overlays" role="group" aria-label="Overlay generation actions">
               <button id="map-generation-run-roads" class="map-draw-secondary-button" type="button">Generate Roads</button>
@@ -1107,7 +1175,7 @@
         <label>
           <span>Add/Replace Image</span>
           <input id="codex-add-npc-image" type="file" accept="image/png,image/jpeg,image/webp">
-          <small>Optional. PNG, JPG, or WebP. Max 5 MB.</small>
+          <small>Optional. PNG, JPG, or WebP. Larger files are compressed to fit the 5 MB upload cap.</small>
         </label>
       </div>
 
@@ -1232,7 +1300,7 @@
         <label>
           <span>Add/Replace Image</span>
           <input id="codex-add-poi-image" type="file" accept="image/png,image/jpeg,image/webp">
-          <small>Optional. PNG, JPG, or WebP. Max 5 MB.</small>
+          <small>Optional. PNG, JPG, or WebP. Larger files are compressed to fit the 5 MB upload cap.</small>
         </label>
       </div>
 
@@ -1317,7 +1385,7 @@
         <label>
           <span>Add/Replace Image</span>
           <input id="codex-edit-poi-group-image" type="file" accept="image/png,image/jpeg,image/webp">
-          <small>Optional replacement image. PNG, JPG, or WebP. Max 5 MB.</small>
+          <small>Optional replacement image. PNG, JPG, or WebP. Larger files are compressed to fit the 5 MB upload cap.</small>
         </label>
 
         <section class="codex-editor-child-manager" aria-label="Child Areas">
@@ -1396,7 +1464,7 @@
         <label id="codex-edit-region-image-row">
           <span>Add/Replace Image</span>
           <input id="codex-edit-region-image" type="file" accept="image/png,image/jpeg,image/webp">
-          <small>Optional replacement image. PNG, JPG, or WebP. Max 5 MB.</small>
+          <small>Optional replacement image. PNG, JPG, or WebP. Larger files are compressed to fit the 5 MB upload cap.</small>
         </label>
       </div>
 

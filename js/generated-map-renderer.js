@@ -517,7 +517,7 @@
       surveyorPoiSubview: "generate",
       surveyorMode: "manual",
       surveyorManualSection: "overlay",
-      surveyorGenerationSection: "overlay",
+      surveyorGenerationSection: "pois",
       cartographerMode: "manual",
       cartographerSection: "terrain",
       tool: "road",
@@ -991,6 +991,7 @@
     const generationRunFeatures = document.getElementById("map-generation-run-features");
     const generationRunRoads = document.getElementById("map-generation-run-roads");
     const generationRunRivers = document.getElementById("map-generation-run-rivers");
+    const generationRunRegions = document.getElementById("map-generation-run-geographic-regions");
     const generationRunPois = document.getElementById("map-generation-run-pois");
     const poiGenerationGlobalAmount = document.getElementById("map-generation-poi-global-amount");
     const clearAllOverlaysButton = document.getElementById("map-clear-all-overlays");
@@ -1136,7 +1137,7 @@
       event.stopPropagation();
       if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
         if (getSurveyorMode() === "generation") {
-          setSurveyorGenerationSection("overlay");
+          setSurveyorGenerationSection("pois");
         } else {
           setSurveyorManualSection("overlay");
         }
@@ -1150,7 +1151,7 @@
       event.stopPropagation();
       if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
         if (getSurveyorMode() === "generation") {
-          setSurveyorGenerationSection("pois");
+          setSurveyorGenerationSection("regions");
         } else {
           setSurveyorManualSection("regions");
         }
@@ -1162,7 +1163,13 @@
     cartographerSubsectionPurgeButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      if ((renderer.drawing.toolsMode || "chooser") === "surveyor") return;
+      if ((renderer.drawing.toolsMode || "chooser") === "surveyor") {
+        if (getSurveyorMode() === "generation") {
+          setSurveyorGenerationSection("overlay");
+          updateMapEditSurface();
+        }
+        return;
+      }
     });
 
     panel.querySelectorAll("[data-terrain-mobile-tab]").forEach(tabButton => {
@@ -1440,6 +1447,12 @@
       event.preventDefault();
       event.stopPropagation();
       runGenerationRiverPass();
+    });
+
+    generationRunRegions?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      runGenerationGeographicRegionPass();
     });
 
     generationRunPois?.addEventListener("click", event => {
@@ -1807,10 +1820,13 @@
   }
 
   function getSurveyorGenerationSection() {
-    if (["overlay", "pois"].includes(renderer.drawing.surveyorGenerationSection)) {
+    if (["overlay", "pois", "regions"].includes(renderer.drawing.surveyorGenerationSection)) {
       return renderer.drawing.surveyorGenerationSection;
     }
-    return renderer.drawing.surveyorSection === "pois" ? "pois" : "overlay";
+    if (renderer.drawing.surveyorSection === "pois") return "pois";
+    if (renderer.drawing.generationSection === "regions") return "regions";
+    if (renderer.drawing.generationSection === "overlays") return "overlay";
+    return "pois";
   }
 
   function syncSurveyorSectionFromMode() {
@@ -1839,8 +1855,9 @@
     renderer.drawing.tool = "";
     resetDrawingState();
     setSurveyorMode(mode);
-    if (getSurveyorMode() === "generation" && getSurveyorGenerationSection() === "overlay") {
-      renderer.drawing.generationSection = "overlays";
+    if (getSurveyorMode() === "generation") {
+      const generationSection = getSurveyorGenerationSection();
+      renderer.drawing.generationSection = generationSection === "overlay" ? "overlays" : generationSection;
     }
     setMapToolsMode("surveyor");
   }
@@ -1858,10 +1875,10 @@
   function setSurveyorGenerationSection(section) {
     renderer.drawing.tool = "";
     resetDrawingState();
-    renderer.drawing.surveyorGenerationSection = section === "pois" ? "pois" : "overlay";
-    if (renderer.drawing.surveyorGenerationSection === "overlay") {
-      renderer.drawing.generationSection = "overlays";
-    }
+    renderer.drawing.surveyorGenerationSection = ["pois", "regions", "overlay"].includes(section) ? section : "pois";
+    renderer.drawing.generationSection = renderer.drawing.surveyorGenerationSection === "overlay"
+      ? "overlays"
+      : renderer.drawing.surveyorGenerationSection;
     if (getSurveyorMode() === "generation") {
       syncSurveyorSectionFromMode();
     }
@@ -1924,7 +1941,7 @@
     const paintButton = document.getElementById("map-cartographer-subsection-paint");
     const generateButton = document.getElementById("map-cartographer-subsection-generate");
     const purgeButton = document.getElementById("map-cartographer-subsection-purge");
-    popout.classList.toggle("map-generation-popout-three", false);
+    popout.classList.toggle("map-generation-popout-three", mode === "surveyor" && surveyorMode === "generation");
     if (title) {
       if (mode === "cartographer") {
         title.textContent = cartographerMode === "generation" ? "Generation" : "Manual";
@@ -1934,25 +1951,26 @@
     }
     if (paintButton) {
       paintButton.hidden = false;
-      paintButton.textContent = mode === "cartographer" ? "Terrain" : "Overlays";
+      paintButton.textContent = mode === "cartographer" ? "Terrain" : surveyorMode === "generation" ? "POIs" : "Overlays";
       paintButton.classList.toggle("active",
         mode === "cartographer"
           ? section === "terrain"
-          : section === "overlay"
+          : surveyorMode === "generation" ? section === "pois" : section === "overlay"
       );
     }
     if (generateButton) {
       generateButton.hidden = false;
-      generateButton.textContent = mode === "cartographer" ? "Features" : surveyorMode === "generation" ? "POIs" : "Regions";
+      generateButton.textContent = mode === "cartographer" ? "Features" : "Regions";
       generateButton.classList.toggle("active",
         mode === "cartographer"
           ? section === "features"
-          : section !== "overlay"
+          : section === "regions"
       );
     }
     if (purgeButton) {
-      purgeButton.hidden = true;
-      purgeButton.classList.remove("active");
+      purgeButton.hidden = !(mode === "surveyor" && surveyorMode === "generation");
+      purgeButton.textContent = "Overlays";
+      purgeButton.classList.toggle("active", mode === "surveyor" && surveyorMode === "generation" && section === "overlay");
     }
   }
 
@@ -1991,7 +2009,7 @@
     if (applyRow) applyRow.hidden = mode !== "cartographer";
     if (visibleSection === "generation") {
       const generationSection = mode === "surveyor"
-        ? "overlays"
+        ? (getSurveyorGenerationSection() === "overlay" ? "overlays" : getSurveyorGenerationSection())
         : getCartographerSection();
       renderer.drawing.generationSection = generationSection;
       syncGenerationSectionUi(generationSection);
@@ -2104,6 +2122,10 @@
         renderer.drawing.surveyorGenerationSection = "overlay";
         setSurveyorMode("generation");
         setMapToolsMode("surveyor");
+      } else if (generationSection === "regions") {
+        renderer.drawing.surveyorGenerationSection = "regions";
+        setSurveyorMode("generation");
+        setMapToolsMode("surveyor");
       } else {
         renderer.drawing.cartographerSection = ["terrain", "features"].includes(generationSection) ? generationSection : "terrain";
         setCartographerMode("generation");
@@ -2117,9 +2139,9 @@
   }
 
   function setGenerationSection(section) {
-    const normalized = ["terrain", "features", "overlays"].includes(section) ? section : "terrain";
+    const normalized = ["terrain", "features", "regions", "overlays"].includes(section) ? section : "terrain";
     renderer.drawing.generationSection = normalized;
-    if (normalized !== "overlays") {
+    if (["terrain", "features"].includes(normalized)) {
       renderer.drawing.cartographerSection = normalized;
     }
     syncGenerationSectionUi(normalized);
@@ -2410,7 +2432,7 @@
     renderer.drawing.surveyorPoiSubview = "generate";
     renderer.drawing.surveyorMode = "manual";
     renderer.drawing.surveyorManualSection = "overlay";
-    renderer.drawing.surveyorGenerationSection = "overlay";
+    renderer.drawing.surveyorGenerationSection = "pois";
     renderer.drawing.cartographerMode = "manual";
     renderer.drawing.cartographerSection = "terrain";
     renderer.drawing.generationSeed = "";
@@ -2795,6 +2817,7 @@
       const { data, error } = await campaignSupabase.rpc("update_region_record", {
         target_campaign_id: campaign.id,
         target_region_id: regionUuid,
+        region_name: region.Region_Name || region.Region_ID || "Unnamed Region",
         region_lore: region.Lore || null,
         region_border_color: nextColor,
         new_region_type: region.Region_Type || normalizedType
@@ -2803,6 +2826,7 @@
       if (error) throw error;
 
       const updated = Array.isArray(data) ? data[0] : data;
+      region.Region_Name = updated?.name || region.Region_Name || "";
       region.Border_Color = updated?.border_color || nextColor;
       region.Region_Type = updated?.region_type || region.Region_Type || normalizedType;
       region.Lore = updated?.lore || region.Lore || "";
@@ -3248,6 +3272,7 @@
     const generationRunFeatures = document.getElementById("map-generation-run-features");
     const generationRunRoads = document.getElementById("map-generation-run-roads");
     const generationRunRivers = document.getElementById("map-generation-run-rivers");
+    const generationRunRegions = document.getElementById("map-generation-run-geographic-regions");
     const generationRunPois = document.getElementById("map-generation-run-pois");
     const poiGenerationGlobalAmount = document.getElementById("map-generation-poi-global-amount");
     const poiGenerationGlobalAmountValue = document.getElementById("map-generation-poi-global-amount-value");
@@ -3292,6 +3317,7 @@
     }
     if (generationRunRoads) generationRunRoads.disabled = Boolean(renderer.drawing.saving);
     if (generationRunRivers) generationRunRivers.disabled = Boolean(renderer.drawing.saving);
+    if (generationRunRegions) generationRunRegions.disabled = Boolean(renderer.drawing.saving);
     if (generationRunPois) generationRunPois.disabled = Boolean(renderer.drawing.saving);
     if (poiGenerationGlobalAmount) {
       poiGenerationGlobalAmount.value = String(globalPoiAmount);
@@ -3558,6 +3584,7 @@
         type: "batch",
         previewSection: action.previewSection || "",
         previewOverlayType: action.previewOverlayType || "",
+        generatedRegions: (action.generatedRegions || []).map(cloneRegionHistoryRecord),
         actions: (action.actions || []).map(cloneMapEditAction).filter(Boolean)
       };
     }
@@ -3567,6 +3594,14 @@
         previewSection: action.previewSection || "",
         previewOverlayType: action.previewOverlayType || "",
         overlays: (action.overlays || []).map(cloneOverlayRecord)
+      };
+    }
+    if (action.type === "nuke-regions") {
+      return {
+        type: "nuke-regions",
+        regionType: action.regionType || "geographic",
+        generatedRegions: (action.generatedRegions || []).map(cloneRegionHistoryRecord),
+        actions: (action.actions || []).map(cloneMapEditAction).filter(Boolean)
       };
     }
     return JSON.parse(JSON.stringify({
@@ -3950,6 +3985,10 @@
       }
       if (renderer.drawing.generationSection === "features") {
         hint.textContent = "Run a shared-rules feature pass to repopulate compatible terrain features without changing base terrain or elevation.";
+        return;
+      }
+      if (renderer.drawing.generationSection === "regions") {
+        hint.textContent = "Generate geographic Codex regions from current terrain and paint unclaimed land hexes. Ctrl+Z undoes during this session.";
         return;
       }
       hint.textContent = "Preview a full terrain draft locally before applying it.";
@@ -9391,6 +9430,633 @@
     }
   }
 
+  async function runGenerationGeographicRegionPass() {
+    const campaign = getActiveCampaign?.();
+    if (!campaign || renderer.drawing.saving) return false;
+
+    const drafts = buildGeneratedGeographicRegionDrafts(campaign.id);
+    if (!drafts.length) {
+      window.alert?.("No region-worthy unclaimed biome pockets were found for geographic region generation.");
+      return false;
+    }
+
+    const confirmed = await showMapConfirm(
+      `Generate ${drafts.length} geographic region${drafts.length === 1 ? "" : "s"} and paint unclaimed land hexes now? This saves directly to the live map and can be undone during this session.`,
+      {
+        title: "Generate Regions?",
+        confirmLabel: "Generate Regions"
+      }
+    );
+    if (!confirmed) return false;
+
+    renderer.drawing.saving = true;
+    setLoading(true);
+    refreshEditorActionControls();
+
+    try {
+      const createdRegions = [];
+      for (const draft of drafts) {
+        const region = await createGeneratedGeographicRegion(campaign.id, draft);
+        if (region?.Region_ID) {
+          draft.regionId = region.Region_ID;
+          createdRegions.push(region);
+        }
+      }
+
+      const actions = drafts
+        .filter(draft => draft.regionId)
+        .flatMap(draft => draft.hexIds.map(hexId => {
+          const before = getRegionSnapshot(hexId);
+          if (!before) return null;
+          const after = {
+            ...before,
+            geographicRegionId: draft.regionId
+          };
+          return regionSnapshotsEqual(before, after)
+            ? null
+            : {
+              type: "region",
+              hexId,
+              regionType: "geographic",
+              before,
+              after
+            };
+        }))
+        .filter(Boolean);
+
+      if (!actions.length) {
+        await deleteGeneratedRegionRecords(campaign.id, createdRegions.map(region => buildGeneratedRegionHistoryRecord(region)));
+        window.alert?.("Generated region records, but no unclaimed hex paint needed to change.");
+        populateDrawRegionSelect();
+        return true;
+      }
+
+      const { error } = await campaignSupabase.rpc("restore_generated_hex_region_snapshots", {
+        target_campaign_id: campaign.id,
+        region_snapshot: serializeRegionSnapshot(actions, "redo")
+      });
+      if (error) throw error;
+
+      actions.forEach(action => applyLocalRegionSnapshot(action.hexId, action.after));
+      pushMapEditAction({
+        type: "batch",
+        generatedRegions: createdRegions.map(region => buildGeneratedRegionHistoryRecord(region, drafts.find(draft => draft.regionId === region.Region_ID)?.family || "")),
+        actions
+      }, { force: true });
+      populateDrawRegionSelect();
+      renderSvgOnly();
+      window.alert?.(`Generated ${createdRegions.length} geographic region${createdRegions.length === 1 ? "" : "s"} across ${actions.length} hex${actions.length === 1 ? "" : "es"}.`);
+      return true;
+    } catch (error) {
+      console.error("Unable to generate geographic regions:", error);
+      window.alert?.(error?.message || "Unable to generate geographic regions.");
+      return false;
+    } finally {
+      renderer.drawing.saving = false;
+      setLoading(false);
+      refreshEditorActionControls();
+    }
+  }
+
+  async function createGeneratedGeographicRegion(campaignId, draft) {
+    const { data, error } = await campaignSupabase.rpc("create_region_with_next_ref_code", {
+      target_campaign_id: campaignId,
+      region_name: draft.name,
+      region_type_input: "geographic",
+      region_border_color: draft.color,
+      region_lore: draft.lore || buildGeneratedGeographicRegionLore(draft.family)
+    });
+    if (error) throw error;
+    const region = adaptGeneratedRegionRow(data);
+    addGeneratedRegionToLocalDb(region);
+    return region;
+  }
+
+  function adaptGeneratedRegionRow(row) {
+    const createdRow = Array.isArray(row) ? row[0] : row;
+    return {
+      __uuid: createdRow?.id,
+      Region_ID: createdRow?.ref_code || "",
+      Region_Name: createdRow?.name || "",
+      Region_Type: createdRow?.region_type || "geographic",
+      Border_Color: createdRow?.border_color || "#ffd84d",
+      Lore: createdRow?.lore || "",
+      Image: ""
+    };
+  }
+
+  function addGeneratedRegionToLocalDb(region) {
+    if (!region?.Region_ID) return;
+    if (isGeneratedGeographicRegionRecord(region)) {
+      region.Generation_Source = "geographic-region-generator";
+    }
+    if (!db.raw.regions) db.raw.regions = [];
+    if (!db.regionsById) db.regionsById = {};
+    if (!db.raw.regions.some(existing => existing.Region_ID === region.Region_ID)) {
+      db.raw.regions.push(region);
+    }
+    db.regionsById[region.Region_ID] = region;
+  }
+
+  function removeGeneratedRegionFromLocalDb(region) {
+    const regionId = region?.Region_ID || "";
+    if (!regionId || regionId === UNCLAIMED_REGION_REF) return;
+    if (db?.raw?.regions) {
+      db.raw.regions = db.raw.regions.filter(existing => existing?.Region_ID !== regionId);
+    }
+    if (db?.regionsById) delete db.regionsById[regionId];
+    Object.values(db?.hexesById || {}).forEach(hex => {
+      if (hex.Region_ID_Ref === regionId) hex.Region_ID_Ref = UNCLAIMED_REGION_REF;
+      if (hex.Political_Region_ID_Ref === regionId) hex.Political_Region_ID_Ref = "";
+    });
+  }
+
+  function cloneRegionHistoryRecord(region) {
+    if (!region) return region;
+    return { ...region };
+  }
+
+  function buildGeneratedRegionHistoryRecord(region, family = "") {
+    return {
+      __uuid: region?.__uuid || null,
+      Region_ID: region?.Region_ID || "",
+      Region_Name: region?.Region_Name || "",
+      Region_Type: region?.Region_Type || "geographic",
+      Border_Color: region?.Border_Color || "#ffd84d",
+      Lore: region?.Lore || "",
+      Generated_Family: family || region?.Generated_Family || "",
+      Generation_Source: "geographic-region-generator"
+    };
+  }
+
+  function isGeneratedGeographicRegionRecord(region) {
+    if (!region || region.Region_ID === UNCLAIMED_REGION_REF) return false;
+    if (region.Generation_Source === "geographic-region-generator") return true;
+    return String(region.Lore || "").includes(getGeneratedRegionLoreMarker());
+  }
+
+  function getGeneratedRegionLoreMarker() {
+    return "[[waymark:generated-geographic-region]]";
+  }
+
+  function buildGeneratedGeographicRegionLore(family) {
+    const label = family ? `Family: ${family}.` : "Family: unknown.";
+    return `${getGeneratedRegionLoreMarker()}\nGenerated by the Surveyor geographic region pass. ${label}`;
+  }
+
+  function buildGeneratedGeographicRegionDrafts(campaignId) {
+    const seedBase = `${getGenerationSeedBase(campaignId)}:geo-regions`;
+    const eligibleHexes = renderer.hexes
+      .filter(hex => hex?.id)
+      .filter(hex => !hex.regionId || hex.regionId === UNCLAIMED_REGION_REF);
+    if (eligibleHexes.length < 18) return [];
+
+    const usedNames = new Set((db?.raw?.regions || []).map(region => String(region.Region_Name || "").toLowerCase()));
+    const usedColors = new Set((db?.raw?.regions || [])
+      .filter(region => String(region.Border_Color || "").toLowerCase() !== "none")
+      .map(region => getColorInputValue(region.Border_Color))
+      .filter(Boolean));
+    const familyCounts = getGeneratedGeographicRegionFamilyCounts(eligibleHexes);
+    const clusters = mergeGeneratedGeographicRegionSiblingClusters(
+      buildGeneratedGeographicRegionClusters(eligibleHexes, seedBase, familyCounts),
+      seedBase
+    );
+    const targetCount = Math.max(1, Math.min(12, Math.round(eligibleHexes.length / 260)));
+    const selectedClusters = selectGeneratedGeographicRegionClusters(clusters, targetCount, eligibleHexes.length, familyCounts);
+
+    return selectedClusters.map((cluster, index) => ({
+      name: buildGeneratedGeographicRegionName(cluster.family, cluster.seed, seedBase, index, usedNames, cluster),
+      color: chooseGeneratedGeographicRegionColor(cluster.family, seedBase, index, usedColors),
+      family: cluster.family,
+      hexIds: cluster.hexIds
+    }));
+  }
+
+  function getGeneratedGeographicRegionFamilyCounts(hexes) {
+    return (hexes || []).reduce((counts, hex) => {
+      const family = getGeneratedGeographicRegionFamily(hex);
+      counts.set(family, (counts.get(family) || 0) + 1);
+      return counts;
+    }, new Map());
+  }
+
+  function buildGeneratedGeographicRegionClusters(hexes, seedBase, familyCounts = new Map()) {
+    const eligibleIds = new Set(hexes.map(hex => hex.id));
+    const visited = new Set();
+    const clusters = [];
+
+    hexes.forEach(startHex => {
+      if (!startHex?.id || visited.has(startHex.id)) return;
+      const family = getGeneratedGeographicRegionFamily(startHex);
+      const config = getGeneratedGeographicRegionClusterConfig(family);
+      if (!config) return;
+
+      const cluster = [];
+      const queue = [startHex];
+      visited.add(startHex.id);
+      while (queue.length) {
+        const hex = queue.shift();
+        cluster.push(hex);
+        EDGE_NAMES.forEach(edge => {
+          const neighbor = getNeighborHex(hex, edge);
+          if (!neighbor?.id || visited.has(neighbor.id) || !eligibleIds.has(neighbor.id)) return;
+          if (getGeneratedGeographicRegionFamily(neighbor) !== family) return;
+          visited.add(neighbor.id);
+          queue.push(neighbor);
+        });
+      }
+
+      clusters.push(...buildGeneratedGeographicRegionClusterCandidates(cluster, family, config, seedBase, hexes.length, familyCounts.get(family) || 0));
+    });
+
+    return clusters.sort((left, right) => right.score - left.score || left.seed.id.localeCompare(right.seed.id));
+  }
+
+  function buildGeneratedGeographicRegionClusterCandidates(cluster, family, config, seedBase, totalEligibleHexes, familyHexCount) {
+    const qualityHexes = getGeneratedGeographicRegionQualityHexes(cluster, family, config);
+    const wholeClusterCandidate = () => {
+      if (!isGeneratedGeographicRegionClusterEligible(cluster, qualityHexes, config, totalEligibleHexes, familyHexCount, family)) return null;
+      const seed = chooseGeneratedGeographicRegionClusterSeed(qualityHexes, family, seedBase);
+      return {
+        family,
+        seed,
+        hexIds: cluster.map(hex => hex.id),
+        sourceHexIds: cluster.map(hex => hex.id),
+        score: getGeneratedGeographicRegionClusterScore(cluster, qualityHexes, family, seedBase)
+      };
+    };
+
+    if (!shouldBuildGeneratedGeographicRegionSubclusters(cluster, family, config)) {
+      return [wholeClusterCandidate()].filter(Boolean);
+    }
+
+    const subclusters = buildGeneratedGeographicRegionSubclusters(cluster, family, config, seedBase, totalEligibleHexes, familyHexCount);
+    if (subclusters.length) return subclusters;
+    return [wholeClusterCandidate()].filter(Boolean);
+  }
+
+  function shouldBuildGeneratedGeographicRegionSubclusters(cluster, family, config) {
+    const threshold = Number(config?.splitThreshold || 0);
+    return threshold > 0 && cluster.length >= threshold && ["marine", "lowland", "woodland", "highland", "snow", "jungle"].includes(family);
+  }
+
+  function buildGeneratedGeographicRegionSubclusters(cluster, family, config, seedBase, totalEligibleHexes, familyHexCount) {
+    const qualityHexes = getGeneratedGeographicRegionQualityHexes(cluster, family, config);
+    const seedPool = (qualityHexes.length ? qualityHexes : cluster)
+      .slice()
+      .sort((left, right) => {
+        const leftScore = getGeneratedGeographicRegionCoreScore(left, family, seedBase) + seededUnit(`${seedBase}:subregion-seed:${family}:${left.id}`) * 5;
+        const rightScore = getGeneratedGeographicRegionCoreScore(right, family, seedBase) + seededUnit(`${seedBase}:subregion-seed:${family}:${right.id}`) * 5;
+        return rightScore - leftScore || left.id.localeCompare(right.id);
+      });
+    const targetSize = Math.max(config.minClusterSize, Number(config.splitTargetSize || config.minClusterSize * 2));
+    const attemptCount = Math.min(Number(config.splitAttempts || 4), Math.max(2, Math.ceil(cluster.length / Math.max(1, targetSize * 1.25))));
+    const candidates = [];
+
+    seedPool.slice(0, Math.max(attemptCount * 3, attemptCount)).forEach((seedHex, seedIndex) => {
+      if (candidates.length >= attemptCount) return;
+      const sizeJitter = 0.82 + seededUnit(`${seedBase}:subregion-size:${family}:${seedHex.id}`) * 0.38;
+      const desiredSize = Math.max(config.minClusterSize, Math.min(cluster.length, Math.round(targetSize * sizeJitter)));
+      const subcluster = growGeneratedGeographicRegionSubcluster(cluster, family, seedHex, desiredSize, seedBase, seedIndex);
+      const subQualityHexes = getGeneratedGeographicRegionQualityHexes(subcluster, family, config);
+      if (!isGeneratedGeographicRegionClusterEligible(subcluster, subQualityHexes, config, totalEligibleHexes, familyHexCount, family)) return;
+      candidates.push({
+        family,
+        seed: chooseGeneratedGeographicRegionClusterSeed(subQualityHexes.length ? subQualityHexes : subcluster, family, seedBase),
+        hexIds: subcluster.map(hex => hex.id),
+        sourceHexIds: subcluster.map(hex => hex.id),
+        score: getGeneratedGeographicRegionClusterScore(subcluster, subQualityHexes.length ? subQualityHexes : subcluster, family, `${seedBase}:subregion:${seedIndex}`)
+      });
+    });
+
+    return candidates;
+  }
+
+  function growGeneratedGeographicRegionSubcluster(cluster, family, seedHex, desiredSize, seedBase, seedIndex) {
+    const allowedIds = new Set(cluster.map(hex => hex.id));
+    const selectedIds = new Set([seedHex.id]);
+    const selected = [seedHex];
+    let frontier = EDGE_NAMES
+      .map(edge => getNeighborHex(seedHex, edge))
+      .filter(hex => hex?.id && allowedIds.has(hex.id) && getGeneratedGeographicRegionFamily(hex) === family);
+
+    while (frontier.length && selected.length < desiredSize) {
+      frontier = frontier
+        .filter(hex => hex?.id && !selectedIds.has(hex.id))
+        .sort((left, right) => getGeneratedGeographicRegionSubclusterStepScore(left, seedHex, family, seedBase, seedIndex) - getGeneratedGeographicRegionSubclusterStepScore(right, seedHex, family, seedBase, seedIndex) || left.id.localeCompare(right.id));
+      const next = frontier.shift();
+      if (!next?.id || selectedIds.has(next.id)) continue;
+      selectedIds.add(next.id);
+      selected.push(next);
+      EDGE_NAMES.forEach(edge => {
+        const neighbor = getNeighborHex(next, edge);
+        if (!neighbor?.id || selectedIds.has(neighbor.id) || !allowedIds.has(neighbor.id)) return;
+        if (getGeneratedGeographicRegionFamily(neighbor) !== family) return;
+        frontier.push(neighbor);
+      });
+    }
+
+    return selected;
+  }
+
+  function getGeneratedGeographicRegionSubclusterStepScore(hex, seedHex, family, seedBase, seedIndex) {
+    const sameNearby = nearbyHexesWithin(hex, 1)
+      .filter(candidate => getGeneratedGeographicRegionFamily(candidate) === family)
+      .length;
+    return roadPathHeuristic(hex, seedHex)
+      - sameNearby * 0.28
+      + seededUnit(`${seedBase}:subregion-step:${family}:${seedIndex}:${seedHex.id}:${hex.id}`) * 3.5;
+  }
+
+  function mergeGeneratedGeographicRegionSiblingClusters(clusters, seedBase) {
+    const grouped = new Map();
+    clusters.forEach(cluster => {
+      if (!grouped.has(cluster.family)) grouped.set(cluster.family, []);
+      grouped.get(cluster.family).push({ ...cluster, hexIds: [...cluster.hexIds], sourceHexIds: [...(cluster.sourceHexIds || cluster.hexIds)] });
+    });
+
+    const merged = [];
+    grouped.forEach((familyClusters, family) => {
+      const config = getGeneratedGeographicRegionClusterConfig(family);
+      const mergeDistance = Number(config?.mergeDistance || 0);
+      const consumed = new Set();
+      familyClusters
+        .sort((left, right) => right.score - left.score || left.seed.id.localeCompare(right.seed.id))
+        .forEach((cluster, index) => {
+          if (consumed.has(index)) return;
+          let current = { ...cluster, hexIds: [...cluster.hexIds], sourceHexIds: [...cluster.sourceHexIds] };
+          consumed.add(index);
+          familyClusters.forEach((candidate, candidateIndex) => {
+            if (consumed.has(candidateIndex) || candidateIndex === index) return;
+            if (!shouldMergeGeneratedGeographicRegionClusters(current, candidate, mergeDistance)) return;
+            current = mergeGeneratedGeographicRegionClusters(current, candidate, seedBase);
+            consumed.add(candidateIndex);
+          });
+          merged.push(current);
+        });
+    });
+
+    return merged.sort((left, right) => right.score - left.score || left.seed.id.localeCompare(right.seed.id));
+  }
+
+  function shouldMergeGeneratedGeographicRegionClusters(left, right, mergeDistance) {
+    if (!mergeDistance || mergeDistance < 1) return false;
+    const leftIds = left.sourceHexIds || left.hexIds || [];
+    const rightIds = right.sourceHexIds || right.hexIds || [];
+    if (!leftIds.length || !rightIds.length) return false;
+    const smallest = leftIds.length <= rightIds.length ? leftIds : rightIds;
+    const largestSet = new Set(leftIds.length <= rightIds.length ? rightIds : leftIds);
+    return smallest.some(hexId => {
+      const hex = hexForPathPoint(hexId);
+      if (!hex) return false;
+      return nearbyHexesWithin(hex, mergeDistance).some(nearbyHex => largestSet.has(nearbyHex.id));
+    });
+  }
+
+  function mergeGeneratedGeographicRegionClusters(left, right, seedBase) {
+    const family = left.family;
+    const sourceHexIds = [...new Set([...(left.sourceHexIds || left.hexIds || []), ...(right.sourceHexIds || right.hexIds || [])])];
+    const bridgeHexIds = getGeneratedRegionBridgeHexIds(left.sourceHexIds || left.hexIds || [], right.sourceHexIds || right.hexIds || []);
+    const bridgeCorridorHexIds = getGeneratedRegionBridgeCorridorHexIds(bridgeHexIds, family);
+    const hexIds = [...new Set([...(left.hexIds || []), ...(right.hexIds || []), ...bridgeHexIds, ...bridgeCorridorHexIds])];
+    const seed = [left.seed, right.seed]
+      .filter(Boolean)
+      .sort((a, b) => getGeneratedGeographicRegionCoreScore(b, family, seedBase) - getGeneratedGeographicRegionCoreScore(a, family, seedBase) || a.id.localeCompare(b.id))[0] || left.seed || right.seed;
+    const score = left.score + right.score * 0.72 + Math.min(120, (bridgeHexIds.length + bridgeCorridorHexIds.length) * 4);
+    return {
+      family,
+      seed,
+      hexIds,
+      sourceHexIds,
+      score
+    };
+  }
+
+  function getGeneratedRegionBridgeHexIds(leftHexIds, rightHexIds) {
+    const leftHexes = (leftHexIds || []).map(hexForPathPoint).filter(Boolean);
+    const rightHexes = (rightHexIds || []).map(hexForPathPoint).filter(Boolean);
+    if (!leftHexes.length || !rightHexes.length) return [];
+    const bestPair = leftHexes
+      .flatMap(left => rightHexes.map(right => ({ left, right, distance: roadPathHeuristic(left, right) })))
+      .sort((a, b) => a.distance - b.distance || a.left.id.localeCompare(b.left.id) || a.right.id.localeCompare(b.right.id))[0];
+    if (!bestPair || bestPair.distance > 5) return [];
+    const sequence = getSimpleGeneratedRegionBridgeSequence(bestPair.left, bestPair.right);
+    return sequence.slice(1, -1);
+  }
+
+  function getGeneratedRegionBridgeCorridorHexIds(bridgeHexIds, family) {
+    if (!["wetland", "jungle", "highland", "snow", "desert", "barrens"].includes(family)) return [];
+    const corridorIds = new Set();
+    (bridgeHexIds || []).forEach(hexId => {
+      const hex = hexForPathPoint(hexId);
+      if (!hex?.id) return;
+      nearbyHexesWithin(hex, 1).forEach(candidate => {
+        if (!candidate?.id) return;
+        if (candidate.regionId && candidate.regionId !== UNCLAIMED_REGION_REF) return;
+        const candidateFamily = getGeneratedGeographicRegionFamily(candidate);
+        if (family !== "wetland" && candidateFamily !== family) return;
+        if (family === "wetland" && candidateFamily === "marine") return;
+        corridorIds.add(candidate.id);
+      });
+    });
+    return [...corridorIds];
+  }
+
+  function getSimpleGeneratedRegionBridgeSequence(fromHex, toHex) {
+    const sequence = [fromHex.id];
+    const visited = new Set(sequence);
+    let current = fromHex;
+    let guard = 0;
+    while (current?.id !== toHex.id && guard < 8) {
+      const next = EDGE_NAMES
+        .map(edge => getNeighborHex(current, edge))
+        .filter(hex => hex?.id && !visited.has(hex.id))
+        .sort((left, right) => roadPathHeuristic(left, toHex) - roadPathHeuristic(right, toHex) || left.id.localeCompare(right.id))[0];
+      if (!next) break;
+      sequence.push(next.id);
+      visited.add(next.id);
+      current = next;
+      guard += 1;
+    }
+    return current?.id === toHex.id ? sequence : [fromHex.id, toHex.id];
+  }
+
+  function selectGeneratedGeographicRegionClusters(clusters, targetCount, totalEligibleHexes, familyCounts) {
+    const selected = [];
+    const selectedByFamily = new Map();
+    const selectedHexIds = new Set();
+    for (const cluster of clusters) {
+      if (selected.length >= targetCount) break;
+      if ((cluster.hexIds || []).some(hexId => selectedHexIds.has(hexId))) continue;
+      const familyCount = familyCounts.get(cluster.family) || 0;
+      const familyShare = totalEligibleHexes > 0 ? familyCount / totalEligibleHexes : 0;
+      const familyLimit = getGeneratedGeographicRegionFamilyLimit(familyShare, targetCount, cluster.family);
+      const currentFamilyCount = selectedByFamily.get(cluster.family) || 0;
+      if (currentFamilyCount >= familyLimit) continue;
+      selected.push(cluster);
+      (cluster.hexIds || []).forEach(hexId => selectedHexIds.add(hexId));
+      selectedByFamily.set(cluster.family, currentFamilyCount + 1);
+    }
+    return selected;
+  }
+
+  function getGeneratedGeographicRegionFamilyLimit(familyShare, targetCount, family = "") {
+    if (family === "marine") {
+      if (familyShare >= 0.32) return Math.min(3, targetCount);
+      if (familyShare >= 0.22) return Math.min(2, targetCount);
+    }
+    if (familyShare >= 0.46) return Math.min(1, targetCount);
+    if (familyShare >= 0.32) return Math.min(2, targetCount);
+    if (familyShare >= 0.22) return Math.min(3, targetCount);
+    return targetCount;
+  }
+
+  function getGeneratedGeographicRegionClusterConfig(family) {
+    const configs = {
+      lowland: { minClusterSize: 34, minCoreSize: 10, qualityRadius: 1, priority: 2.4, splitThreshold: 120, splitTargetSize: 58, splitAttempts: 4 },
+      woodland: { minClusterSize: 42, minCoreSize: 12, qualityRadius: 1, priority: 2.7, splitThreshold: 140, splitTargetSize: 72, splitAttempts: 4 },
+      wetland: { minClusterSize: 18, minCoreSize: 6, qualityRadius: 1, priority: 7.2, mergeDistance: 4 },
+      snow: { minClusterSize: 16, minCoreSize: 5, qualityRadius: 1, priority: 6.8, mergeDistance: 3, splitThreshold: 110, splitTargetSize: 48, splitAttempts: 4 },
+      highland: { minClusterSize: 24, minCoreSize: 7, qualityRadius: 1, priority: 5.2, mergeDistance: 3, splitThreshold: 96, splitTargetSize: 52, splitAttempts: 4 },
+      desert: { minClusterSize: 24, minCoreSize: 7, qualityRadius: 1, priority: 4.8, mergeDistance: 3 },
+      barrens: { minClusterSize: 24, minCoreSize: 7, qualityRadius: 1, priority: 4.4, mergeDistance: 3 },
+      jungle: { minClusterSize: 38, minCoreSize: 12, qualityRadius: 1, priority: 3.8, mergeDistance: 3, splitThreshold: 130, splitTargetSize: 70, splitAttempts: 4 },
+      inland_water: { minClusterSize: 12, minCoreSize: 4, qualityRadius: 1, priority: 5.4, mergeDistance: 2 },
+      marine: { minClusterSize: 24, minCoreSize: 7, qualityRadius: 1, priority: 4.2, mergeDistance: 2, splitThreshold: 70, splitTargetSize: 56, splitAttempts: 7 }
+    };
+    return configs[family] || null;
+  }
+
+  function isGeneratedGeographicRegionClusterEligible(cluster, coreHexes, config, totalEligibleHexes, familyHexCount, family = "") {
+    if (cluster.length < config.minClusterSize || coreHexes.length < config.minCoreSize) return false;
+    const familyShare = totalEligibleHexes > 0 ? familyHexCount / totalEligibleHexes : 0;
+    const clusterShare = totalEligibleHexes > 0 ? cluster.length / totalEligibleHexes : 0;
+    const familyClusterShare = familyHexCount > 0 ? cluster.length / familyHexCount : 0;
+    if (family === "marine") return clusterShare <= 0.58;
+    if (clusterShare > getGeneratedGeographicRegionMaxClusterShare(familyShare)) return false;
+    if (familyShare >= 0.38 && familyClusterShare > 0.52) return false;
+    return true;
+  }
+
+  function getGeneratedGeographicRegionMaxClusterShare(familyShare) {
+    if (familyShare >= 0.46) return 0.16;
+    if (familyShare >= 0.32) return 0.20;
+    if (familyShare >= 0.22) return 0.26;
+    return 0.34;
+  }
+
+  function getGeneratedGeographicRegionQualityHexes(cluster, family, config) {
+    return filterGeneratedGeographicRegionQualityHexes(cluster, family, config.qualityRadius || 1);
+  }
+
+  function filterGeneratedGeographicRegionQualityHexes(cluster, family, qualityRadius = 1) {
+    const clusterIds = new Set(cluster.map(hex => hex.id));
+    return cluster.filter(hex => {
+      if (getOuterMapEdge(hex)) return false;
+      const nearby = nearbyHexesWithin(hex, qualityRadius);
+      const sameFamilyCount = nearby.filter(nearbyHex => clusterIds.has(nearbyHex.id) && getGeneratedGeographicRegionFamily(nearbyHex) === family).length;
+      return sameFamilyCount >= Math.min(4, nearby.length);
+    });
+  }
+
+  function chooseGeneratedGeographicRegionClusterSeed(coreHexes, family, seedBase) {
+    return [...coreHexes]
+      .sort((left, right) => {
+        const leftScore = getGeneratedGeographicRegionCoreScore(left, family, seedBase);
+        const rightScore = getGeneratedGeographicRegionCoreScore(right, family, seedBase);
+        return rightScore - leftScore || left.id.localeCompare(right.id);
+      })[0] || coreHexes[0];
+  }
+
+  function getGeneratedGeographicRegionCoreScore(hex, family, seedBase) {
+    const sameNearby = nearbyHexesWithin(hex, 2)
+      .filter(candidate => getGeneratedGeographicRegionFamily(candidate) === family)
+      .length;
+    return sameNearby
+      + Math.min(2, Number(hex.elevation || 0) * 0.16)
+      + seededUnit(`${seedBase}:cluster-seed:${family}:${hex.id}`) * 1.8;
+  }
+
+  function getGeneratedGeographicRegionClusterScore(cluster, coreHexes, family, seedBase) {
+    const config = getGeneratedGeographicRegionClusterConfig(family) || { priority: 1 };
+    const sizeScore = Math.min(420, cluster.length * 6);
+    const coreScore = Math.min(260, coreHexes.length * 9);
+    const seedScore = seededUnit(`${seedBase}:cluster:${family}:${coreHexes[0]?.id || cluster[0]?.id || ""}`) * 16;
+    return config.priority * 1000 + sizeScore + coreScore + seedScore;
+  }
+
+  function getGeneratedGeographicRegionFamily(hex) {
+    const base = String(hex?.baseTerrain || "").toLowerCase();
+    const features = new Set((hex?.features || []).map(feature => String(feature || "").toLowerCase()));
+    if (base === "deep_sea" || base === "sea" || base === "coastal_water") return "marine";
+    if (base === "inland_water") return "inland_water";
+    const rangeFeatures = ["mountains", "mountains_snow", "snowcapped_mountains", "lone_mountain", "ridges", "cliffs", "volcano"];
+    if (["rock", "volcanic", "ashland"].includes(base) || rangeFeatures.some(feature => features.has(feature)) || (Number(hex?.elevation || 0) >= 4 && base !== "snow")) return "highland";
+    if (base === "snow" || features.has("ice")) return "snow";
+    if (base === "desert" || base === "deep_desert") return "desert";
+    if (base === "bleak_barrens" || base === "barrens" || base === "wastes") return "barrens";
+    if (base === "wetland" || features.has("marsh")) return "wetland";
+    if (base === "jungle_floor" || features.has("jungle")) return "jungle";
+    if (features.has("forest") || features.has("woods") || base === "lush_grassland") return "woodland";
+    return "lowland";
+  }
+
+  function buildGeneratedGeographicRegionName(family, seedHex, seedBase, index, usedNames, cluster = null) {
+    const nameParts = {
+      lowland: ["Greenvale", "Meadowmarch", "Sunfield", "Lowmere", "Brightmead", "Goldfield", "Southvale", "Windplain", "Hearthvale", "Amberlea", "Greenmarch", "Fairmeadow"],
+      woodland: ["Thornwood", "Greenwold", "Elderbough", "Wildgrove", "Oakmere", "Ashenwood", "Pinewold", "Deepbough", "Briarglen", "Wolfswood", "Greenholt", "The Oldwood"],
+      wetland: ["Reedmere", "Mossfen", "Mistmarsh", "Blackfen", "Greyfen", "Siltmere", "Fenreach", "Mirewold", "Lowmire", "Reedwater", "Duskfen", "Marshmere"],
+      jungle: ["Verdant Deep", "Emerald Wilds", "Vinewold", "Greenhollow", "The Greendeep", "Rainwold", "Vinefall", "Jadewild", "Canopy Reach", "Rootmere", "Gloomgreen", "The Deep Canopy"],
+      highland: ["Stonewold", "Highcrag", "Ironridge", "Greyspine", "Stormridge", "Cloudcrag", "Oldpeak", "Stoneback", "Frostspine", "Blackridge", "The High Teeth", "Embercrag"],
+      snow: ["Frostmere", "Whitewold", "Snowreach", "Rimefield", "Wintermere", "Pale Reach", "Icewold", "Frostmarch", "Whitebarrow", "Coldmead", "Rimevale", "Snowmere"],
+      desert: ["Sunglass Expanse", "Amber Waste", "Dunereach", "Goldbarrow", "Sunscar", "The Brass Flats", "Dunefield", "Ashdune", "Redglass", "Windreach", "Saltplain", "Cinderwaste"],
+      barrens: ["Ashen March", "Grey Barrens", "Bleakwold", "Dustreach", "Stonewaste", "The Old Scars", "Cairnfield", "Ruinmarch", "Blackbarrow", "Drymere", "Wraithfield", "The Grey Reach"],
+      inland_water: ["Blueglass Mere", "Stillmere", "Mirrorwater", "Reedwater", "Willowmere", "Glassmere", "Moonmere", "Silverpond", "Frogwater", "Lake Aurel", "Lake Windmere", "Brightwater Lake"],
+      inland_water_large: ["Inner Sea", "Brightwater Sea", "Blueglass Sea", "Silvermere", "The Great Mere", "Reedwater Sea", "Lake Aurel", "Lake Windmere", "The Mirror Sea", "Stillwater Sea"],
+      marine: ["Greysea", "Bluewater", "Saltreach", "Windsea", "Deepwater", "Farwater", "The Sapphire Sea", "Outer Sea", "Stormreach", "Dawnwater", "Whitewake Sea", "The Long Blue", "Gulf of Glass", "Blackwater", "Western Ocean", "Eastern Ocean", "Starfall Sea", "Tideward Sea"]
+    };
+    const hexCount = Array.isArray(cluster?.hexIds) ? cluster.hexIds.length : 0;
+    const pool = family === "inland_water" && hexCount >= 34 ? nameParts.inland_water_large : (nameParts[family] || nameParts.lowland);
+    const start = stableHash(`${seedBase}:name:${seedHex.id}:${index}`) % pool.length;
+    for (let offset = 0; offset < pool.length; offset += 1) {
+      const candidate = pool[(start + offset) % pool.length];
+      if (!usedNames.has(candidate.toLowerCase())) {
+        usedNames.add(candidate.toLowerCase());
+        return candidate;
+      }
+    }
+    const fallback = `${pool[start]} ${index + 1}`;
+    usedNames.add(fallback.toLowerCase());
+    return fallback;
+  }
+
+  function chooseGeneratedGeographicRegionColor(family, seedBase, index, usedColors) {
+    const palettes = {
+      lowland: ["#8fbf57", "#b6bd5f", "#d0b85f", "#74a85a"],
+      woodland: ["#3f8f49", "#2f7650", "#5d9443", "#4d7f3f"],
+      wetland: ["#3e7067", "#4f867a", "#547e5b", "#386d63"],
+      jungle: ["#2f855a", "#247245", "#3e8a4e", "#2d6f52"],
+      highland: ["#8a7f70", "#776f63", "#9a8468", "#6f746f"],
+      snow: ["#9fc8d3", "#b9d4dd", "#d8e4e8", "#aabdc9"],
+      desert: ["#d1a24f", "#c78f42", "#d0b066", "#b9843c"],
+      barrens: ["#a66c52", "#8f6f5d", "#b07a55", "#8a7469"],
+      inland_water: ["#4f9ab0", "#5aa8b8", "#3d8fa8", "#6baebd"],
+      marine: ["#245f82", "#2b6d8e", "#1f5878", "#346f8a", "#123953", "#0b304a"]
+    };
+    const pool = palettes[family] || palettes.lowland;
+    const start = stableHash(`${seedBase}:color:${family}:${index}`) % pool.length;
+    for (let offset = 0; offset < pool.length; offset += 1) {
+      const candidate = pool[(start + offset) % pool.length];
+      if (!usedColors.has(candidate.toLowerCase())) {
+        usedColors.add(candidate.toLowerCase());
+        return candidate;
+      }
+    }
+    const fallback = pool[start];
+    usedColors.add(fallback.toLowerCase());
+    return fallback;
+  }
+
   async function runGenerationPoiPass() {
     const campaign = getActiveCampaign?.();
     const generator = window.CampaignGeneratedMapGenerator;
@@ -11360,44 +12026,14 @@
       step += 1;
     }
 
-    if (includePaths) {
-      const pathTargets = anchors
-        .filter(anchor => !connectedRoadIds.has(anchor.hex.id) && anchor.routeClass === "path")
-        .sort((left, right) => right.priority - left.priority || left.hex.id.localeCompare(right.hex.id));
-      let pathCount = 0;
-      while (pathTargets.length && pathCount < maxPathRoutes) {
-        const best = pathTargets
-          .map(anchor => ({
-            anchor,
-            target: connectedAnchors
-              .map(connectedAnchor => ({
-                anchor: connectedAnchor,
-                score: getGeneratedPathFeederScore(anchor, connectedAnchor, seedBase, lengthScale)
-              }))
-              .sort((a, b) => a.score - b.score)[0]
-          }))
-          .filter(candidate => candidate.target?.anchor)
-          .sort((a, b) => a.target.score - b.target.score)[0];
-        if (!best?.target?.anchor) break;
-        pathTargets.splice(pathTargets.findIndex(anchor => anchor.hex.id === best.anchor.hex.id), 1);
-        const sequence = buildGeneratedAnchorRouteSequence("path", best.target.anchor, best.anchor, [], {
-          generatedPathMode: true,
-          pathSalt: `${seedBase}:path-spur:${pathCount}`
-        });
-        const finalSequence = best.anchor.stopShort ? trimGeneratedPathBeforeTarget(sequence) : sequence;
-        if (!finalSequence?.length || finalSequence.length < 2) continue;
-        routes.push({
-          tool: "path",
-          sequence: finalSequence,
-          routeMetadata: {
-            isMajorRoute: false,
-            routeName: ""
-          }
-        });
-        pathCount += 1;
-      }
-    }
-
+    addGeneratedSettlementCoverageRoutes({
+      routes,
+      anchors,
+      seedBase,
+      lengthScale,
+      amountScale,
+      crossingAnchorHexIds
+    });
     addGeneratedNetworkCompletionSpurs({
       routes,
       anchors,
@@ -11424,6 +12060,13 @@
       crossingAnchorHexIds,
       maxCount: Math.max(2, Math.round((5 + Math.round(anchorPressureBonus * 0.4)) * amountScale))
     });
+    addGeneratedPathFeederRoutes({
+      routes,
+      anchors,
+      seedBase,
+      lengthScale,
+      maxCount: maxPathRoutes
+    });
     addGeneratedCoastalVillagePaths({
       routes,
       anchors,
@@ -11443,6 +12086,124 @@
         score: getGeneratedRoadFeederScore(anchor, connectedAnchor, seedBase, lengthScale)
       }))
       .sort((a, b) => a.score - b.score)[0] || null;
+  }
+
+  function addGeneratedSettlementCoverageRoutes({ routes, anchors, seedBase, lengthScale = 1, amountScale = 1, crossingAnchorHexIds = new Set() }) {
+    if (!Array.isArray(routes) || !Array.isArray(anchors)) return;
+    const settlementAnchors = anchors
+      .filter(isGeneratedRoadSettlementAnchor)
+      .sort((left, right) => right.priority - left.priority || left.hex.id.localeCompare(right.hex.id));
+    if (settlementAnchors.length < 2) return;
+
+    const roadNetworkHexIds = getGeneratedRouteHexIdSet(routes.filter(route => route?.tool === "road"));
+    if (!roadNetworkHexIds.size) return;
+    const targetCount = getGeneratedSettlementCoverageTargetCount(settlementAnchors.length, amountScale);
+    let coveredCount = settlementAnchors.filter(anchor => roadNetworkHexIds.has(anchor.hex.id)).length;
+    if (coveredCount >= targetCount) return;
+
+    const maxDistance = getGeneratedSettlementCoverageMaxDistance(lengthScale, amountScale);
+    const remaining = settlementAnchors.filter(anchor => !roadNetworkHexIds.has(anchor.hex.id));
+    while (remaining.length && coveredCount < targetCount) {
+      const candidate = remaining
+        .map(anchor => {
+          const target = getNearestGeneratedRouteHexAnchor(anchor, roadNetworkHexIds, "road", seedBase, lengthScale);
+          return {
+            anchor,
+            target,
+            score: target
+              ? target.score - Math.min(4, anchor.priority / 26) + seededUnit(`${seedBase}:settlement-coverage:${anchor.hex.id}`) * 1.3
+              : Infinity
+          };
+        })
+        .filter(entry => entry.target?.anchor && entry.target.distance <= maxDistance)
+        .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id))[0];
+      if (!candidate) break;
+      remaining.splice(remaining.findIndex(anchor => anchor.hex.id === candidate.anchor.hex.id), 1);
+      const sequence = buildGeneratedAnchorRouteSequence("road", candidate.target.anchor, candidate.anchor, [], {
+        generatedRoadMode: true,
+        pathSalt: `${seedBase}:settlement-coverage-route:${candidate.anchor.hex.id}`
+      });
+      if (!sequence?.length || sequence.length < 2) continue;
+      if (wouldGeneratedRouteOverloadCrossings(sequence, routes, crossingAnchorHexIds)) continue;
+      routes.push({
+        tool: "road",
+        sequence,
+        routeMetadata: {
+          isMajorRoute: false,
+          routeName: ""
+        }
+      });
+      sequence.forEach(hexId => roadNetworkHexIds.add(hexId));
+      coveredCount += 1;
+    }
+  }
+
+  function isGeneratedRoadSettlementAnchor(anchor) {
+    return Boolean(anchor?.hex?.id && (anchor.anchorKind === "settlement" || anchor.anchorKind === "province_seat"));
+  }
+
+  function getGeneratedSettlementCoverageTargetCount(settlementCount, amountScale = 1) {
+    if (settlementCount <= 0) return 0;
+    const coverageRatio = Math.max(0.7, Math.min(0.94, 0.78 + amountScale * 0.08));
+    return Math.min(settlementCount, Math.ceil(settlementCount * coverageRatio));
+  }
+
+  function getGeneratedSettlementCoverageMaxDistance(lengthScale = 1, amountScale = 1) {
+    return 16 + lengthScale * 12 + Math.min(6, amountScale * 3);
+  }
+
+  function addGeneratedPathFeederRoutes({ routes, anchors, seedBase, lengthScale = 1, maxCount = 0 }) {
+    if (!Array.isArray(routes) || !Array.isArray(anchors) || maxCount <= 0) return;
+    const roadNetworkHexIds = getGeneratedRouteHexIdSet(routes.filter(route => route?.tool === "road"));
+    if (!roadNetworkHexIds.size) return;
+    const anyNetworkHexIds = getGeneratedRouteHexIdSet(routes);
+    const pathTargets = anchors
+      .filter(anchor => anchor?.hex?.id && anchor.routeClass === "path")
+      .filter(anchor => !isGeneratedRoadSettlementAnchor(anchor))
+      .filter(anchor => !anyNetworkHexIds.has(anchor.hex.id))
+      .map(anchor => {
+        const target = getNearestGeneratedRouteHexAnchor(anchor, roadNetworkHexIds, "path", seedBase, lengthScale);
+        return {
+          anchor,
+          target,
+          score: target
+            ? target.score - Math.min(2.4, anchor.priority / 32) + seededUnit(`${seedBase}:path-feeder-target:${anchor.hex.id}`) * 1.2
+            : Infinity
+        };
+      })
+      .filter(candidate => candidate.target?.anchor)
+      .sort((left, right) => left.score - right.score || left.anchor.hex.id.localeCompare(right.anchor.hex.id));
+
+    let added = 0;
+    pathTargets.forEach(candidate => {
+      if (added >= maxCount) return;
+      const maxDistance = getGeneratedPathFeederMaxDistance(candidate.anchor, lengthScale);
+      if (candidate.target.distance > maxDistance) return;
+      const sequence = buildGeneratedAnchorRouteSequence("path", candidate.target.anchor, candidate.anchor, [], {
+        generatedPathMode: true,
+        pathSalt: `${seedBase}:path-feeder:${candidate.anchor.hex.id}`
+      });
+      const finalSequence = candidate.anchor.stopShort ? trimGeneratedPathBeforeTarget(sequence) : sequence;
+      if (!finalSequence?.length || finalSequence.length < 2) return;
+      routes.push({
+        tool: "path",
+        sequence: finalSequence,
+        routeMetadata: {
+          isMajorRoute: false,
+          routeName: ""
+        }
+      });
+      added += 1;
+    });
+  }
+
+  function getGeneratedPathFeederMaxDistance(anchor, lengthScale = 1) {
+    const anchorBonus = anchor?.anchorKind === "settlement" ? 2
+      : anchor?.anchorKind === "site" ? 1.5
+      : anchor?.anchorKind === "hazard" ? 1
+      : anchor?.anchorKind === "camp" ? -1
+      : 0;
+    return 5 + lengthScale * 5 + anchorBonus;
   }
 
   function buildGeneratedAnchorRouteSequence(tool, fromAnchor, toAnchor, detours = [], options = {}) {
@@ -11659,7 +12420,7 @@
   }
 
   function getGeneratedCompletionSpurTool(anchor, includePaths) {
-    if (anchor.routeClass === "road" || anchor.anchorKind === "crossing" || anchor.anchorKind === "pass" || anchor.anchorKind === "roadstop") return "road";
+    if (isGeneratedRoadSettlementAnchor(anchor) || anchor.routeClass === "road" || anchor.anchorKind === "crossing" || anchor.anchorKind === "pass" || anchor.anchorKind === "roadstop") return "road";
     if (!includePaths) return "road";
     if (anchor.anchorKind === "soft_crossing" && anchor.priority >= 64) return "road";
     if (anchor.anchorKind === "resource" && anchor.priority >= 70) return "road";
@@ -11887,9 +12648,15 @@
       if (!existing || profile.priority > existing.priority) bestPoiByHex.set(hex.id, profile);
     });
 
-    const poiAnchors = [...bestPoiByHex.values()]
-      .sort((a, b) => b.priority - a.priority || a.hex.id.localeCompare(b.hex.id))
-      .slice(0, 140)
+    const sortedPoiAnchorEntries = [...bestPoiByHex.values()]
+      .sort((a, b) => b.priority - a.priority || a.hex.id.localeCompare(b.hex.id));
+    const requiredPoiAnchorEntries = sortedPoiAnchorEntries.filter(isRequiredGeneratedRoadAnchorEntry);
+    const requiredHexIds = new Set(requiredPoiAnchorEntries.map(entry => entry.hex.id));
+    const optionalPoiAnchorLimit = Math.max(60, 140 - requiredPoiAnchorEntries.length);
+    const optionalPoiAnchorEntries = sortedPoiAnchorEntries
+      .filter(entry => !requiredHexIds.has(entry.hex.id))
+      .slice(0, optionalPoiAnchorLimit);
+    const poiAnchors = [...requiredPoiAnchorEntries, ...optionalPoiAnchorEntries]
       .map(entry => ({
         hex: entry.hex,
         name: entry.name,
@@ -11901,6 +12668,12 @@
       }));
     return [...poiAnchors, ...getFallbackRoadAnchors(campaignId, new Set(poiAnchors.map(anchor => anchor.hex.id)))]
       .filter((anchor, index, list) => anchor?.hex && list.findIndex(candidate => candidate.hex.id === anchor.hex.id) === index);
+  }
+
+  function isRequiredGeneratedRoadAnchorEntry(entry) {
+    if (!entry?.hex?.id) return false;
+    if (entry.routeClass === "seat" || entry.routeClass === "road" || entry.routeClass === "detour") return true;
+    return ["province_seat", "settlement", "stronghold", "crossing", "pass", "roadstop"].includes(entry.anchorKind || "");
   }
 
   function getPoiIconMetaForRoads(poi) {
@@ -14420,6 +15193,10 @@
         await applyTerrainBatchAction(campaignId, actions, direction);
         return;
       }
+      if (actions.length && actions.every(childAction => childAction?.type === "region")) {
+        await applyRegionBatchAction(campaignId, actions, direction, action);
+        return;
+      }
       for (const childAction of actions) {
         await applyMapEditAction(campaignId, childAction, direction);
       }
@@ -14613,6 +15390,95 @@
     });
   }
 
+  async function applyRegionBatchAction(campaignId, actions, direction, historyAction = {}) {
+    const regionActions = (actions || []).filter(action => action?.type === "region");
+    if (!regionActions.length) return;
+    const generatedRegions = (historyAction.generatedRegions || []).filter(isGeneratedGeographicRegionRecord);
+
+    if (direction === "redo" && generatedRegions.length) {
+      await restoreGeneratedRegionRecords(campaignId, generatedRegions, regionActions);
+    }
+
+    const { error } = await campaignSupabase.rpc("restore_generated_hex_region_snapshots", {
+      target_campaign_id: campaignId,
+      region_snapshot: serializeRegionSnapshot(regionActions, direction)
+    });
+    if (error) throw error;
+
+    regionActions.forEach(action => {
+      applyLocalRegionSnapshot(action.hexId, direction === "undo" ? action.before : action.after);
+    });
+
+    if (direction === "undo" && generatedRegions.length) {
+      await deleteGeneratedRegionRecords(campaignId, generatedRegions);
+    }
+  }
+
+  async function restoreGeneratedRegionRecords(campaignId, generatedRegions, regionActions) {
+    const refRemap = new Map();
+    for (const regionRecord of generatedRegions) {
+      if (!regionRecord?.Region_ID) continue;
+      const existing = db?.regionsById?.[regionRecord.Region_ID];
+      if (existing?.__uuid) {
+        refRemap.set(regionRecord.Region_ID, existing.Region_ID);
+        continue;
+      }
+
+      const restored = await createGeneratedGeographicRegion(campaignId, {
+        name: regionRecord.Region_Name || "Generated Region",
+        color: regionRecord.Border_Color || "#ffd84d",
+        family: regionRecord.Generated_Family || "",
+        lore: regionRecord.Lore || buildGeneratedGeographicRegionLore(regionRecord.Generated_Family || "")
+      });
+      if (!restored?.Region_ID) continue;
+      const previousRef = regionRecord.Region_ID;
+      Object.assign(regionRecord, buildGeneratedRegionHistoryRecord(restored, regionRecord.Generated_Family || ""));
+      refRemap.set(previousRef, restored.Region_ID);
+    }
+
+    if (!refRemap.size) return;
+    regionActions.forEach(action => {
+      const nextRef = refRemap.get(action?.after?.geographicRegionId);
+      if (nextRef) action.after.geographicRegionId = nextRef;
+      const previousRef = refRemap.get(action?.before?.geographicRegionId);
+      if (previousRef) action.before.geographicRegionId = previousRef;
+    });
+  }
+
+  async function deleteGeneratedRegionRecords(campaignId, generatedRegions) {
+    for (const regionRecord of generatedRegions) {
+      const region = db?.regionsById?.[regionRecord.Region_ID] || regionRecord;
+      if (!isGeneratedGeographicRegionRecord(region)) continue;
+      const regionUuid = region.__uuid || regionRecord.__uuid;
+      if (!regionUuid) {
+        removeGeneratedRegionFromLocalDb(region);
+        continue;
+      }
+      const { error } = await campaignSupabase.rpc("delete_campaign_record", {
+        target_campaign_id: campaignId,
+        target_record_type: "region",
+        target_record_id: regionUuid
+      });
+      if (error && !isMissingPersistedDeleteError(error)) throw error;
+      removeGeneratedRegionFromLocalDb(region);
+    }
+    refreshGeneratedRegionCodexViews();
+  }
+
+  function refreshGeneratedRegionCodexViews() {
+    populateDrawRegionSelect();
+    window.refreshGeneratedMapRegionLayer?.();
+    const currentPage = getCurrentCodexPage?.();
+    if (!currentPage) return;
+    if (currentPage.type === "region" && !db?.regionsById?.[currentPage.id]) {
+      renderCodexPage?.("regions", null);
+      return;
+    }
+    if (["region", "regions", "hex"].includes(currentPage.type)) {
+      renderCodexPage?.(currentPage.type, currentPage.id);
+    }
+  }
+
   async function applyNukeOverlayAction(campaignId, action, direction) {
     if (direction === "redo") {
       const { error } = await campaignSupabase.rpc("clear_generated_map_overlays", {
@@ -14635,13 +15501,20 @@
   }
 
   async function applyNukeRegionAction(campaignId, action, direction) {
+    const generatedRegions = (action.generatedRegions || []).filter(isGeneratedGeographicRegionRecord);
     if (direction === "redo") {
       const { error } = await campaignSupabase.rpc("clear_generated_hex_region_layer", {
         target_campaign_id: campaignId,
         target_region_type: action.regionType === "political" ? "political" : "geographic"
       });
       if (error) throw error;
+      if (generatedRegions.length) {
+        await deleteGeneratedRegionRecords(campaignId, generatedRegions);
+      }
     } else {
+      if (generatedRegions.length) {
+        await restoreGeneratedRegionRecords(campaignId, generatedRegions, action.actions || []);
+      }
       const { error } = await campaignSupabase.rpc("restore_generated_hex_region_snapshots", {
         target_campaign_id: campaignId,
         region_snapshot: serializeRegionSnapshot(action.actions || [])
@@ -14730,11 +15603,11 @@
     }));
   }
 
-  function serializeRegionSnapshot(actions) {
+  function serializeRegionSnapshot(actions, direction = "undo") {
     return (actions || []).map(action => ({
       hex_ref: action.hexId,
-      geographic_region_ref: action.before?.geographicRegionId || UNCLAIMED_REGION_REF,
-      political_region_ref: action.before?.politicalRegionId || null
+      geographic_region_ref: (direction === "undo" ? action.before : action.after)?.geographicRegionId || UNCLAIMED_REGION_REF,
+      political_region_ref: (direction === "undo" ? action.before : action.after)?.politicalRegionId || null
     }));
   }
 
@@ -15033,7 +15906,7 @@
     const normalizedType = regionType === "political" ? "political" : "geographic";
     const label = normalizedType === "political" ? "political" : "geographic";
     if (!campaign) return;
-    if (!await confirmNukeAction(`Purge all ${label} region paint from the live generated map immediately? Region Codex entries will not be deleted.`)) return;
+    if (!await confirmNukeAction(`Purge all ${label} region paint from the live generated map immediately? Generated Codex region entries will also be deleted; manual region entries stay intact.`)) return;
 
     const actions = renderer.hexes
       .map(hex => {
@@ -15056,6 +15929,7 @@
       .filter(Boolean);
 
     if (!actions.length) return;
+    const generatedRegions = getGeneratedRegionRecordsForPurge(normalizedType, actions);
     await runBulkNukeAction({
       actions,
       rpcName: "clear_generated_hex_region_layer",
@@ -15069,9 +15943,21 @@
         });
         renderSvgOnly();
       },
-      historyAction: { type: "nuke-regions", regionType: normalizedType, actions },
+      afterPersist: () => deleteGeneratedRegionRecords(campaign.id, generatedRegions),
+      historyAction: { type: "nuke-regions", regionType: normalizedType, actions, generatedRegions },
       errorPrefix: `Unable to purge ${label} regions`
     });
+  }
+
+  function getGeneratedRegionRecordsForPurge(regionType, actions) {
+    const affectedRegionIds = new Set((actions || []).map(action => (
+      regionType === "political" ? action?.before?.politicalRegionId : action?.before?.geographicRegionId
+    )).filter(Boolean));
+    return (db?.raw?.regions || [])
+      .filter(region => String(region.Region_Type || "geographic") === regionType)
+      .filter(region => affectedRegionIds.has(region.Region_ID))
+      .filter(isGeneratedGeographicRegionRecord)
+      .map(region => buildGeneratedRegionHistoryRecord(region));
   }
 
   async function stageAllGeneratedFeaturePurge() {
@@ -15109,7 +15995,7 @@
     refreshEditorActionControls();
   }
 
-  async function runBulkNukeAction({ actions, rpcName, rpcArgs, applyLocal, historyAction, errorPrefix }) {
+  async function runBulkNukeAction({ actions, rpcName, rpcArgs, applyLocal, afterPersist, historyAction, errorPrefix }) {
     renderer.drawing.saving = true;
     const showBulkLoading = actions.length >= BULK_OVERLAY_LOADING_THRESHOLD;
     if (showBulkLoading) setLoading(true);
@@ -15119,6 +16005,7 @@
       const { error } = await campaignSupabase.rpc(rpcName, rpcArgs);
       if (error) throw error;
       applyLocal?.();
+      await afterPersist?.();
       pushMapEditAction(historyAction || { type: "batch", actions }, { force: true });
     } catch (error) {
       console.error(`${errorPrefix}:`, error);

@@ -190,6 +190,28 @@
   box-shadow: 0 2px 8px rgba(35, 20, 8, 0.20);
 }
 
+.campaign-auth-card .campaign-auth-link-button,
+.campaign-auth-card form > .campaign-auth-link-button {
+  min-height: auto;
+  margin-top: 0;
+  border: 0;
+  background: transparent;
+  color: #5b351d;
+  box-shadow: none;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.campaign-auth-card .campaign-auth-link-button:hover,
+.campaign-auth-card .campaign-auth-link-button:focus-visible,
+.campaign-auth-card form > .campaign-auth-link-button:hover,
+.campaign-auth-card form > .campaign-auth-link-button:focus-visible {
+  background: transparent;
+  color: #2f2115;
+  box-shadow: none;
+}
+
 .campaign-auth-card form > button:active {
   transform: translateY(1px);
   box-shadow: inset 0 2px 5px rgba(35, 20, 8, 0.22);
@@ -523,6 +545,104 @@
 
 .campaign-settings-actions[hidden] {
   display: none !important;
+}
+
+.campaign-debug-toggle-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(70, 47, 24, 0.42);
+  background: rgba(255, 249, 235, 0.44);
+  color: #26190f;
+  text-align: left;
+}
+
+.campaign-debug-toggle-row input {
+  width: 17px;
+  height: 17px;
+  accent-color: #4a3019;
+}
+
+.campaign-debug-toggle-row span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.campaign-debug-toggle-row strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "Marcellus SC", serif;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+}
+
+.campaign-debug-help-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.campaign-settings-menu .campaign-debug-help-button {
+  display: inline-grid;
+  place-items: center;
+  width: 19px;
+  min-width: 19px;
+  height: 19px;
+  min-height: 19px;
+  padding: 0;
+  border-radius: 999px;
+  font-family: "Marcellus SC", serif;
+  font-size: 0.72rem;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.campaign-debug-help-tooltip {
+  position: absolute;
+  z-index: 20;
+  top: 50%;
+  left: calc(100% + 9px);
+  width: min(260px, calc(100vw - 72px));
+  padding: 9px 10px;
+  border: 1px solid rgba(70, 47, 24, 0.56);
+  background: rgba(255, 249, 235, 0.96);
+  box-shadow: 0 8px 18px rgba(35, 20, 8, 0.20);
+  color: #26190f;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-transform: none;
+  transform: translate(0, -50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    visibility 120ms ease;
+}
+
+.campaign-debug-help-wrap:hover .campaign-debug-help-tooltip,
+.campaign-debug-help-wrap:focus-within .campaign-debug-help-tooltip {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.campaign-debug-toggle-row small {
+  font-size: 0.78rem;
+  line-height: 1.25;
+  opacity: 0.74;
+}
+
+.campaign-debug-toggle-row:focus-within {
+  background: rgba(255, 249, 235, 0.68);
+  box-shadow: 0 2px 8px rgba(63, 39, 19, 0.16);
 }
 
 .campaign-settings-section {

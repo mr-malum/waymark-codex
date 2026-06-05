@@ -14,11 +14,10 @@ function isCodexAuditVisible() {
 
 function setCodexAuditVisible(isVisible) {
   codexAuditVisible = Boolean(isVisible);
-  document.getElementById("campaign-settings-audit-button")?.classList.toggle("active", codexAuditVisible);
-  document.getElementById("campaign-settings-audit-button")?.setAttribute(
-    "aria-pressed",
-    codexAuditVisible ? "true" : "false"
-  );
+  const auditViewCheckbox = document.getElementById("campaign-settings-audit-view-checkbox");
+  if (auditViewCheckbox) {
+    auditViewCheckbox.checked = codexAuditVisible;
+  }
 
   if (window.db) {
     refreshOpenCodexAfterDatabaseLoad?.();
