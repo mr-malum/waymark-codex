@@ -4,7 +4,7 @@ let campaignBootstrapPromise = null;
 let availableCampaigns = [];
 let activeProfile = null;
 let pendingPasswordRecovery = false;
-const CAMPAIGN_PASSWORD_RECOVERY_REDIRECT_URL = "https://mrmalum.github.io/waymark-codex/";
+const CAMPAIGN_PASSWORD_RECOVERY_REDIRECT_URL = "https://waymarkcodex.com/";
 let campaignPasswordRecoveryLinkDetected = /passwordRecovery=1|(?:type|event)=password_recovery|(?:type|event)=recovery/i
   .test(`${window.location.search || ""}${window.location.hash || ""}`);
 const pendingMemberRoleChanges = new Map();
