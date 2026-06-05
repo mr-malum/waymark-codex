@@ -2,33 +2,6 @@
    APP EVENT WIRING
    ========================================================= */
 
-const HEX_GRID_MIN = 300;
-const HEX_GRID_MAX = 350;
-
-const generatedTerrainColors = {
-  deep_sea: "#0b263a",
-  sea: "#245f82",
-  coastal_water: "#4a91ab",
-  inland_water: "#79b8c8",
-  beach: "#dbc487",
-  plains: "#c1b06d",
-  grassland: "#8fa75f",
-  lush_grassland: "#4e7b45",
-  wetland: "#3d6856",
-  jungle_floor: "#3E855A",
-  desert: "#d4b36f",
-  deep_desert: "#b88955",
-  barrens: "#a56545",
-  bleak_barrens: "#7d4335",
-  snow: "#dce5e6",
-  rock: "#756e66",
-  wastes: "#453232"
-};
-
-const hexOverlayLayer = L.layerGroup().addTo(map);
-const generatedCoordinateLabelLayer = L.layerGroup().addTo(map);
-const GENERATED_COORDINATE_LABEL_MIN_ZOOM = -0.75;
-
 let retroCodexSequence = "";
 let codexLongPressTimer = null;
 let suppressNextCodexClick = false;
@@ -94,114 +67,12 @@ window.openCodexNavPocket = openCodexNavPocket;
 window.isCodexNavPocketOpen = isCodexNavPocketOpen;
 
 function initializeHexGrid() {
-  hexOverlayLayer.clearLayers();
-  generatedCoordinateLabelLayer.clearLayers();
-
   if (isGeneratedMapCampaign() && db?.raw?.hexes?.length) {
     window.generatedMapRenderer?.renderFromDatabase();
     return;
   }
 
   window.generatedMapRenderer?.deactivate();
-  updateGeneratedCoordinateLabelVisibility();
-
-  for (let xxx = HEX_GRID_MIN; xxx < HEX_GRID_MAX; xxx++) {
-    for (let yyy = HEX_GRID_MIN; yyy < HEX_GRID_MAX; yyy++) {
-      createHexOverlay(xxx, yyy);
-    }
-  }
-}
-
-function createHexOverlay(xxx, yyy) {
-  const { x, y } = getHexCenter(xxx, yyy);
-  const hexId = `${xxx}:${yyy}`;
-
-  const hex = L.polygon(
-    makeHex(x, y, hexWidth, hexHeight),
-    defaultStyle
-  ).addTo(hexOverlayLayer);
-
-  hex.__codexBaseStyle = defaultStyle;
-
-  bindHexEvents(hex, hexId);
-}
-
-function updateGeneratedCoordinateLabelVisibility() {
-  const mapElement = document.getElementById("map");
-  if (!mapElement) return;
-
-  mapElement.classList.toggle(
-    "generated-coordinate-labels-visible",
-    isGeneratedMapCampaign() && map.getZoom() >= GENERATED_COORDINATE_LABEL_MIN_ZOOM
-  );
-}
-
-function getGeneratedHexStyle(hexRecord) {
-  const fillColor = generatedTerrainColors[hexRecord?.Base_Terrain] || "#7f7a66";
-
-  return {
-    color: "#f7ead0",
-    weight: 1.4,
-    opacity: 0.55,
-    fillColor,
-    fillOpacity: 0.88,
-    className: "hex-glow"
-  };
-}
-
-function getGeneratedHexCoordinates(hexRecord) {
-  return parseMapHexId(hexRecord?.Map_XY || hexRecord?.Hex_ID);
-}
-
-function createGeneratedHexOverlay(hexRecord) {
-  const coordinates = getGeneratedHexCoordinates(hexRecord);
-  if (!coordinates) return;
-
-  const center = getGeneratedHexCenter(coordinates.x, coordinates.y);
-  const dimensions = getGeneratedMapDimensions();
-  const style = getGeneratedHexStyle(hexRecord);
-  const hex = L.polygon(
-    makeHex(center.x, center.y, dimensions.radius, dimensions.hexHeight),
-    style
-  ).addTo(hexOverlayLayer);
-
-  createGeneratedCoordinateLabel(hexRecord, center);
-
-  hex.__codexBaseStyle = style;
-  hex.__codexHoverStyle = {
-    ...style,
-    opacity: 0.85,
-    fillOpacity: 0.96,
-    weight: 2.2
-  };
-  hex.__codexSelectedStyle = {
-    ...style,
-    color: "#ffffff",
-    opacity: 1,
-    fillOpacity: 1,
-    weight: 3
-  };
-  bindHexEvents(hex, hexRecord.Hex_ID);
-}
-
-function createGeneratedCoordinateLabel(hexRecord, center) {
-  const label = hexRecord?.Map_XY || hexRecord?.Hex_ID || "";
-  if (!label) return;
-
-  L.marker([center.y, center.x], {
-    interactive: false,
-    icon: L.divIcon({
-      className: "generated-hex-coordinate-label",
-      html: `<span>${escapeHtml(label)}</span>`,
-      iconSize: [42, 10],
-      iconAnchor: [21, 5]
-    })
-  }).addTo(generatedCoordinateLabelLayer);
-}
-
-function initializeGeneratedHexGrid() {
-  (db?.raw?.hexes || []).forEach(createGeneratedHexOverlay);
-  updateGeneratedCoordinateLabelVisibility();
 }
 
 function renderHexGridForActiveCampaign() {
@@ -210,52 +81,8 @@ function renderHexGridForActiveCampaign() {
 
 window.renderHexGridForActiveCampaign = renderHexGridForActiveCampaign;
 window.addEventListener("campaign-database-loaded", renderHexGridForActiveCampaign);
-map.on("zoomend", updateGeneratedCoordinateLabelVisibility);
-
-function bindHexEvents(hex, hexId) {
-  hex.on("mouseover", function () {
-    if (!isTouchDevice && this !== selectedHex) {
-      this.setStyle(this.__codexHoverStyle || hoverStyle);
-    }
-  });
-
-  hex.on("mouseout", function () {
-    if (!isTouchDevice && this !== selectedHex) {
-      this.setStyle(this.__codexBaseStyle || defaultStyle);
-    }
-  });
-
-  hex.on("click", function (event) {
-    L.DomEvent.stopPropagation(event);
-
-    document
-      .getElementById("codex-button")
-      .classList.remove("codex-label-visible");
-
-    closePanel({ syncHistory: false });
-    selectHex(this);
-    selectedHexId = hexId;
-
-    this.bindPopup(buildMobilePopupHtml(hexId)).openPopup();
-  });
-}
 
 function bindMapEvents() {
-  map.on("click", function () {
-    closePanel();
-    map.closePopup();
-
-    document
-      .getElementById("codex-button")
-      .classList.remove("codex-label-visible");
-
-    clearSelectedHex();
-  });
-
-  map.on("popupclose", function () {
-    clearSelectedHex();
-  });
-
   document
     .getElementById("map-reset-button")
     .addEventListener("click", function (event) {
@@ -534,7 +361,7 @@ function handleCodexButtonClick(event) {
 
   const codexButton = document.getElementById("codex-button");
 
-  map.closePopup();
+  window.generatedMapRenderer?.closePopup?.();
 
   if (isTouchDevice && !codexButton.classList.contains("codex-label-visible")) {
     codexButton.classList.add("codex-label-visible");
@@ -542,7 +369,7 @@ function handleCodexButtonClick(event) {
   }
 
   codexButton.classList.remove("codex-label-visible");
-  resetMapToAtlasView();
+  closePanel({ syncHistory: false });
   resetCodexToIndex();
 }
 

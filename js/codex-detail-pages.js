@@ -499,6 +499,21 @@ function renderCodexUpperListPanel(title, rows, emptyText, type, idField, getLab
   `;
 }
 
+function renderCodexZoomToAction(hexId) {
+  const cleanHexId = String(hexId || "").trim();
+  if (!cleanHexId) return "";
+
+  return `
+    <button
+      class="codex-detail-zoom-to-button"
+      type="button"
+      onclick="zoomToHexFromCodex('${escapeJsString(cleanHexId)}')"
+    >
+      Zoom To
+    </button>
+  `;
+}
+
 function renderCodexHexPage(hexId) {
   const hex = db?.hexesById?.[hexId];
   const region = hex?.Region_ID_Ref ? db?.regionsById?.[hex.Region_ID_Ref] : null;
@@ -533,6 +548,9 @@ function renderCodexHexPage(hexId) {
               : escapeHtml(hex?.Political_Region_ID_Ref || "Unknown")
           }</p>
         ` : ""}
+      </div>
+      <div class="codex-detail-overview-action-row">
+        ${renderCodexZoomToAction(hexId)}
       </div>
     </section>
   `;
@@ -766,7 +784,10 @@ function renderCodexPoiPage(poiId) {
     <section class="codex-detail-overview-panel codex-detail-overview-section">
       <h3>Overview</h3>
       <div class="codex-detail-fixed codex-detail-fixed-poi">
-        <div class="codex-detail-portrait-slot ${placeholderClass}" ${renderImageStyle(imageUrl, imageKind)}></div>
+        <div class="codex-detail-portrait-action-stack">
+          <div class="codex-detail-portrait-slot ${placeholderClass}" ${renderImageStyle(imageUrl, imageKind)}></div>
+          ${renderCodexZoomToAction(hexId)}
+        </div>
 
         <div class="codex-detail-meta">
           <p><strong>Type:</strong> ${escapeHtml(poi?.POI_Type || "Unknown")}</p>

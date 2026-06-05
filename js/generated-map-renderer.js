@@ -116,9 +116,10 @@
     falls: 0
   };
 
-  const MIN_ZOOM = 0.25;
+  const MIN_ZOOM = 0.16;
   const MAX_ZOOM = 1.25;
-  const ZOOM_STEPS = [0.25, 0.5, 0.85, 1.25];
+  const ZOOM_STEPS = [0.16, 0.25, 0.5, 0.85, 1.25];
+  const FEATURE_GROUP_MAX_ZOOM = 0.25;
   const REGION_LABEL_REFERENCE_ZOOM = 0.85;
   const COORD_LABEL_MIN_ZOOM = 0.6;
   const PAN_PADDING_RATIO = 0.45;
@@ -160,10 +161,11 @@
   }));
   const EDGE_NAMES = ["E", "SE", "SW", "W", "NW", "NE"];
   const UNCLAIMED_REGION_REF = "REG-0000";
-  const DRAWABLE_OVERLAY_TYPES = new Set(["road", "river", "sea_route", "path", "wall", "mist", "farmland", "region", "unregion", "political-region", "clear-political-region", "erase", "terrain", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper"]);
+  const DRAWABLE_OVERLAY_TYPES = new Set(["road", "river", "sea_route", "path", "wall", "mist", "farmland", "region", "unregion", "political-region", "clear-political-region", "erase", "terrain", "terrain-fill", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper"]);
   const HEX_STYLE_OVERLAY_TYPES = new Set(["wall", "mist", "farmland"]);
   const REGION_PAINT_TYPES = new Set(["region", "unregion", "political-region", "clear-political-region"]);
   const PATH_OVERLAY_TYPES = new Set(["road", "river", "sea_route", "path"]);
+  const CARTOGRAPHER_MANUAL_PAINT_TOOLS = new Set(["terrain", "terrain-fill", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper"]);
   const OVERLAY_TYPE_LABELS = {
     road: "roads",
     river: "rivers",
@@ -244,7 +246,7 @@
       copy: "Brush compatible terrain features with density and noise."
     },
     overlay: {
-      title: "Overlay",
+      title: "Overlays",
       copy: "Draw roads, rivers, paths, walls, mist, and farmland directly onto the saved map."
     },
     pois: {
@@ -497,7 +499,9 @@
       lastX: 0,
       lastY: 0,
       zoomAnimationFrame: null,
+      panAnimationFrame: null,
       animatingZoom: false,
+      featureRenderMode: "",
       wheelLockedUntil: 0,
       routeLabelsHiddenUntil: 0,
       routeLabelRestoreTimer: null,
@@ -696,6 +700,7 @@
     renderer.root.addEventListener("pointerleave", clearEditorBrushHover);
     renderer.root.addEventListener("click", handleClick);
     renderer.root.addEventListener("contextmenu", event => event.preventDefault());
+    document.addEventListener("pointerdown", handleGeneratedPopupOutsidePointerDown, true);
     setupDrawControls();
     window.addEventListener("resize", () => {
       if (!isActive()) return;
@@ -1000,6 +1005,7 @@
     const poiGenerationResetSliders = document.getElementById("map-poi-generation-reset-sliders");
     const poiGenerationReplaceGenerated = document.getElementById("map-poi-generation-replace-generated");
     const generationResetSliders = document.getElementById("map-generation-reset-sliders");
+    const generationOverlayResetSliders = document.getElementById("map-generation-reset-overlay-sliders");
     const generationPreviewTerrain = document.getElementById("map-generation-preview-terrain");
     const sharedApplyButton = document.getElementById("map-editor-apply-staged");
     const sharedDiscardButton = document.getElementById("map-editor-discard-staged");
@@ -1139,7 +1145,7 @@
         if (getSurveyorMode() === "generation") {
           setSurveyorGenerationSection("pois");
         } else {
-          setSurveyorManualSection("overlay");
+          setSurveyorManualSection("regions");
         }
       } else {
         setCartographerSection("terrain");
@@ -1153,7 +1159,7 @@
         if (getSurveyorMode() === "generation") {
           setSurveyorGenerationSection("regions");
         } else {
-          setSurveyorManualSection("regions");
+          setSurveyorManualSection("overlay");
         }
       } else {
         setCartographerSection("features");
@@ -1490,6 +1496,12 @@
       resetGenerationTerrainSliders();
     });
 
+    generationOverlayResetSliders?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      resetGenerationOverlaySliders();
+    });
+
     poiGenerationResetSliders?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -1788,6 +1800,9 @@
       renderer.drawing.generationSection = getCartographerSection();
     }
     setMapToolsMode("cartographer");
+    if (getCartographerMode() === "manual") {
+      activateDefaultCartographerManualTool();
+    }
   }
 
   function setCartographerSection(section) {
@@ -1796,6 +1811,8 @@
     renderer.drawing.cartographerSection = ["terrain", "features"].includes(section) ? section : "terrain";
     if (getCartographerMode() !== "manual") {
       renderer.drawing.generationSection = getCartographerSection();
+    } else {
+      activateDefaultCartographerManualTool({ skipReset: true });
     }
     setMapToolsMode("cartographer");
   }
@@ -1951,20 +1968,20 @@
     }
     if (paintButton) {
       paintButton.hidden = false;
-      paintButton.textContent = mode === "cartographer" ? "Terrain" : surveyorMode === "generation" ? "POIs" : "Overlays";
+      paintButton.textContent = mode === "cartographer" ? "Terrain" : surveyorMode === "generation" ? "POIs" : "Regions";
       paintButton.classList.toggle("active",
         mode === "cartographer"
           ? section === "terrain"
-          : surveyorMode === "generation" ? section === "pois" : section === "overlay"
+          : surveyorMode === "generation" ? section === "pois" : section === "regions"
       );
     }
     if (generateButton) {
       generateButton.hidden = false;
-      generateButton.textContent = mode === "cartographer" ? "Features" : "Regions";
+      generateButton.textContent = mode === "cartographer" ? "Features" : surveyorMode === "generation" ? "Regions" : "Overlays";
       generateButton.classList.toggle("active",
         mode === "cartographer"
           ? section === "features"
-          : section === "regions"
+          : surveyorMode === "generation" ? section === "regions" : section === "overlay"
       );
     }
     if (purgeButton) {
@@ -1981,10 +1998,17 @@
       : mode === "surveyor"
       ? MAP_EDIT_SECTION_COPY.surveyor
       : MAP_EDIT_SECTION_COPY.cartographer;
-    const detailMeta = MAP_EDIT_SECTION_COPY[section] || null;
+    let detailSection = section;
+    if (section === "generation") {
+      const generationSection = renderer.drawing.generationSection || "terrain";
+      detailSection = generationSection === "overlays" ? "overlay" : generationSection;
+    }
+    const detailMeta = MAP_EDIT_SECTION_COPY[detailSection] || null;
     const heading = document.getElementById("map-edit-section-heading");
     const copy = document.getElementById("map-edit-section-copy");
     const kicker = document.querySelector(".map-edit-pane-kicker");
+    document.getElementById("map-surveyor-mode-help")?.toggleAttribute("hidden", mode !== "surveyor");
+    document.getElementById("map-cartographer-mode-help")?.toggleAttribute("hidden", mode !== "cartographer");
     if (kicker) kicker.textContent = mode === "surveyor" ? "Surveyor" : mode === "cartographer" ? "Cartographer" : "Hex Mapper";
     if (heading) heading.textContent = detailMeta?.title || meta.title;
     if (copy) copy.textContent = detailMeta?.copy || meta.copy;
@@ -2076,7 +2100,12 @@
     if (normalized === "surveyor") {
       syncSurveyorSectionFromMode();
     }
-    if (normalized === "cartographer") showMapEditorIntroIfNeeded();
+    if (normalized === "cartographer") {
+      showMapEditorIntroIfNeeded();
+      if (previousMode !== normalized && getCartographerMode() === "manual") {
+        activateDefaultCartographerManualTool({ skipReset: true });
+      }
+    }
     else {
       document.getElementById("map-editor-intro")?.classList.add("hidden");
       document.getElementById("map-editor-intro")?.setAttribute("aria-hidden", "true");
@@ -2135,6 +2164,7 @@
     }
     renderer.drawing.cartographerSection = normalized;
     setCartographerMode("manual");
+    activateDefaultCartographerManualTool({ skipReset: true });
     setMapToolsMode("cartographer");
   }
 
@@ -2284,15 +2314,25 @@
   }
 
   function setDrawTool(tool) {
+    setDrawToolSelection(tool, { toggle: true });
+  }
+
+  function setDrawToolSelection(tool, options = {}) {
     if (!DRAWABLE_OVERLAY_TYPES.has(tool)) return;
-    renderer.drawing.tool = renderer.drawing.tool === tool ? "" : tool;
-    resetDrawingState();
+    const nextTool = options.toggle && renderer.drawing.tool === tool ? "" : tool;
+    renderer.drawing.tool = nextTool;
+    if (!options.skipReset) resetDrawingState();
     updateDrawToolButtons();
     updateDrawRegionControls();
     updateDrawStyleControls();
     syncMapInteractionCursor();
     updateDrawHint();
     renderSvgOnly();
+  }
+
+  function activateDefaultCartographerManualTool(options = {}) {
+    const tool = getCartographerSection() === "features" ? "feature" : "terrain";
+    setDrawToolSelection(tool, { ...options, toggle: false });
   }
 
   function clearDrawTool() {
@@ -2511,6 +2551,7 @@
     closeNamedRoutesMenu();
     clearPendingDrawingState({ commitBatch: false });
     cancelZoomAnimation();
+    cancelPanAnimation();
     clearRouteLabelRestoreTimer();
     renderer.view.touchPointers.clear();
     renderer.view.pinching = false;
@@ -2758,6 +2799,11 @@
 
   function syncMapInteractionCursor() {
     renderer.root?.classList.toggle("generated-map-wall-brush-active", Boolean(renderer.drawing.enabled && renderer.drawing.tool === "wall"));
+    renderer.root?.classList.toggle("generated-map-editor-brush-active", Boolean(
+      renderer.drawing.enabled &&
+      (renderer.drawing.toolsMode || "chooser") === "cartographer" &&
+      CARTOGRAPHER_MANUAL_PAINT_TOOLS.has(renderer.drawing.tool)
+    ));
   }
 
   function updateDrawRegionControls() {
@@ -2895,10 +2941,12 @@
     const wallSizeValue = document.getElementById("map-wall-size-value");
     const wallShapeRow = document.getElementById("map-wall-shape-row");
     const wallShapeInput = document.getElementById("map-wall-shape");
+    const roadOptionsHelpRow = document.getElementById("map-road-options-help-row");
     const roadOverrideRow = document.getElementById("map-road-water-override-row");
     const roadOverrideInput = document.getElementById("map-road-water-override");
     const autoPassRow = document.getElementById("map-road-auto-pass-row");
     const autoPassInput = document.getElementById("map-road-auto-pass");
+    const riverOptionsHelpRow = document.getElementById("map-river-options-help-row");
     const autoFallsRow = document.getElementById("map-river-auto-falls-row");
     const autoFallsInput = document.getElementById("map-river-auto-falls");
     const riverWaterPullRow = document.getElementById("map-river-water-pull-row");
@@ -2950,12 +2998,14 @@
     if (wallSizeValue) wallSizeValue.textContent = String(renderer.drawing.wallSize || wallMinSize);
     if (wallShapeRow) wallShapeRow.hidden = !isWallTool || wallMode !== "shape";
     if (wallShapeInput) wallShapeInput.value = getValidWallShape(renderer.drawing.wallShape);
+    if (roadOptionsHelpRow) roadOptionsHelpRow.hidden = renderer.drawing.tool !== "road";
     if (roadOverrideRow) roadOverrideRow.hidden = renderer.drawing.tool !== "road";
     if (roadOverrideInput) roadOverrideInput.checked = Boolean(renderer.drawing.roadWaterOverride);
     if (autoPassRow) autoPassRow.hidden = renderer.drawing.tool !== "road";
     if (autoPassInput) autoPassInput.checked = renderer.drawing.autoPass !== false;
     const isRiverTool = renderer.drawing.tool === "river";
     const riverMajorTrade = isRiverTool && currentRouteMajor;
+    if (riverOptionsHelpRow) riverOptionsHelpRow.hidden = !isRiverTool;
     if (autoFallsRow) autoFallsRow.hidden = !isRiverTool;
     if (autoFallsInput) {
       autoFallsInput.disabled = riverMajorTrade;
@@ -3052,7 +3102,7 @@
   }
 
   function refreshEditorBrushPreview() {
-    if (!["terrain", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper", "region", "unregion", "political-region", "clear-political-region"].includes(renderer.drawing.tool) || !renderer.drawing.hoverBrushHexIds?.length) return;
+    if (!["terrain", "terrain-fill", "terrain-eyedropper", "feature", "feature-erase", "feature-eyedropper", "region", "unregion", "political-region", "clear-political-region"].includes(renderer.drawing.tool) || !renderer.drawing.hoverBrushHexIds?.length) return;
     const centerHex = hexForPathPoint(renderer.drawing.hoverBrushHexIds[0]);
     renderer.drawing.hoverBrushHexIds = centerHex ? getEditorBrushHexIds(centerHex) : [];
   }
@@ -3115,6 +3165,9 @@
         event.preventDefault();
         event.stopPropagation();
         setTerrainBase(button.dataset.mapTerrainBase || "plains");
+        if ((renderer.drawing.toolsMode || "chooser") === "cartographer" && getCartographerMode() === "manual" && getCartographerSection() === "terrain") {
+          setDrawToolSelection("terrain", { toggle: false });
+        }
         if (isMobileEditorLayout()) setMobileTerrainTab("elevation");
       });
     });
@@ -3133,6 +3186,9 @@
           const nextBrush = button.dataset.mapFeatureBrush || "generated";
           if (nextBrush === "chaos" && !renderer.drawing.featureChaosEnabled) return;
           renderer.drawing.featureBrush = nextBrush;
+          if ((renderer.drawing.toolsMode || "chooser") === "cartographer" && getCartographerMode() === "manual" && getCartographerSection() === "features") {
+            setDrawToolSelection("feature", { toggle: false });
+          }
           updateTerrainControls();
           renderSvgOnly();
         });
@@ -3282,6 +3338,7 @@
     const poiGenerationResetSliders = document.getElementById("map-poi-generation-reset-sliders");
     const poiGenerationReplaceGenerated = document.getElementById("map-poi-generation-replace-generated");
     const generationResetSliders = document.getElementById("map-generation-reset-sliders");
+    const generationOverlayResetSliders = document.getElementById("map-generation-reset-overlay-sliders");
     const generationPreviewTerrain = document.getElementById("map-generation-preview-terrain");
     const sharedApplyButton = document.getElementById("map-editor-apply-staged");
     const sharedDiscardButton = document.getElementById("map-editor-discard-staged");
@@ -3333,6 +3390,7 @@
       poiGenerationReplaceGenerated.disabled = Boolean(renderer.drawing.saving);
     }
     if (generationResetSliders) generationResetSliders.disabled = Boolean(renderer.drawing.saving);
+    if (generationOverlayResetSliders) generationOverlayResetSliders.disabled = Boolean(renderer.drawing.saving);
     document.querySelectorAll("[data-generation-random-seed], [data-generation-discard-section]").forEach(button => {
       button.disabled = Boolean(renderer.drawing.saving);
     });
@@ -3408,6 +3466,19 @@
       generationResourceAmount: 100,
       generationWaypointAmount: 100,
       generationStrongholdAmount: 100
+    });
+    updateGenerationControls();
+  }
+
+  function resetGenerationOverlaySliders() {
+    Object.assign(renderer.drawing, {
+      generationRoadAmount: 100,
+      generationRoadLength: 100,
+      generationIncludePaths: true,
+      generationIncludeTradeRoutes: false,
+      generationRiverAmount: 100,
+      generationRiverLength: 100,
+      generationRiverWildcards: 100
     });
     updateGenerationControls();
   }
@@ -3938,8 +4009,12 @@
       hint.textContent = "Paint base terrain with brush size, noise, and optional generated features.";
       return;
     }
+    if (tool === "terrain-fill") {
+      hint.textContent = "Fill the connected patch of matching base terrain from the clicked hex.";
+      return;
+    }
     if (tool === "terrain-eyedropper") {
-      hint.textContent = "Pick a hex to copy its base terrain, features, and elevation into the editor.";
+      hint.textContent = "Pick a hex to copy its base terrain. Elevation stays Auto.";
       return;
     }
     if (tool === "feature") {
@@ -4109,14 +4184,23 @@
     return { width: rect.width, height: rect.height, scale };
   }
 
-  function fitViewToMap() {
+  function fitViewToMap(options = {}) {
     const rect = renderer.root.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
 
     const fitZoom = Math.min(rect.width / renderer.view.width, rect.height / renderer.view.height);
-    renderer.view.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, fitZoom));
-    renderer.view.panX = (renderer.view.width - rect.width / renderer.view.zoom) / 2;
-    renderer.view.panY = (renderer.view.height - rect.height / renderer.view.zoom) / 2;
+    const targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, fitZoom));
+    const targetPanX = (renderer.view.width - rect.width / targetZoom) / 2;
+    const targetPanY = (renderer.view.height - rect.height / targetZoom) / 2;
+
+    if (options.animate) {
+      animateViewTo(targetZoom, targetPanX, targetPanY);
+      return;
+    }
+
+    renderer.view.zoom = targetZoom;
+    renderer.view.panX = targetPanX;
+    renderer.view.panY = targetPanY;
     clampView();
   }
 
@@ -4153,6 +4237,7 @@
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.clearRect(0, 0, width, height);
     const deferOverlayCaches = shouldDeferOverlayCacheRefresh();
+    syncFeatureRenderMode();
     updateTerrainCache(visibleHexes);
     updateFeatureCache();
     // Heavy live overlays should not block the first terrain/feature paint on dense maps.
@@ -4244,6 +4329,13 @@
     renderer.cacheDirty = false;
   }
 
+  function syncFeatureRenderMode() {
+    const nextMode = getFeatureRenderMode();
+    if (renderer.view.featureRenderMode === nextMode) return;
+    renderer.view.featureRenderMode = nextMode;
+    renderer.featureCacheDirty = true;
+  }
+
   function updateRouteCache() {
     const cacheWidth = Math.max(1, Math.ceil(renderer.view.width * TERRAIN_CACHE_SCALE));
     const cacheHeight = Math.max(1, Math.ceil(renderer.view.height * TERRAIN_CACHE_SCALE));
@@ -4276,6 +4368,10 @@
       renderer.featureCacheDirty = true;
     }
 
+    if (getFeatureRenderMode().startsWith("group") && renderer.drawing.terrainDirtyHexIds.size) {
+      renderer.featureCacheDirty = true;
+    }
+
     if (!renderer.featureCacheDirty && !renderer.drawing.terrainDirtyHexIds.size) return;
 
     const ctx = renderer.featureCacheCtx;
@@ -4283,8 +4379,8 @@
     if (renderer.featureCacheDirty) {
       ctx.clearRect(0, 0, renderer.view.width, renderer.view.height);
       renderer.hexes.forEach(hex => renderEdgeBleedForHex(ctx, hex));
-      if (renderer.drawing.visibleOverlays.features && shouldRenderFeatureArt()) {
-        renderer.hexes.forEach(hex => renderFeatureArtForHex(ctx, hex));
+      if (renderer.drawing.visibleOverlays.features) {
+        renderFeatureLayer(ctx, renderer.hexes);
       }
     } else {
       const dirtyBounds = getTerrainDirtyBounds();
@@ -4307,8 +4403,8 @@
         dirtyBounds.bottom - dirtyBounds.top
       );
       patchHexes.forEach(hex => renderEdgeBleedForHex(ctx, hex));
-      if (renderer.drawing.visibleOverlays.features && shouldRenderFeatureArt()) {
-        patchHexes.forEach(hex => renderFeatureArtForHex(ctx, hex));
+      if (renderer.drawing.visibleOverlays.features) {
+        renderFeatureLayer(ctx, patchHexes);
       }
       ctx.restore();
     }
@@ -4627,11 +4723,16 @@
     if (delta <= 0) return null;
 
     const elevationStep = Math.max(0, delta - 1);
-    const shadowOpacity = Math.min(0.28, 0.14 + elevationStep * 0.045);
+    const shadowOpacity = Math.min(0.28, 0.14 + elevationStep * 0.045) * getElevationBleedOpacityScale();
     return {
       fill: "#201712",
       opacity: Number(shadowOpacity.toFixed(3))
     };
+  }
+
+  function getElevationBleedOpacityScale() {
+    if (renderer.view.zoom > FEATURE_GROUP_MAX_ZOOM) return 1;
+    return 0.76 - getFeatureGroupCompactness() * 0.22;
   }
 
   function isWaterBase(baseTerrain) {
@@ -4892,6 +4993,292 @@
       if (fill !== "none") element.setAttribute("fill", "currentColor");
       if (stroke && stroke !== "none") element.setAttribute("stroke", "currentColor");
     });
+  }
+
+  function renderFeatureLayer(ctx, hexes) {
+    const mode = getFeatureRenderMode();
+    if (mode.startsWith("group")) {
+      renderGroupedFeatureArt(ctx, hexes);
+      return;
+    }
+    if (!shouldRenderFeatureArt()) return;
+    hexes.forEach(hex => renderFeatureArtForHex(ctx, hex));
+  }
+
+  function getFeatureRenderMode() {
+    if (renderer.view.zoom <= 0.18) return "group-far";
+    if (renderer.view.zoom <= 0.21) return "group-mid";
+    if (renderer.view.zoom <= FEATURE_GROUP_MAX_ZOOM + 0.001) return "group-near";
+    return "detail";
+  }
+
+  function renderGroupedFeatureArt(ctx, hexes) {
+    if (!shouldRenderFeatureArt()) return;
+    getFeatureArtGroups(hexes).forEach(group => {
+      const items = getGroupedFeatureItems(group);
+      items.forEach((item, index) => renderGroupedFeatureIcon(ctx, group, item, index, items.length));
+    });
+  }
+
+  function getFeatureArtGroups(hexes) {
+    const bucketSize = getFeatureGroupBucketSize();
+    const groups = new Map();
+
+    hexes.forEach(hex => {
+      const stack = getFeatureArtStack(hex);
+      if (!stack.length) return;
+      const bucketX = Math.floor(Number(hex.x || 0) / bucketSize);
+      const bucketY = Math.floor(Number(hex.y || 0) / bucketSize);
+      const key = `${bucketX}:${bucketY}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          key,
+          count: 0,
+          centerX: 0,
+          centerY: 0,
+          families: new Map()
+        };
+        groups.set(key, group);
+      }
+
+      group.count += 1;
+      group.centerX += hex.center.x;
+      group.centerY += hex.center.y;
+      stack.forEach(item => addGroupedFeatureItem(group, hex, item));
+    });
+
+    return [...groups.values()]
+      .filter(group => group.count > 0 && group.families.size > 0)
+      .map(group => ({
+        ...group,
+        centerX: group.centerX / group.count,
+        centerY: group.centerY / group.count
+      }));
+  }
+
+  function addGroupedFeatureItem(group, hex, item) {
+    const family = getFeatureGroupFamily(item.featureId);
+    if (!family) return;
+    let familyEntry = group.families.get(family);
+    if (!familyEntry) {
+      familyEntry = {
+        family,
+        count: 0,
+        priority: getFeatureGroupPriority(family),
+        biomes: new Map()
+      };
+      group.families.set(family, familyEntry);
+    }
+
+    familyEntry.count += 1;
+    const biomeKey = getFeatureGroupBiomeKey(hex, item);
+    let biomeEntry = familyEntry.biomes.get(biomeKey);
+    if (!biomeEntry) {
+      biomeEntry = {
+        family,
+        biomeKey,
+        count: 0,
+        centerX: 0,
+        centerY: 0,
+        minX: Infinity,
+        maxX: -Infinity,
+        minY: Infinity,
+        maxY: -Infinity,
+        hexes: [],
+        features: new Map()
+      };
+      familyEntry.biomes.set(biomeKey, biomeEntry);
+    }
+
+    biomeEntry.count += 1;
+    biomeEntry.centerX += hex.center.x;
+    biomeEntry.centerY += hex.center.y;
+    biomeEntry.minX = Math.min(biomeEntry.minX, hex.center.x);
+    biomeEntry.maxX = Math.max(biomeEntry.maxX, hex.center.x);
+    biomeEntry.minY = Math.min(biomeEntry.minY, hex.center.y);
+    biomeEntry.maxY = Math.max(biomeEntry.maxY, hex.center.y);
+    biomeEntry.hexes.push(hex);
+
+    let featureEntry = biomeEntry.features.get(item.featureId);
+    if (!featureEntry) {
+      featureEntry = {
+        ...item,
+        count: 0,
+        hex
+      };
+      biomeEntry.features.set(item.featureId, featureEntry);
+    }
+    featureEntry.count += 1;
+    if (featureEntry.count === 1 || stableHash(`${hex.id}:${item.featureId}`) % featureEntry.count === 0) {
+      featureEntry.hex = hex;
+      featureEntry.file = item.file;
+    }
+  }
+
+  function getGroupedFeatureItems(group) {
+    const candidates = [...group.families.values()]
+      .map(family => {
+        const biome = [...family.biomes.values()]
+          .sort((a, b) => b.count - a.count)[0];
+        if (!biome) return null;
+        const feature = [...biome.features.values()]
+          .sort((a, b) => b.count - a.count || (FEATURE_LAYER_BY_ID[a.featureId] || 0) - (FEATURE_LAYER_BY_ID[b.featureId] || 0))[0];
+        return feature ? {
+          ...feature,
+          family: family.family,
+          biomeKey: biome.biomeKey,
+          groupCount: biome.count,
+          familyCount: family.count,
+          priority: family.priority,
+          centerX: biome.centerX / Math.max(1, biome.count),
+          centerY: biome.centerY / Math.max(1, biome.count),
+          spanX: Math.max(0, biome.maxX - biome.minX),
+          spanY: Math.max(0, biome.maxY - biome.minY),
+          hexes: biome.hexes
+        } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.groupCount * b.priority) - (a.groupCount * a.priority));
+
+    const topCount = candidates[0]?.groupCount || 0;
+    const compactness = getFeatureGroupCompactness();
+    const minCount = 2;
+    const dominanceFloor = 0.62 + compactness * 0.14;
+
+    return candidates
+      .filter((item, index) => index === 0 || (
+        item.groupCount >= minCount &&
+        item.groupCount >= topCount * dominanceFloor
+      ))
+      .slice(0, 2)
+      .sort((a, b) => (FEATURE_LAYER_BY_ID[a.featureId] || 0) - (FEATURE_LAYER_BY_ID[b.featureId] || 0));
+  }
+
+  function renderGroupedFeatureIcon(ctx, group, item, index, total) {
+    const image = getFeatureArtImage(item.file, getFeatureArtTint(item.hex, item), { type: "terrain", hexId: item.hex.id });
+    if (!image) return;
+
+    const box = getGroupedFeatureDrawBox(group, item, index, total);
+    ctx.save();
+    if (shouldClipGroupedFeatureIcon(item)) {
+      clipToGroupedFeatureHexes(ctx, item);
+    }
+    drawFeatureArtImage(ctx, image, applyFeatureArtSizeMultiplier(box, item.featureId), getGroupedFeatureOpacity(group, item));
+    ctx.restore();
+  }
+
+  function getFeatureGroupBucketSize() {
+    if (renderer.view.zoom <= 0.18) return 6;
+    if (renderer.view.zoom <= 0.21) return 5;
+    return 3;
+  }
+
+  function getGroupedFeatureDrawBox(group, item, index, total) {
+    const compactness = getFeatureGroupCompactness();
+    const anchor = getGroupedFeatureStackAnchor(group, item);
+    const sizeBase = index === 0 ? 94 : 74;
+    const radius = getGeneratedMapDimensions().radius;
+    const groupScale = 1.34 + compactness * 0.72;
+    const coverageSpan = Math.max(Number(item.spanX || 0), Number(item.spanY || 0)) + radius * (1.4 + compactness * 0.9);
+    const coverageSize = coverageSpan * (0.84 + compactness * 0.24);
+    const maxSize = radius * (6.2 + compactness * 3.8);
+    const size = Math.min(maxSize, Math.max(sizeBase * groupScale, coverageSize));
+    const offsetY = (index === 0 ? -46 : -34 + index * 8) * groupScale;
+    const seed = stableHash(`${group.key}:${item.featureId}`);
+    const jitter = radius * 0.06 * (1 - compactness);
+    const jitterX = ((seed % 7) - 3) * jitter * 0.12;
+    const jitterY = (((Math.floor(seed / 7) % 7) - 3) * jitter * 0.12);
+    const x = anchor.x - size / 2 + jitterX;
+    const y = anchor.y + offsetY - size / 2 + jitterY;
+
+    return {
+      x,
+      y,
+      width: size,
+      height: size
+    };
+  }
+
+  function getGroupedFeatureStackAnchor(group, item) {
+    return {
+      x: Number.isFinite(item.centerX) ? item.centerX : group.centerX,
+      y: Number.isFinite(item.centerY) ? item.centerY : group.centerY
+    };
+  }
+
+  function getFeatureGroupCompactness() {
+    return Math.max(0, Math.min(1, (FEATURE_GROUP_MAX_ZOOM - renderer.view.zoom) / Math.max(0.01, FEATURE_GROUP_MAX_ZOOM - MIN_ZOOM)));
+  }
+
+  function getGroupedFeatureOpacity(group, item) {
+    const compactness = getFeatureGroupCompactness();
+    const countBoost = Math.min(0.12, Math.max(0, (item.groupCount || group.count) - 1) * 0.018);
+    return Math.min(0.78, 0.68 - compactness * 0.16 + countBoost);
+  }
+
+  function getFeatureGroupFamily(featureId) {
+    if (["volcano", "snowcapped_mountains", "mountains", "lone_mountain", "cliffs", "ridges"].includes(featureId)) return "structure";
+    if (["jungle", "forest", "woods", "shrub", "cactus_scrub"].includes(featureId)) return "vegetation";
+    if (featureId === "ice") return "ice";
+    if (["falls", "rapids", "whirlpool", "water_rocks", "reef", "kelp", "shoals", "waves"].includes(featureId)) return "water";
+    if (featureId === "marsh") return "wetland";
+    if (["farmland", "sand"].includes(featureId)) return "surface";
+    return "";
+  }
+
+  function getFeatureGroupBiomeKey(hex, item) {
+    const family = getFeatureGroupFamily(item.featureId);
+    const base = hex?.baseTerrain || "";
+    if (family === "water") return "water";
+    if (family === "ice") return WATER_TERRAINS.has(base) ? "ice-water" : "ice-snow";
+    if (family === "structure") {
+      if (base === "snow") return "snow";
+      if (base === "rock") return "rock";
+      if (["desert", "deep_desert", "barrens", "bleak_barrens", "wastes"].includes(base)) return "arid-rough";
+      if (["plains", "grassland", "lush_grassland", "jungle_floor", "wetland"].includes(base)) return "green-rough";
+    }
+    if (family === "vegetation") {
+      if (["barrens", "bleak_barrens", "wastes"].includes(base)) return "dead-vegetation";
+      if (base === "snow" || base === "rock") return "cold-vegetation";
+      if (base === "jungle_floor") return "jungle";
+      if (["wetland", "lush_grassland"].includes(base)) return "wet-green";
+      if (["desert", "deep_desert"].includes(base)) return "dry-vegetation";
+      return "green";
+    }
+    if (family === "wetland") return "wetland";
+    if (family === "surface") return base || "surface";
+    return base || family || "feature";
+  }
+
+  function shouldClipGroupedFeatureIcon(item) {
+    return item?.family === "water" || item?.biomeKey === "ice-water";
+  }
+
+  function clipToGroupedFeatureHexes(ctx, item) {
+    if (!Array.isArray(item.hexes) || !item.hexes.length) return;
+    ctx.beginPath();
+    item.hexes.forEach(hex => {
+      const points = hex?.points || [];
+      if (points.length < 3) return;
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let index = 1; index < points.length; index += 1) {
+        ctx.lineTo(points[index].x, points[index].y);
+      }
+      ctx.closePath();
+    });
+    ctx.clip();
+  }
+
+  function getFeatureGroupPriority(family) {
+    return {
+      structure: 1.36,
+      vegetation: 1.18,
+      ice: 1.16,
+      wetland: 1.05,
+      water: 1,
+      surface: 0.82
+    }[family] || 1;
   }
 
   function renderFeatureArtForHex(ctx, hex) {
@@ -5279,6 +5666,7 @@
     const gridPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
     gridPath.setAttribute("class", "generated-map-grid-lines");
     gridPath.setAttribute("d", buildGridPath(visibleHexes));
+    gridPath.setAttribute("opacity", String(getGridLineOpacity()));
     fragment.appendChild(gridPath);
 
     renderGeographicRegionOverlay(fragment, visibleHexes);
@@ -5293,18 +5681,30 @@
       renderRouteLabels(fragment);
     }
 
-    const activeHex = hexForPathPoint(renderer.hoveredHexId) || hexForPathPoint(renderer.selectedHexId);
-    if (activeHex) {
-      const selected = activeHex.id === renderer.selectedHexId;
+    const selectedHex = hexForPathPoint(renderer.selectedHexId);
+    if (selectedHex) {
       const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-      polygon.setAttribute("class", selected ? "generated-map-selected-hex" : "generated-map-hovered-hex");
-      polygon.setAttribute("points", activeHex.points.map(point => `${point.x},${point.y}`).join(" "));
+      polygon.setAttribute("class", "generated-map-selected-hex");
+      polygon.setAttribute("points", selectedHex.points.map(point => `${point.x},${point.y}`).join(" "));
+      fragment.appendChild(polygon);
+    }
+
+    const hoveredHex = hexForPathPoint(renderer.hoveredHexId);
+    if (hoveredHex && hoveredHex.id !== renderer.selectedHexId) {
+      const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      polygon.setAttribute("class", "generated-map-hovered-hex");
+      polygon.setAttribute("points", hoveredHex.points.map(point => `${point.x},${point.y}`).join(" "));
       fragment.appendChild(polygon);
     }
 
     renderDrawingGuides(fragment, visibleHexes);
 
     renderer.svg.appendChild(fragment);
+  }
+
+  function getGridLineOpacity() {
+    if (renderer.view.zoom > FEATURE_GROUP_MAX_ZOOM) return 1;
+    return 0.42 - getFeatureGroupCompactness() * 0.24;
   }
 
   function renderCoordinateLabels(fragment, visibleHexes) {
@@ -5523,7 +5923,7 @@
       renderMistBrushPreview(fragment, visibleHexes, renderer.drawing.tool);
     }
 
-    if ((renderer.drawing.tool === "terrain" || renderer.drawing.tool === "terrain-eyedropper" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase" || renderer.drawing.tool === "feature-eyedropper" || REGION_PAINT_TYPES.has(renderer.drawing.tool)) && renderer.drawing.hoverBrushHexIds?.length) {
+    if ((renderer.drawing.tool === "terrain" || renderer.drawing.tool === "terrain-fill" || renderer.drawing.tool === "terrain-eyedropper" || renderer.drawing.tool === "feature" || renderer.drawing.tool === "feature-erase" || renderer.drawing.tool === "feature-eyedropper" || REGION_PAINT_TYPES.has(renderer.drawing.tool)) && renderer.drawing.hoverBrushHexIds?.length) {
       renderEditorBrushPreview(fragment, visibleHexes);
     }
 
@@ -8294,6 +8694,7 @@
     const targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nextZoom));
     if (Math.abs(targetZoom - startZoom) < 0.0001) return;
 
+    cancelPanAnimation();
     cancelZoomAnimation();
 
     const rect = renderer.root.getBoundingClientRect();
@@ -8343,6 +8744,56 @@
       renderer.view.zoomAnimationFrame = null;
     }
     renderer.view.animatingZoom = false;
+  }
+
+  function cancelPanAnimation() {
+    if (renderer.view.panAnimationFrame) {
+      cancelAnimationFrame(renderer.view.panAnimationFrame);
+      renderer.view.panAnimationFrame = null;
+    }
+  }
+
+  function animateViewTo(targetZoom, targetPanX, targetPanY) {
+    cancelPanAnimation();
+    cancelZoomAnimation();
+
+    const startZoom = renderer.view.zoom;
+    const startPanX = renderer.view.panX;
+    const startPanY = renderer.view.panY;
+    const zoomDistance = Math.abs(targetZoom - startZoom) * 420;
+    const panDistance = Math.hypot(
+      (targetPanX - startPanX) * startZoom,
+      (targetPanY - startPanY) * startZoom
+    );
+    const duration = Math.max(420, Math.min(820, Math.max(panDistance * 0.45, zoomDistance)));
+    const startedAt = performance.now();
+    renderer.view.animatingZoom = Math.abs(targetZoom - startZoom) > 0.0001;
+
+    function step(now) {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = easeOutCubic(progress);
+
+      renderer.view.zoom = startZoom + (targetZoom - startZoom) * eased;
+      renderer.view.panX = startPanX + (targetPanX - startPanX) * eased;
+      renderer.view.panY = startPanY + (targetPanY - startPanY) * eased;
+      clampView();
+      render();
+
+      if (progress < 1) {
+        renderer.view.panAnimationFrame = requestAnimationFrame(step);
+        return;
+      }
+
+      renderer.view.panAnimationFrame = null;
+      renderer.view.animatingZoom = false;
+      renderer.view.zoom = targetZoom;
+      renderer.view.panX = targetPanX;
+      renderer.view.panY = targetPanY;
+      clampView();
+      render();
+    }
+
+    renderer.view.panAnimationFrame = requestAnimationFrame(step);
   }
 
   function shouldRenderRouteLabels() {
@@ -8433,6 +8884,7 @@
     if (!first || !second) return;
 
     cancelZoomAnimation();
+    cancelPanAnimation();
 
     const rect = renderer.root.getBoundingClientRect();
     const midpoint = getPointerMidpoint(first, second);
@@ -8494,6 +8946,7 @@
     }
 
     cancelZoomAnimation();
+    cancelPanAnimation();
 
     if (renderer.drawing.enabled && (event.pointerType === "touch" || event.button === 1 || event.button === 2)) {
       beginTouchDrawIntent(event);
@@ -8539,6 +8992,7 @@
 
     if (renderer.drawing.touchDrawArmed && event.pointerId === renderer.drawing.touchDrawPointerId) {
       event.preventDefault();
+      if (renderer.drawing.tool === "terrain-fill") return;
       applyDrawingAtEvent(event, true);
       return;
     }
@@ -8716,10 +9170,18 @@
     }
 
     const isEditorPreview = renderer.drawing.enabled && !renderer.drawing.tool;
+    centerHexInView(hex.id);
     selectGeneratedHex(hex.id, {
       detailsDisabled: isEditorPreview,
       disablePoiLinks: isEditorPreview
     });
+  }
+
+  function handleGeneratedPopupOutsidePointerDown(event) {
+    if (!isActive() || !renderer.popup || renderer.popup.hidden) return;
+    const target = event.target;
+    if (target && renderer.popup.contains(target)) return;
+    closeGeneratedPopup();
   }
 
   function applyDrawingAtEvent(event, fromDrag = false) {
@@ -8796,6 +9258,11 @@
       return;
     }
 
+    if (tool === "terrain-fill") {
+      fillGeneratedHexTerrainPatch(hex);
+      return;
+    }
+
     if (tool === "terrain-eyedropper") {
       pickTerrainFromHex(hex.id);
       return;
@@ -8833,34 +9300,74 @@
     const actions = [];
 
     for (const hex of targets) {
-      const before = getTerrainSnapshot(hex.id);
-      if (!before) continue;
-      const targetBase = getTerrainBrushBase(hex, centerHex);
-      const maxFeatures = resolveChaosNumber(renderer.drawing.terrainMaxFeatures, 0, 2, `terrain-max-features:${centerHex.id}:${hex.id}`);
-      const featureDensity = resolveChaosNumber(renderer.drawing.terrainFeatureDensity, 5, 100, `terrain-feature-density-setting:${centerHex.id}:${hex.id}`, 5);
-      const features = maxFeatures > 0 && shouldApplyTerrainFeatureDensity(centerHex, hex, featureDensity)
-        ? generateFeaturesForTerrain(targetBase, renderer.drawing.terrainElevation, `${centerHex.id}:${hex.id}:terrain`, brushNoise, {
-          hexId: hex.id,
-          baseTerrain: targetBase,
-          features: []
-        }, maxFeatures)
-        : [];
-      const targetElevation = renderer.drawing.terrainElevation === "chaos"
-        ? getChaosTerrainElevation(hex, centerHex)
-        : renderer.drawing.terrainElevation === "auto"
-        ? getAutoTerrainElevation(targetBase, features)
-        : renderer.drawing.terrainElevation;
-      const action = getTerrainUpdateAction(hex.id, {
-        baseTerrain: targetBase,
-        features,
-        elevation: targetElevation
-      }, before);
+      const action = buildTerrainPaintAction(hex, centerHex, "terrain", brushNoise);
       if (!action) continue;
       applyLocalTerrainSnapshot(action.hexId, action.after);
       actions.push(action);
     }
     pushBrushTerrainActions(actions, "terrain-manual");
     queueMapRender(true);
+  }
+
+  function fillGeneratedHexTerrainPatch(centerHex) {
+    const targets = getConnectedTerrainPatchHexes(centerHex);
+    const actions = [];
+
+    for (const hex of targets) {
+      const action = buildTerrainPaintAction(hex, centerHex, "terrain-fill", 0);
+      if (!action) continue;
+      applyLocalTerrainSnapshot(action.hexId, action.after);
+      actions.push(action);
+    }
+    pushBrushTerrainActions(actions, "terrain-manual");
+    queueMapRender(true);
+  }
+
+  function buildTerrainPaintAction(hex, centerHex, seedKind = "terrain", brushNoise = 0) {
+    const before = getTerrainSnapshot(hex.id);
+    if (!before) return null;
+    const targetBase = getTerrainBrushBase(hex, centerHex);
+    const maxFeatures = resolveChaosNumber(renderer.drawing.terrainMaxFeatures, 0, 2, `terrain-max-features:${centerHex.id}:${hex.id}`);
+    const featureDensity = resolveChaosNumber(renderer.drawing.terrainFeatureDensity, 5, 100, `terrain-feature-density-setting:${centerHex.id}:${hex.id}`, 5);
+    const features = maxFeatures > 0 && shouldApplyTerrainFeatureDensity(centerHex, hex, featureDensity)
+      ? generateFeaturesForTerrain(targetBase, renderer.drawing.terrainElevation, `${centerHex.id}:${hex.id}:${seedKind}`, brushNoise, {
+        hexId: hex.id,
+        baseTerrain: targetBase,
+        features: []
+      }, maxFeatures)
+      : [];
+    const targetElevation = renderer.drawing.terrainElevation === "chaos"
+      ? getChaosTerrainElevation(hex, centerHex)
+      : renderer.drawing.terrainElevation === "auto"
+      ? getAutoTerrainElevation(targetBase, features)
+      : renderer.drawing.terrainElevation;
+    return getTerrainUpdateAction(hex.id, {
+      baseTerrain: targetBase,
+      features,
+      elevation: targetElevation
+    }, before);
+  }
+
+  function getConnectedTerrainPatchHexes(centerHex) {
+    if (!centerHex?.id) return [];
+    const sourceBase = centerHex.baseTerrain;
+    const targets = [];
+    const visited = new Set([centerHex.id]);
+    const queue = [centerHex];
+
+    while (queue.length) {
+      const hex = queue.shift();
+      if (!hex || hex.baseTerrain !== sourceBase) continue;
+      targets.push(hex);
+      EDGE_NAMES.forEach(edgeName => {
+        const neighbor = getNeighborHex(hex, edgeName);
+        if (!neighbor?.id || visited.has(neighbor.id) || neighbor.baseTerrain !== sourceBase) return;
+        visited.add(neighbor.id);
+        queue.push(neighbor);
+      });
+    }
+
+    return targets;
   }
 
   function getTerrainBrushBase(hex, centerHex) {
@@ -9058,6 +9565,9 @@
 
   function getEditorBrushHexIds(hex) {
     if (!hex) return [];
+    if (renderer.drawing.tool === "terrain-fill") {
+      return [hex.id];
+    }
     if (renderer.drawing.tool === "terrain-eyedropper" || renderer.drawing.tool === "feature-eyedropper") {
       return [hex.id];
     }
@@ -9294,7 +9804,7 @@
     const snapshot = getTerrainSnapshot(hexId);
     if (!snapshot) return;
     renderer.drawing.terrainBase = snapshot.baseTerrain || "plains";
-    renderer.drawing.terrainElevation = snapshot.elevation;
+    renderer.drawing.terrainElevation = "auto";
     updateTerrainControls();
   }
 
@@ -17493,7 +18003,6 @@
     renderer.selectedHexId = hexId;
     renderer.popupOptions = { ...options };
     selectedHexId = hexId;
-    selectedHex = { setStyle() {} };
     showPopup(hexId, options);
     render();
   }
@@ -17517,14 +18026,21 @@
     renderer.popup.style.top = `${point.y - 34}px`;
   }
 
-  function clearSelection() {
-    renderer.selectedHexId = null;
+  function closeGeneratedPopup(options = {}) {
     renderer.popupOptions = {};
+    if (!options.preserveSelection) {
+      renderer.selectedHexId = null;
+      selectedHexId = null;
+    }
     if (renderer.popup) {
       renderer.popup.hidden = true;
       renderer.popup.innerHTML = "";
     }
     render();
+  }
+
+  function clearSelection() {
+    closeGeneratedPopup();
   }
 
   function centerHexInView(hexId, biasForInspector = false) {
@@ -17534,21 +18050,68 @@
 
     const desiredX = rect.width * (biasForInspector ? 0.33 : 0.5);
     const desiredY = rect.height * 0.5;
+
+    cancelPanAnimation();
+    const startPanX = renderer.view.panX;
+    const startPanY = renderer.view.panY;
+
     renderer.view.panX = hex.center.x - desiredX / renderer.view.zoom;
     renderer.view.panY = hex.center.y - desiredY / renderer.view.zoom;
-    render();
+    clampView();
+    const targetPanX = renderer.view.panX;
+    const targetPanY = renderer.view.panY;
+
+    renderer.view.panX = startPanX;
+    renderer.view.panY = startPanY;
+
+    const screenDistance = Math.hypot(
+      (targetPanX - startPanX) * renderer.view.zoom,
+      (targetPanY - startPanY) * renderer.view.zoom
+    );
+
+    if (screenDistance < 4) {
+      renderer.view.panX = targetPanX;
+      renderer.view.panY = targetPanY;
+      render();
+      return;
+    }
+
+    const duration = Math.max(380, Math.min(760, screenDistance * 0.45));
+    const startedAt = performance.now();
+
+    function step(now) {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = easeOutCubic(progress);
+
+      renderer.view.panX = startPanX + (targetPanX - startPanX) * eased;
+      renderer.view.panY = startPanY + (targetPanY - startPanY) * eased;
+      render();
+
+      if (progress < 1) {
+        renderer.view.panAnimationFrame = requestAnimationFrame(step);
+        return;
+      }
+
+      renderer.view.panAnimationFrame = null;
+      renderer.view.panX = targetPanX;
+      renderer.view.panY = targetPanY;
+      render();
+    }
+
+    renderer.view.panAnimationFrame = requestAnimationFrame(step);
   }
 
   window.generatedMapRenderer = {
     clearSelection,
+    closePopup: closeGeneratedPopup,
     centerHexInView,
     beginLoading,
     deactivate() {
       resetEditorStateForCampaignSwitch(null);
       setActive(false);
     },
-    fitViewToMap() {
-      fitViewToMap();
+    fitViewToMap(options = {}) {
+      fitViewToMap(options);
       render();
     },
     isActive,

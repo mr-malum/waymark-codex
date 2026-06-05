@@ -48,8 +48,9 @@ function closeCodex(options = {}) {
   document
     .getElementById("campaign-settings-shell")
     ?.classList.remove("codex-map-settings-hidden");
-  map.closePopup();
-  clearSelectedHex();
+  if (!options.preserveSelection) {
+    clearSelectedHex();
+  }
 
   if (
     wasOpen &&
@@ -319,8 +320,8 @@ function updateCodexBackButton() {
 }
 
 function prepareCodexNavigation() {
-  closePanel({ clearSelection: true });
-  resetMapToAtlasView();
+  closePanel({ syncHistory: false });
+  window.generatedMapRenderer?.closePopup?.();
   openCodex();
 }
 

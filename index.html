@@ -12,7 +12,6 @@
   <link rel="icon" type="image/x-icon" sizes="64x64" href="assets/ico/favicon_64x64.ico">
   <link rel="icon" type="image/x-icon" sizes="256x256" href="assets/ico/favicon_256x256.ico">
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/panel.css">
   <link rel="stylesheet" href="css/map.css">
@@ -467,7 +466,17 @@
   <div class="map-edit-pane">
     <div class="map-edit-pane-header">
       <div class="map-edit-pane-kicker">Hex Mapper</div>
-      <div id="map-edit-section-heading" class="map-draw-panel-title">Overlay</div>
+      <div class="map-edit-pane-title-row">
+        <div id="map-edit-section-heading" class="map-draw-panel-title">Overlays</div>
+        <span id="map-surveyor-mode-help" class="map-editor-help-wrap map-mode-persistent-help" hidden>
+          <button class="map-editor-help-button" type="button" aria-describedby="map-surveyor-mode-help-tooltip">?</button>
+          <span id="map-surveyor-mode-help-tooltip" class="map-editor-help-tooltip" role="tooltip">Live map management: regions, saved overlays (rivers, roads, etc.), named routes, and utilities. Changes here save immediately.</span>
+        </span>
+        <span id="map-cartographer-mode-help" class="map-editor-help-wrap map-mode-persistent-help" hidden>
+          <button class="map-editor-help-button" type="button" aria-describedby="map-cartographer-mode-help-tooltip">?</button>
+          <span id="map-cartographer-mode-help-tooltip" class="map-editor-help-tooltip" role="tooltip">Staged editing: terrain and feature painting/generation preview locally first. Use Apply Preview to save or Discard All to revert.</span>
+        </span>
+      </div>
       <p id="map-edit-section-copy" class="map-edit-section-copy">Draw roads, rivers, paths, walls, mist, and farmland on the generated map.</p>
     </div>
 
@@ -500,6 +509,7 @@
         <div class="map-draw-section-title" data-terrain-mobile-group="tools">Tools</div>
         <div class="map-draw-tool-row map-draw-tool-row-single" data-terrain-mobile-group="tools" role="group" aria-label="Terrain paint tool">
           <button type="button" data-map-draw-tool="terrain">Paint</button>
+          <button type="button" data-map-draw-tool="terrain-fill">Fill</button>
           <button type="button" data-map-draw-tool="terrain-eyedropper">Eyedropper</button>
         </div>
         <div class="map-draw-section-title" data-terrain-mobile-group="base">Base Terrain</div>
@@ -537,7 +547,13 @@
           <button type="button" data-map-draw-tool="feature-erase">Erase</button>
           <button type="button" data-map-draw-tool="feature-eyedropper">Eyedropper</button>
         </div>
-        <div class="map-draw-section-title">Brush</div>
+        <div class="map-draw-section-title map-draw-section-title-with-help">
+          <span>Brush</span>
+          <span class="map-editor-help-wrap">
+            <button class="map-editor-help-button" type="button" aria-describedby="map-feature-brush-help">?</button>
+            <span id="map-feature-brush-help" class="map-editor-help-tooltip" role="tooltip">Feature brushes only paint details that fit the selected base terrain. Incompatible features are skipped unless Chaos is enabled.</span>
+          </span>
+        </div>
         <div id="map-feature-brush-options" class="map-terrain-feature-options map-feature-brush-options" role="group" aria-label="Feature brush"></div>
         <p id="map-feature-brush-note" class="map-feature-brush-note" hidden></p>
         <label class="map-draw-range-row">
@@ -563,20 +579,30 @@
       </section>
 
       <section class="map-draw-panel-section active" data-map-edit-section="overlay">
-        <div class="map-draw-section-title" data-overlay-subview-group="drawing">Travel</div>
+        <div class="map-draw-section-title map-draw-section-title-with-help" data-overlay-subview-group="drawing">
+          <span>Travel</span>
+          <span class="map-editor-help-wrap">
+            <button class="map-editor-help-button" type="button" aria-describedby="map-overlay-travel-help">?</button>
+            <span id="map-overlay-travel-help" class="map-editor-help-tooltip" role="tooltip">Choose a route tool, click a start hex, then click an end hex. The editor draws the route between those points using the selected route settings.</span>
+          </span>
+        </div>
         <div class="map-draw-tool-row map-draw-tool-row-compact" data-overlay-subview-group="drawing" role="group" aria-label="Travel overlay tools">
           <button type="button" data-map-draw-tool="road">Road</button>
           <button type="button" data-map-draw-tool="path">Path</button>
           <button type="button" data-map-draw-tool="river">River</button>
           <button type="button" data-map-draw-tool="sea_route">Sea Route</button>
         </div>
-        <label class="map-draw-style-row" data-overlay-subview-group="drawing">
-          <span id="map-draw-style-label">Road Style</span>
-          <select id="map-draw-road-style">
-            <option value="dark_brown">Dark Brown</option>
-            <option value="tan">Tan</option>
-          </select>
-        </label>
+        <div class="map-draw-section-title map-draw-section-title-with-help map-draw-tool-setting" id="map-road-options-help-row" data-overlay-subview-group="drawing" hidden>
+          <span>Road Options</span>
+          <span class="map-editor-help-wrap">
+            <button class="map-editor-help-button" type="button" aria-describedby="map-road-options-help">?</button>
+            <span id="map-road-options-help" class="map-editor-help-tooltip" role="tooltip">
+              <span>Water Crossing Override allows this road to cross water when needed.</span>
+              <span>Auto Pass Style uses pass styling for mountain crossings.</span>
+              <span>Major Trade Route marks and names this road as a major route.</span>
+            </span>
+          </span>
+        </div>
         <label class="map-draw-option-row" id="map-road-water-override-row" data-overlay-subview-group="drawing" hidden>
           <input id="map-road-water-override" type="checkbox">
           <span>Water Crossing Override</span>
@@ -585,6 +611,16 @@
           <input id="map-road-auto-pass" type="checkbox" checked>
           <span>Auto Pass Style</span>
         </label>
+        <div class="map-draw-section-title map-draw-section-title-with-help map-draw-tool-setting" id="map-river-options-help-row" data-overlay-subview-group="drawing" hidden>
+          <span>River Settings</span>
+          <span class="map-editor-help-wrap">
+            <button class="map-editor-help-button" type="button" aria-describedby="map-river-options-help">?</button>
+            <span id="map-river-options-help" class="map-editor-help-tooltip" role="tooltip">
+              <span>Water Pull favors existing water, Wildness adds wandering, Terrain Respect avoids unsuitable terrain, and Straightness keeps the route direct.</span>
+              <span>Auto Falls, Tributaries, Wetland Vanish, and Major Trade Route control extra river behavior.</span>
+            </span>
+          </span>
+        </div>
         <label class="map-draw-range-row map-draw-tool-setting" id="map-river-water-pull-row" data-overlay-subview-group="drawing" hidden>
           <span>Water Pull <strong id="map-river-water-pull-value">100%</strong></span>
           <input id="map-river-water-pull" type="range" min="0" max="200" step="5" value="100">
@@ -617,6 +653,13 @@
           <input id="map-route-major" type="checkbox">
           <span>Major Trade Route</span>
         </label>
+        <label class="map-draw-style-row" data-overlay-subview-group="drawing">
+          <span id="map-draw-style-label">Road Style</span>
+          <select id="map-draw-road-style">
+            <option value="dark_brown">Dark Brown</option>
+            <option value="tan">Tan</option>
+          </select>
+        </label>
         <label class="map-draw-route-name-row" id="map-route-name-row" data-overlay-subview-group="drawing" hidden>
           <span>Route Name</span>
           <input id="map-route-name" type="text" maxlength="80" placeholder="Old Imperial Road">
@@ -629,7 +672,13 @@
           <button type="button" data-map-draw-tool="erase">Erase Overlay</button>
         </div>
         <label class="map-draw-style-row map-draw-tool-setting" id="map-wall-mode-row" data-overlay-subview-group="drawing" hidden>
-          <span>Wall Mode</span>
+          <span>
+            Wall Mode
+            <span class="map-editor-help-wrap">
+              <button class="map-editor-help-button" type="button" aria-describedby="map-wall-mode-help">?</button>
+              <span id="map-wall-mode-help" class="map-editor-help-tooltip" role="tooltip">Regular draws one wall edge at a time. Plane Drag paints wider wall bands. Shape traces larger wall outlines.</span>
+            </span>
+          </span>
           <select id="map-wall-mode">
             <option value="regular">Regular</option>
             <option value="plane">Plane Drag</option>
@@ -676,7 +725,16 @@
       </section>
 
       <section class="map-draw-panel-section" data-map-edit-section="regions">
-        <div class="map-draw-section-title">Region Tools</div>
+        <div class="map-draw-section-title map-draw-section-title-with-help">
+          <span>Region Tools</span>
+          <span class="map-editor-help-wrap">
+            <button class="map-editor-help-button" type="button" aria-describedby="map-region-tools-help">?</button>
+            <span id="map-region-tools-help" class="map-editor-help-tooltip" role="tooltip">
+              <span>Geographic regions mark natural areas such as forests, ranges, and shores.</span>
+              <span>Political regions mark borders and territories.</span>
+            </span>
+          </span>
+        </div>
         <div class="map-draw-tool-row map-draw-tool-row-paired" role="group" aria-label="Geographic region tools">
           <button type="button" data-map-draw-tool="region">Paint Geographic</button>
           <button type="button" data-map-draw-tool="unregion">Clear Geographic</button>
@@ -719,11 +777,10 @@
 
       <section class="map-draw-panel-section" data-map-edit-section="purge">
         <div class="map-draw-section-title">Purge</div>
-        <p class="map-edit-empty-note map-edit-warning-note">These purge saved live-map content immediately. Region Codex entries stay intact, and generated-only POI cleanup preserves your manual POIs.</p>
+        <p class="map-edit-empty-note map-edit-warning-note">These purge saved live-map content immediately. Generated region cleanup can remove generated Region Codex entries, and generated-only POI cleanup preserves your manual POIs.</p>
 
         <div class="map-draw-section-title map-draw-subsection-title">Overlays</div>
         <div class="map-draw-tool-row map-draw-tool-row-compact" role="group" aria-label="Purge saved overlay types">
-          <button id="map-clear-all-overlays" class="map-draw-clear" type="button">Purge ALL Overlays</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="road">Purge Roads</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="river">Purge Rivers</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="path">Purge Paths</button>
@@ -731,6 +788,7 @@
           <button class="map-draw-clear" type="button" data-clear-overlay-type="wall">Purge Walls</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="mist">Purge Mist</button>
           <button class="map-draw-clear" type="button" data-clear-overlay-type="farmland">Purge Farmland</button>
+          <button id="map-clear-all-overlays" class="map-draw-clear" type="button">Purge ALL Overlays</button>
         </div>
 
         <div class="map-draw-section-title map-draw-subsection-title">POIs</div>
@@ -757,12 +815,16 @@
           <span class="map-editor-help-wrap">
             <button class="map-editor-help-button" type="button" aria-describedby="map-generation-poi-help">?</button>
             <span id="map-generation-poi-help" class="map-editor-help-tooltip" role="tooltip">
-              <span>Generate a first civilization backbone with settlements, supporting resource sites, travel waypoints, strongholds, dungeons, and world sites.</span>
-              <span>Best results come after rivers exist. These POIs save directly to the live map and codex, and generated roads can build on them afterward.</span>
+              <span>Generate settlements, resource sites, travel waypoints, strongholds, dungeons, and places of note while avoiding occupied hexes where possible.</span>
+              <span>Global Density / Amount moves most POI sliders together. Population Concentration is separate: higher values make cities and grand hubs larger while smaller settlements stay lighter.</span>
+              <span>These POIs save directly to the live map and Codex.</span>
             </span>
           </span>
         </div>
-        <p class="map-edit-empty-note" data-poi-subview-group="generation">This POI pass creates standalone Settlements, Strongholds, Dungeons, Dungeon Complexes, Resource Sites, Waypoints, and broader world Sites. It avoids occupied hexes when possible and leaves grouped POIs for a later pass.</p>
+        <label class="map-draw-range-row" data-poi-subview-group="generation">
+          <span>Population Concentration <strong id="map-generation-population-concentration-value">100%</strong></span>
+          <input id="map-generation-population-concentration" type="range" min="50" max="150" step="5" value="100">
+        </label>
         <label class="map-draw-range-row" data-poi-subview-group="generation">
           <span>Global Density / Amount <strong id="map-generation-poi-global-amount-value">100%</strong></span>
           <input id="map-generation-poi-global-amount" type="range" min="0" max="200" step="5" value="100">
@@ -770,10 +832,6 @@
         <label class="map-draw-range-row" data-poi-subview-group="generation">
           <span>Settlement Density <strong id="map-generation-settlement-density-value">100%</strong></span>
           <input id="map-generation-settlement-density" type="range" min="0" max="200" step="5" value="100">
-        </label>
-        <label class="map-draw-range-row" data-poi-subview-group="generation">
-          <span>Population Concentration <strong id="map-generation-population-concentration-value">100%</strong></span>
-          <input id="map-generation-population-concentration" type="range" min="50" max="150" step="5" value="100">
         </label>
         <label class="map-draw-range-row" data-poi-subview-group="generation">
           <span>Resource Site Amount <strong id="map-generation-resource-amount-value">100%</strong></span>
@@ -897,7 +955,7 @@
               <span>Feature Pass</span>
               <span class="map-editor-help-wrap">
                 <button class="map-editor-help-button" type="button" aria-describedby="map-generation-feature-help">?</button>
-                <span id="map-generation-feature-help" class="map-editor-help-tooltip" role="tooltip">Populate compatible terrain features from the shared rules brain. Base terrain and elevation stay as-is.</span>
+                <span id="map-generation-feature-help" class="map-editor-help-tooltip" role="tooltip">Populate compatible terrain features from the current base terrain. Base terrain and elevation stay as-is.</span>
               </span>
             </div>
             <label class="map-draw-range-row">
@@ -919,22 +977,25 @@
               <span class="map-editor-help-wrap">
                 <button class="map-editor-help-button" type="button" aria-describedby="map-generation-region-help">?</button>
                 <span id="map-generation-region-help" class="map-editor-help-tooltip" role="tooltip">
-                  <span>Generate geographic Codex regions from the current terrain and paint unclaimed land hexes into contiguous region blobs.</span>
-                  <span>This saves directly to the live map and can be undone from the Surveyor undo stack.</span>
+                  <span>Generate geographic Codex regions from the current terrain and paint matching land into connected region areas.</span>
+                  <span>This pass saves directly to the live map and Codex. Political region generation is planned for a later pass.</span>
                 </span>
               </span>
             </div>
-            <p class="map-edit-empty-note">First pass: creates biome-aware geographic regions only. Political regions will come later from settlements, population, and resources.</p>
+            <button id="map-generation-run-geographic-regions" class="map-draw-secondary-button" type="button">Generate Geographic Regions</button>
           </div>
           <div class="map-generation-subsection" data-generation-section="overlays">
             <div class="map-draw-section-title map-draw-section-title-with-help">
               <span>Overlay Pass</span>
               <span class="map-editor-help-wrap">
                 <button class="map-editor-help-button" type="button" aria-describedby="map-generation-overlay-help">?</button>
-                <span id="map-generation-overlay-help" class="map-editor-help-tooltip" role="tooltip">Generate starter roads and rivers using the same saved overlay segments as the manual drawing tools.</span>
+                <span id="map-generation-overlay-help" class="map-editor-help-tooltip" role="tooltip">
+                  <span>Generate starter roads and rivers using the same saved overlay segments as the manual drawing tools.</span>
+                  <span>Road Amount and Length control how many routes are made and how far they reach. Include Paths adds lighter local connections; Generate Trade Routes adds major road routes where possible.</span>
+                  <span>River Amount, Length, and Wildcards control how many rivers appear, how far they run, and how many extra source candidates are considered.</span>
+                </span>
               </span>
             </div>
-            <p class="map-edit-empty-note">These passes add overlays without clearing your hand-drawn work. Use Undo if the result is not what you want.</p>
             <label class="map-draw-range-row">
               <span>Road Amount <strong id="map-generation-road-value">100%</strong></span>
               <input id="map-generation-road" type="range" min="25" max="200" step="5" value="100">
@@ -976,12 +1037,10 @@
               <button id="map-clear-features" class="map-draw-clear" type="button">Purge All Features</button>
               <button data-generation-discard-section="features" type="button">Discard</button>
             </div>
-            <div class="map-draw-tool-row map-generation-actions" data-generation-action-panel="regions" role="group" aria-label="Region generation actions">
-              <button id="map-generation-run-geographic-regions" class="map-draw-secondary-button" type="button">Generate Geographic Regions</button>
-            </div>
             <div class="map-draw-tool-row map-generation-actions" data-generation-action-panel="overlays" role="group" aria-label="Overlay generation actions">
               <button id="map-generation-run-roads" class="map-draw-secondary-button" type="button">Generate Roads</button>
               <button id="map-generation-run-rivers" class="map-draw-secondary-button" type="button">Generate Rivers</button>
+              <button id="map-generation-reset-overlay-sliders" type="button">Reset Sliders</button>
             </div>
           </div>
         <div class="map-generation-shared-controls">
@@ -999,15 +1058,15 @@
     <div class="map-edit-utility-pane">
       <button id="map-edit-collapse-button" class="map-edit-collapse-button" type="button" aria-expanded="true">Collapse</button>
       <div class="map-edit-history-row" aria-label="Map edit history controls">
-        <button id="map-draw-no-tool" class="map-draw-no-tool" type="button">No Tool</button>
+        <button id="map-draw-no-tool" class="map-draw-no-tool" type="button">Inspect</button>
         <button id="map-draw-undo" class="map-draw-undo" type="button" disabled>Undo</button>
         <button id="map-draw-redo" class="map-draw-redo" type="button" disabled>Redo</button>
         <span class="map-editor-help-wrap map-edit-history-help">
           <button class="map-editor-help-button" type="button" aria-describedby="map-editor-hotkeys-help">?</button>
           <span id="map-editor-hotkeys-help" class="map-editor-help-tooltip" role="tooltip">
             <span>Ctrl+Z undoes the last map edit. Ctrl+Y redoes it.</span>
-            <span>Esc closes the Named Routes menu first, then closes an open hex tooltip, then clears the active tool back to No Tool.</span>
-            <span>No Tool lets you pan and inspect hexes without painting.</span>
+            <span>Esc deselects the active tool in manual painting modes.</span>
+            <span>Inspect mode lets you pan and inspect hexes without painting.</span>
           </span>
         </span>
       </div>
@@ -1595,7 +1654,6 @@
   </div>
 </div>
  
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/codex-dialog.js"></script>

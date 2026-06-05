@@ -29,9 +29,7 @@
   .codex-row,
   .codex-link-button,
   .codex-section-button,
-  .codex-image-modal,
-  .leaflet-container,
-  .leaflet-interactive {
+  .codex-image-modal {
     -webkit-tap-highlight-color: transparent !important;
     -webkit-touch-callout: none !important;
   }
@@ -41,8 +39,7 @@
   [role="button"],
   .codex-row,
   .codex-link-button,
-  .codex-section-button,
-  .leaflet-interactive {
+  .codex-section-button {
     user-select: none !important;
     -webkit-user-select: none !important;
   }

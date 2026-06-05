@@ -1,19 +1,6 @@
-function selectHex(hex) {
-  if (selectedHex && selectedHex !== hex) {
-    selectedHex.setStyle(selectedHex.__codexBaseStyle || defaultStyle);
-  }
-
-  selectedHex = hex;
-  hex.setStyle(hex.__codexSelectedStyle || selectedStyle);
-}
-
 function clearSelectedHex() {
-  if (selectedHex) {
-    selectedHex.setStyle(selectedHex.__codexBaseStyle || defaultStyle);
-    selectedHex = null;
-  }
-
   window.generatedMapRenderer?.clearSelection();
+  selectedHexId = null;
 }
 
 function closePanel(options = {}) {
@@ -28,7 +15,6 @@ function closePanel(options = {}) {
 
   if (options.clearSelection) {
     clearSelectedHex();
-    map.closePopup();
   }
 
   if (
@@ -111,57 +97,29 @@ function openPanelForHex(hexId) {
 }
 
 function panHexIntoInspectorView(hexId) {
-  if (window.generatedMapRenderer?.isActive?.()) {
-    window.generatedMapRenderer.centerHexInView(hexId, true);
-    return;
-  }
-
-  const center = getMapHexCenter(hexId);
-  const targetLatLng = L.latLng(center.y, center.x);
-
-  const targetPoint = map.latLngToContainerPoint(targetLatLng);
-  const desiredPoint = L.point(
-    map.getSize().x * 0.33,
-    map.getSize().y * 0.5
-  );
-
-  const offset = targetPoint.subtract(desiredPoint);
-
-  map.panBy(offset, {
-    animate: true,
-    duration: 0.35
-  });
+  window.generatedMapRenderer?.centerHexInView(hexId, true);
 }
 
 function resetMapToAtlasView() {
-  if (window.generatedMapRenderer?.isActive?.()) {
-    clearSelectedHex();
-    selectedHexId = null;
-    window.generatedMapRenderer.fitViewToMap();
-    return;
-  }
-
-  map.closePopup();
   clearSelectedHex();
-  selectedHexId = null;
-  map.fitBounds(currentMapBounds, { animate: true, duration: 0.5 });
+  window.generatedMapRenderer?.fitViewToMap?.({ animate: true });
 }
 
 function centerHexInView(hexId) {
-  if (window.generatedMapRenderer?.isActive?.()) {
-    window.generatedMapRenderer.centerHexInView(hexId);
-    return;
-  }
+  window.generatedMapRenderer?.centerHexInView(hexId);
+}
 
-  const center = getMapHexCenter(hexId);
+function zoomToHexFromCodex(hexId) {
+  const cleanHexId = String(hexId || "").trim();
+  if (!cleanHexId) return;
 
-  map.panTo(
-    L.latLng(center.y, center.x),
-    {
-      animate: true,
-      duration: 0.35
-    }
-  );
+  closeCodex?.({ preserveSelection: true });
+  closePanel?.({ syncHistory: false });
+  document.getElementById("codex-button")?.classList.remove("codex-label-visible");
+
+  window.generatedMapRenderer?.centerHexInView(cleanHexId);
+  window.generatedMapRenderer?.selectGeneratedHex(cleanHexId);
+  selectedHexId = cleanHexId;
 }
 
 function toggleRetroCodexMode() {
@@ -186,13 +144,6 @@ function toggleRetroCodexMode() {
 }
 
 function closeMobileHexPopup() {
-  if (window.generatedMapRenderer?.isActive?.()) {
-    clearSelectedHex();
-    selectedHexId = null;
-    return;
-  }
-
-  map.closePopup();
   clearSelectedHex();
 }
 
@@ -355,3 +306,4 @@ function getPopupTerrainName(data) {
 
 window.openPanelForHex = openPanelForHex;
 window.closeMobileHexPopup = closeMobileHexPopup;
+window.zoomToHexFromCodex = zoomToHexFromCodex;
