@@ -2656,6 +2656,14 @@
   vector-effect: non-scaling-stroke;
 }
 
+.generated-map-subhex-grid-lines {
+  fill: none;
+  stroke: rgba(34, 43, 38, 0.18);
+  stroke-width: 0.65;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
 .generated-map-region-border-glow {
   fill: none;
   stroke-linecap: round;
@@ -3040,7 +3048,7 @@
 
 .generated-map-poi-icon {
   color: #120d09;
-  overflow: visible;
+  overflow: hidden;
   pointer-events: none;
 }
 

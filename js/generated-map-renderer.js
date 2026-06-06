@@ -117,8 +117,12 @@
   };
 
   const MIN_ZOOM = 0.16;
-  const MAX_ZOOM = 1.25;
-  const ZOOM_STEPS = [0.16, 0.25, 0.5, 0.85, 1.25];
+  const PARENT_MAX_ZOOM = 1.25;
+  const MAX_ZOOM = 2;
+  const ZOOM_STEPS = [MIN_ZOOM, 0.25, 0.5, 0.85, PARENT_MAX_ZOOM, MAX_ZOOM];
+  const SUBHEX_LAYER_MIN_ZOOM = MAX_ZOOM;
+  const SUBHEX_PARENT_SPAN = 6;
+  const SUBHEX_DETAIL_ZOOM_SETTLE_MS = 180;
   const FEATURE_GROUP_MAX_ZOOM = 0.25;
   const REGION_LABEL_REFERENCE_ZOOM = 0.85;
   const COORD_LABEL_MIN_ZOOM = 0.6;
@@ -131,6 +135,9 @@
   const PATH_REVEAL_MIN_DURATION = 320;
   const PATH_REVEAL_MAX_DURATION = 820;
   const ZOOM_STEP_LOCK_MS = 260;
+  const WHEEL_ZOOM_DELTA_THRESHOLD = 12;
+  const WHEEL_ZOOM_SETTLE_MS = 48;
+  const PERF_SAMPLE_LIMIT = 120;
   const PATH_WOBBLE_BASE = 0.08;
   const PATH_WOBBLE_MAX = 0.22;
   const ROAD_WATER_CROSSING_MAX_ELEVATION_DELTA = 1;
@@ -446,6 +453,11 @@
     featureCacheCanvas: document.createElement("canvas"),
     featureCacheCtx: null,
     featureCacheDirty: true,
+    subhexDetailTileCache: new Map(),
+    subhexGridPathCache: new Map(),
+    subhexGridReady: false,
+    subhexDetailPrecache: { running: false, complete: false, index: 0, frame: null, awaitingImages: false },
+    subhexRouteProjectionCache: { key: "", entries: [] },
     initialMapLoadingTimer: null,
     overlayCacheCanvas: document.createElement("canvas"),
     overlayCacheCtx: null,
@@ -476,9 +488,17 @@
     svg: null,
     popup: null,
     popupOptions: {},
+    perf: {
+      apiReady: false,
+      enabled: false,
+      frame: null,
+      lastFrame: null,
+      samples: []
+    },
     loadingVeil: null,
     hexes: [],
     hexesById: new Map(),
+    hexesByRef: new Map(),
     hexIdsByUuid: new Map(),
     hexesByCoord: new Map(),
     overlayRevision: 0,
@@ -503,6 +523,13 @@
       animatingZoom: false,
       featureRenderMode: "",
       wheelLockedUntil: 0,
+      wheelZoomFrame: null,
+      wheelDeltaY: 0,
+      wheelStartedAt: 0,
+      wheelClientX: null,
+      wheelClientY: null,
+      subhexDetailDeferredUntil: 0,
+      subhexDetailSettleTimer: null,
       routeLabelsHiddenUntil: 0,
       routeLabelRestoreTimer: null,
       touchPointers: new Map(),
@@ -685,6 +712,7 @@
     renderer.svg = renderer.root.querySelector("svg");
     renderer.popup = renderer.root.querySelector(".generated-map-popup");
     renderer.loadingVeil = renderer.root.querySelector(".generated-map-loading-veil");
+    ensureRendererPerfApi();
     if (renderer.loadingVeil) {
       document.body.appendChild(renderer.loadingVeil);
     }
@@ -2536,6 +2564,12 @@
     renderer.featureCacheDirty = true;
     renderer.overlayCacheDirty = true;
     renderer.featureImageUsage.clear();
+    renderer.subhexRouteAnchorCache?.clear?.();
+    renderer.subhexDetailTileCache.clear();
+    renderer.subhexGridPathCache.clear();
+    renderer.subhexGridReady = false;
+    resetSubhexDetailPrecache();
+    renderer.subhexRouteProjectionCache = { key: "", entries: [] };
     renderer.featureImageQueue = [];
     renderer.featureImageQueued.clear();
     if (renderer.featureImageFrame) {
@@ -2552,7 +2586,9 @@
     clearPendingDrawingState({ commitBatch: false });
     cancelZoomAnimation();
     cancelPanAnimation();
+    cancelQueuedWheelZoom();
     clearRouteLabelRestoreTimer();
+    clearSubhexDetailSettleTimer();
     renderer.view.touchPointers.clear();
     renderer.view.pinching = false;
     renderer.view.dragging = false;
@@ -2562,6 +2598,7 @@
     renderer.selectedHexId = null;
     selectedHexId = null;
     renderer.hexesById = new Map();
+    renderer.hexesByRef = new Map();
     renderer.hexIdsByUuid = new Map();
     renderer.hexesByCoord = new Map();
     bumpOverlayRevision();
@@ -2632,9 +2669,99 @@
     });
   }
 
+  function ensureRendererPerfApi() {
+    if (renderer.perf.apiReady) return;
+    renderer.perf.apiReady = true;
+    window.GeneratedMapRendererPerf = {
+      enable() {
+        renderer.perf.enabled = true;
+        return "Generated map renderer profiling enabled.";
+      },
+      disable() {
+        renderer.perf.enabled = false;
+        return "Generated map renderer profiling disabled.";
+      },
+      latest() {
+        return renderer.perf.lastFrame;
+      },
+      samples() {
+        return [...renderer.perf.samples];
+      },
+      clear() {
+        renderer.perf.samples = [];
+        renderer.perf.lastFrame = null;
+        return "Generated map renderer profiling samples cleared.";
+      }
+    };
+  }
+
+  function isRendererPerfEnabled() {
+    return renderer.perf.enabled || window.GeneratedMapRendererPerfEnabled === true;
+  }
+
+  function beginRenderPerf(kind) {
+    if (!isRendererPerfEnabled()) return null;
+    const frame = {
+      kind,
+      startedAt: performance.now(),
+      zoom: Number(renderer.view.zoom.toFixed(3)),
+      panX: Math.round(renderer.view.panX),
+      panY: Math.round(renderer.view.panY),
+      visibleParentHexes: 0,
+      visibleSubhexes: 0,
+      poiCount: 0,
+      svgNodeCount: 0,
+      featureRenderMode: renderer.view.featureRenderMode || getFeatureRenderMode(),
+      terrainCacheRebuilt: false,
+      featureCacheRebuilt: false,
+      routeCacheRebuilt: false,
+      overlayCacheRebuilt: false,
+      subhexTilesBuilt: 0,
+      subhexGridBuilt: 0,
+      subhexRoutesBuilt: false,
+      svgRebuilt: false,
+      svgReused: false,
+      marks: {}
+    };
+    renderer.perf.frame = frame;
+    return frame;
+  }
+
+  function finishRenderPerf(frame) {
+    if (!frame || renderer.perf.frame !== frame) return;
+    frame.durationMs = Number((performance.now() - frame.startedAt).toFixed(2));
+    frame.svgNodeCount = renderer.svg?.querySelectorAll?.("*")?.length || 0;
+    renderer.perf.lastFrame = frame;
+    renderer.perf.samples.push(frame);
+    if (renderer.perf.samples.length > PERF_SAMPLE_LIMIT) renderer.perf.samples.shift();
+    renderer.perf.frame = null;
+    if (frame.durationMs >= 28) {
+      console.debug?.("[GeneratedMapRendererPerf]", frame);
+    }
+  }
+
+  function setRenderPerfValue(key, value) {
+    if (!renderer.perf.frame) return;
+    renderer.perf.frame[key] = value;
+  }
+
+  function incrementRenderPerfValue(key, amount = 1) {
+    if (!renderer.perf.frame) return;
+    renderer.perf.frame[key] = (Number(renderer.perf.frame[key]) || 0) + amount;
+  }
+
+  function timeRenderPerfMark(key, callback) {
+    if (!renderer.perf.frame) return callback();
+    const startedAt = performance.now();
+    const result = callback();
+    renderer.perf.frame.marks[key] = Number((performance.now() - startedAt).toFixed(2));
+    return result;
+  }
+
   function markTerrainCacheDirty() {
     renderer.cacheDirty = true;
     renderer.featureCacheDirty = true;
+    invalidateAllSubhexDetailTiles();
     renderer.drawing.terrainDirtyHexIds.clear();
   }
 
@@ -2644,6 +2771,7 @@
 
   function markFeatureCacheDirty() {
     renderer.featureCacheDirty = true;
+    invalidateAllSubhexDetailTiles();
   }
 
   function markOverlayCacheDirty() {
@@ -2652,6 +2780,12 @@
 
   function rebuildHexIndexes() {
     renderer.hexesById = new Map(renderer.hexes.map(hex => [hex.id, hex]));
+    renderer.hexesByRef = new Map();
+    renderer.hexes.forEach(hex => {
+      if (hex.id) renderer.hexesByRef.set(hex.id, hex);
+      if (hex.label) renderer.hexesByRef.set(hex.label, hex);
+      if (hex.record?.__uuid) renderer.hexesByRef.set(hex.record.__uuid, hex);
+    });
     renderer.hexIdsByUuid = new Map(renderer.hexes
       .map(hex => [hex.record?.__uuid, hex.id])
       .filter(([uuid]) => Boolean(uuid)));
@@ -2662,6 +2796,7 @@
     renderer.overlaysByTypeCache = { revision: -1, groups: null };
     renderer.snapHexIdsCache = { revision: -1, type: "", hexIds: new Set() };
     renderer.riverFallsHexIdsCache = { revision: -1, hexIds: new Set() };
+    renderer.subhexRouteProjectionCache = { key: "", entries: [] };
   }
 
   function markAllMapCachesDirty() {
@@ -2674,13 +2809,22 @@
   function markTerrainHexesDirty(hexes, radius = 3, enforceThreshold = true) {
     const candidates = (hexes || []).filter(Boolean);
     if (!candidates.length) return;
+    const dirtyHexIds = new Set();
     candidates.forEach(hex => {
       if (!hex?.id) return;
       renderer.drawing.terrainDirtyHexIds.add(hex.id);
+      dirtyHexIds.add(hex.id);
       nearbyHexesWithin(hex, radius).forEach(neighbor => {
-        if (neighbor?.id) renderer.drawing.terrainDirtyHexIds.add(neighbor.id);
+        if (!neighbor?.id) return;
+        renderer.drawing.terrainDirtyHexIds.add(neighbor.id);
+        dirtyHexIds.add(neighbor.id);
       });
     });
+    dirtyHexIds.forEach(hexId => renderer.subhexDetailTileCache.delete(hexId));
+    if (dirtyHexIds.size) {
+      renderer.subhexDetailPrecache.complete = false;
+      renderer.subhexDetailPrecache.index = 0;
+    }
     if (enforceThreshold && renderer.drawing.terrainDirtyHexIds.size > Math.max(180, Math.floor(renderer.hexes.length * 0.35))) {
       markTerrainCacheDirty();
     }
@@ -4163,9 +4307,28 @@
   function renderSvgOnly() {
     if (!renderer.root || renderer.root.hidden) return;
 
+    const perf = beginRenderPerf("svg");
     const rect = renderer.root.getBoundingClientRect();
-    renderSvg({ width: rect.width, height: rect.height }, getVisibleHexes());
+    const visibleHexes = shouldSkipVisibleHexesForFastPan()
+      ? []
+      : timeRenderPerfMark("visibleParents", () => getVisibleHexes());
+    setRenderPerfValue("visibleParentHexes", visibleHexes.length);
+    renderSvg({ width: rect.width, height: rect.height }, visibleHexes, []);
     positionPopup();
+    finishRenderPerf(perf);
+  }
+
+  function shouldSkipVisibleHexesForFastPan() {
+    return Boolean(renderer.svg?.childNodes?.length)
+      && renderer.view.dragging
+      && renderer.view.dragMoved
+      && !renderer.drawing.enabled
+      && !isSubhexLayerActive()
+      && !renderer.cacheDirty
+      && !renderer.routeCacheDirty
+      && !renderer.featureCacheDirty
+      && !renderer.overlayCacheDirty
+      && renderer.drawing.terrainDirtyHexIds.size === 0;
   }
 
   function resizeCanvas() {
@@ -4189,7 +4352,7 @@
     if (!rect.width || !rect.height) return;
 
     const fitZoom = Math.min(rect.width / renderer.view.width, rect.height / renderer.view.height);
-    const targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, fitZoom));
+    const targetZoom = Math.max(MIN_ZOOM, Math.min(getCurrentMaxZoom(), fitZoom));
     const targetPanX = (renderer.view.width - rect.width / targetZoom) / 2;
     const targetPanY = (renderer.view.height - rect.height / targetZoom) / 2;
 
@@ -4205,9 +4368,16 @@
   }
 
   function clampView() {
+    renderer.view.zoom = Math.max(MIN_ZOOM, Math.min(getCurrentMaxZoom(), renderer.view.zoom));
+    const clamped = getClampedPan(renderer.view.zoom, renderer.view.panX, renderer.view.panY);
+    renderer.view.panX = clamped.panX;
+    renderer.view.panY = clamped.panY;
+  }
+
+  function getClampedPan(zoom, panX, panY) {
     const rect = renderer.root.getBoundingClientRect();
-    const visibleWidth = rect.width / renderer.view.zoom;
-    const visibleHeight = rect.height / renderer.view.zoom;
+    const visibleWidth = rect.width / zoom;
+    const visibleHeight = rect.height / zoom;
     const paddingX = Math.max(160, visibleWidth * PAN_PADDING_RATIO);
     const paddingY = Math.max(160, visibleHeight * PAN_PADDING_RATIO);
     const centeredPanX = (renderer.view.width - visibleWidth) / 2;
@@ -4217,40 +4387,57 @@
     const maxPanX = Math.max(renderer.view.width - visibleWidth + paddingX, centeredPanX);
     const maxPanY = Math.max(renderer.view.height - visibleHeight + paddingY, centeredPanY);
 
-    renderer.view.panX = Math.max(minPanX, Math.min(maxPanX, renderer.view.panX));
-    renderer.view.panY = Math.max(minPanY, Math.min(maxPanY, renderer.view.panY));
+    return {
+      panX: Math.max(minPanX, Math.min(maxPanX, panX)),
+      panY: Math.max(minPanY, Math.min(maxPanY, panY))
+    };
   }
 
-  function render() {
+  function render(options = {}) {
     if (!renderer.root || renderer.root.hidden) return;
 
-    const viewport = resizeCanvas();
-    clampView();
-    const visibleHexes = getVisibleHexes();
-    renderTerrain(viewport, visibleHexes);
-    renderSvg(viewport, visibleHexes);
+    const perf = beginRenderPerf("full");
+    const viewport = timeRenderPerfMark("resize", () => resizeCanvas());
+    if (!options.skipClamp) clampView();
+    const visibleHexes = timeRenderPerfMark("visibleParents", () => getVisibleHexes());
+    setRenderPerfValue("visibleParentHexes", visibleHexes.length);
+    const visibleSubhexes = [];
+    renderTerrain(viewport, visibleHexes, visibleSubhexes);
+    renderSvg(viewport, visibleHexes, visibleSubhexes);
     positionPopup();
+    finishRenderPerf(perf);
   }
 
-  function renderTerrain({ width, height, scale }, visibleHexes) {
+  function renderTerrain({ width, height, scale }, visibleHexes, visibleSubhexes = []) {
     const ctx = renderer.ctx;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.clearRect(0, 0, width, height);
     const deferOverlayCaches = shouldDeferOverlayCacheRefresh();
     syncFeatureRenderMode();
-    updateTerrainCache(visibleHexes);
-    updateFeatureCache();
+    const terrainWasDirty = renderer.cacheDirty || renderer.drawing.terrainDirtyHexIds.size > 0;
+    const featureWasDirty = renderer.featureCacheDirty || renderer.drawing.terrainDirtyHexIds.size > 0;
+    const routeWasDirty = renderer.routeCacheDirty;
+    const overlayWasDirty = renderer.overlayCacheDirty;
+    timeRenderPerfMark("terrainCache", () => updateTerrainCache(visibleHexes));
+    timeRenderPerfMark("featureCache", () => updateFeatureCache());
+    setRenderPerfValue("terrainCacheRebuilt", terrainWasDirty && !renderer.cacheDirty);
+    setRenderPerfValue("featureCacheRebuilt", featureWasDirty && !renderer.featureCacheDirty);
     // Heavy live overlays should not block the first terrain/feature paint on dense maps.
     if (deferOverlayCaches) queueMapRender(true);
     else {
       // Keep routes in their own under-feature layer so route edits do not rebuild feature art.
-      updateRouteCache();
-      updateOverlayCache();
+      timeRenderPerfMark("routeCache", () => updateRouteCache());
+      timeRenderPerfMark("overlayCache", () => updateOverlayCache());
+      setRenderPerfValue("routeCacheRebuilt", routeWasDirty && !renderer.routeCacheDirty);
+      setRenderPerfValue("overlayCacheRebuilt", overlayWasDirty && !renderer.overlayCacheDirty);
     }
-    drawCacheSlice(ctx, renderer.cacheCanvas, width, height);
-    drawCacheSlice(ctx, renderer.routeCacheCanvas, width, height);
-    drawCacheSlice(ctx, renderer.featureCacheCanvas, width, height);
-    drawCacheSlice(ctx, renderer.overlayCacheCanvas, width, height);
+    timeRenderPerfMark("drawTerrain", () => drawCacheSlice(ctx, renderer.cacheCanvas, width, height));
+    timeRenderPerfMark("drawSubhexTerrain", () => renderSubhexDetailTileLayer(ctx, visibleHexes, "terrain"));
+    timeRenderPerfMark("drawRoutes", () => drawCacheSlice(ctx, renderer.routeCacheCanvas, width, height, getParentRouteLayerOpacity()));
+    timeRenderPerfMark("drawFeatures", () => drawCacheSlice(ctx, renderer.featureCacheCanvas, width, height, getParentFeatureLayerOpacity()));
+    timeRenderPerfMark("drawSubhexFeatures", () => renderSubhexDetailTileLayer(ctx, visibleHexes, "features"));
+    timeRenderPerfMark("drawSubhexRoutes", () => renderSubhexRouteProjectionLayer(ctx, visibleHexes));
+    timeRenderPerfMark("drawOverlays", () => drawCacheSlice(ctx, renderer.overlayCacheCanvas, width, height));
     renderer.drawing.terrainDirtyHexIds.clear();
     if (!renderer.drawing.saving && !renderer.initialMapLoadingActive) {
       setLoading(false);
@@ -4264,7 +4451,10 @@
       || renderer.drawing.terrainDirtyHexIds.size > 0;
   }
 
-  function drawCacheSlice(ctx, sourceCanvas, width, height) {
+  function drawCacheSlice(ctx, sourceCanvas, width, height, opacity = 1) {
+    const alpha = Math.max(0, Math.min(1, Number(opacity) || 0));
+    if (alpha <= 0) return;
+
     const sourceWorldX = Math.max(0, renderer.view.panX);
     const sourceWorldY = Math.max(0, renderer.view.panY);
     const sourceWorldRight = Math.min(renderer.view.width, renderer.view.panX + width / renderer.view.zoom);
@@ -4279,6 +4469,8 @@
     const destinationWidth = sourceWorldWidth * renderer.view.zoom;
     const destinationHeight = sourceWorldHeight * renderer.view.zoom;
 
+    ctx.save();
+    ctx.globalAlpha = alpha;
     ctx.drawImage(
       sourceCanvas,
       sourceWorldX * TERRAIN_CACHE_SCALE,
@@ -4290,6 +4482,7 @@
       destinationWidth,
       destinationHeight
     );
+    ctx.restore();
   }
 
   function updateTerrainCache(visibleHexes = []) {
@@ -4378,10 +4571,13 @@
     ctx.setTransform(TERRAIN_CACHE_SCALE, 0, 0, TERRAIN_CACHE_SCALE, 0, 0);
     if (renderer.featureCacheDirty) {
       ctx.clearRect(0, 0, renderer.view.width, renderer.view.height);
+      ctx.save();
+      clipToMapHexArea(ctx);
       renderer.hexes.forEach(hex => renderEdgeBleedForHex(ctx, hex));
       if (renderer.drawing.visibleOverlays.features) {
         renderFeatureLayer(ctx, renderer.hexes);
       }
+      ctx.restore();
     } else {
       const dirtyBounds = getTerrainDirtyBounds();
       if (!dirtyBounds) return;
@@ -4402,6 +4598,7 @@
         dirtyBounds.right - dirtyBounds.left,
         dirtyBounds.bottom - dirtyBounds.top
       );
+      clipToMapHexArea(ctx);
       patchHexes.forEach(hex => renderEdgeBleedForHex(ctx, hex));
       if (renderer.drawing.visibleOverlays.features) {
         renderFeatureLayer(ctx, patchHexes);
@@ -4409,6 +4606,17 @@
       ctx.restore();
     }
     renderer.featureCacheDirty = false;
+  }
+
+  function clipToMapHexArea(ctx) {
+    ctx.beginPath();
+    renderer.hexes.forEach(hex => {
+      if (!hex?.points?.length) return;
+      ctx.moveTo(hex.points[0].x, hex.points[0].y);
+      hex.points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
+      ctx.closePath();
+    });
+    ctx.clip();
   }
 
   function getTerrainDirtyBounds() {
@@ -4496,6 +4704,710 @@
     ctx.fillStyle = fill;
     ctx.fill();
     ctx.restore();
+  }
+
+  function renderSubhexDetailTileLayer(ctx, visibleHexes = [], layer = "terrain") {
+    if (!isSubhexLayerActive()) return;
+    if (layer === "features" && (!renderer.drawing.visibleOverlays.features || !shouldRenderFeatureArt())) return;
+
+    const progress = getSubhexLayerProgress();
+    if (!progress || !visibleHexes.length) return;
+    const allowTileBuild = !isSubhexDetailBuildDeferred();
+
+    withWorldCanvasTransform(ctx, () => {
+      ctx.save();
+      ctx.globalAlpha = progress;
+      visibleHexes.forEach(hex => {
+        const tile = getSubhexDetailTile(hex, { allowBuild: allowTileBuild });
+        const canvas = layer === "features" ? tile?.featureCanvas : tile?.terrainCanvas;
+        if (!tile || !canvas?.width || !canvas?.height) return;
+        ctx.drawImage(
+          canvas,
+          tile.bounds.left,
+          tile.bounds.top,
+          tile.bounds.right - tile.bounds.left,
+          tile.bounds.bottom - tile.bounds.top
+        );
+      });
+      ctx.restore();
+    });
+  }
+
+  function resetSubhexDetailPrecache() {
+    if (renderer.subhexDetailPrecache.frame) {
+      window.cancelAnimationFrame(renderer.subhexDetailPrecache.frame);
+    }
+    renderer.subhexDetailPrecache = {
+      running: false,
+      complete: false,
+      index: 0,
+      frame: null,
+      awaitingImages: false
+    };
+  }
+
+  function invalidateAllSubhexDetailTiles() {
+    renderer.subhexDetailTileCache.clear();
+    renderer.subhexGridPathCache.clear();
+    renderer.subhexGridReady = false;
+    resetSubhexDetailPrecache();
+  }
+
+  function isSubhexDetailPrecachePending() {
+    return Boolean(renderer.hexes.length)
+      && (!renderer.subhexDetailPrecache.complete || renderer.subhexDetailPrecache.running || renderer.subhexDetailPrecache.awaitingImages);
+  }
+
+  function startSubhexDetailPrecache() {
+    const state = renderer.subhexDetailPrecache;
+    if (!shouldRunSubhexDetailPrecache()) return;
+    if (!renderer.hexes.length || state.running || state.complete) return;
+    if (!renderer.featureAssetsLoaded) {
+      state.awaitingImages = true;
+      return;
+    }
+    if (state.awaitingImages && (renderer.featureImageQueue.length || renderer.featureImageActiveLoads > 0)) return;
+    if (state.awaitingImages) {
+      state.awaitingImages = false;
+      state.index = 0;
+    }
+
+    state.running = true;
+    state.frame = window.requestAnimationFrame(processSubhexDetailPrecache);
+  }
+
+  function shouldRunSubhexDetailPrecache() {
+    return !renderer.drawing.enabled
+      && !renderer.view.animatingZoom
+      && !renderer.view.pinching
+      && renderer.view.zoom >= PARENT_MAX_ZOOM - 0.001;
+  }
+
+  function processSubhexDetailPrecache() {
+    const state = renderer.subhexDetailPrecache;
+    state.frame = null;
+    if (!state.running) return;
+
+    if (!renderer.featureAssetsLoaded) {
+      state.running = false;
+      state.awaitingImages = true;
+      return;
+    }
+
+    const startedAt = performance.now();
+    const frameBudgetMs = renderer.initialMapLoadingActive ? 12 : 6;
+    while (state.index < renderer.hexes.length && performance.now() - startedAt < frameBudgetMs) {
+      buildSubhexGridPathForHex(renderer.hexes[state.index]);
+      getSubhexDetailTile(renderer.hexes[state.index], { allowBuild: true, skipTrim: true });
+      state.index += 1;
+    }
+
+    if (state.index < renderer.hexes.length) {
+      state.frame = window.requestAnimationFrame(processSubhexDetailPrecache);
+      return;
+    }
+
+    if (renderer.featureImageQueue.length || renderer.featureImageActiveLoads > 0) {
+      state.running = false;
+      state.awaitingImages = true;
+      return;
+    }
+
+    state.running = false;
+    state.awaitingImages = false;
+    state.complete = true;
+    buildFullSubhexGridPath();
+    trimSubhexDetailTileCache();
+  }
+
+  function getSubhexDetailTile(hex, options = {}) {
+    if (!hex?.id) return null;
+    const metrics = getSubhexMetrics();
+    const key = getSubhexDetailTileKey(hex, metrics);
+    const cached = renderer.subhexDetailTileCache.get(hex.id);
+    if (cached?.key === key) return cached;
+    if (options.allowBuild === false) return null;
+
+    const bounds = getSubhexDetailTileBounds(hex, metrics);
+    const terrainCanvas = document.createElement("canvas");
+    const featureCanvas = document.createElement("canvas");
+    const width = Math.max(1, Math.ceil((bounds.right - bounds.left) * TERRAIN_CACHE_SCALE));
+    const height = Math.max(1, Math.ceil((bounds.bottom - bounds.top) * TERRAIN_CACHE_SCALE));
+    terrainCanvas.width = width;
+    terrainCanvas.height = height;
+    featureCanvas.width = width;
+    featureCanvas.height = height;
+
+    const subhexes = getSubhexesForBounds(bounds, [hex]);
+    renderSubhexTileTerrain(terrainCanvas.getContext("2d"), bounds, subhexes);
+    renderSubhexTileFeatures(featureCanvas.getContext("2d"), bounds, subhexes, metrics);
+
+    const tile = { key, bounds, terrainCanvas, featureCanvas };
+    renderer.subhexDetailTileCache.set(hex.id, tile);
+    incrementRenderPerfValue("subhexTilesBuilt");
+    trimSubhexDetailTileCache();
+    return tile;
+  }
+
+  function buildSubhexGridPathForHex(hex) {
+    if (!hex?.id) return "";
+    const cached = renderer.subhexGridPathCache.get(hex.id);
+    if (cached) return cached;
+
+    const metrics = getSubhexMetrics();
+    const bounds = getSubhexDetailTileBounds(hex, metrics);
+    const path = buildGridPath(getSubhexesForBounds(bounds, [hex]));
+    renderer.subhexGridPathCache.set(hex.id, path);
+    incrementRenderPerfValue("subhexGridBuilt");
+    return path;
+  }
+
+  function buildFullSubhexGridPath() {
+    if (renderer.subhexGridReady) return;
+    renderer.hexes.forEach(buildSubhexGridPathForHex);
+    renderer.subhexGridReady = true;
+  }
+
+  function buildVisibleSubhexGridPath(visibleHexes = []) {
+    return (visibleHexes || []).map(buildSubhexGridPathForHex).filter(Boolean).join(" ");
+  }
+
+  function renderSubhexTileTerrain(ctx, bounds, subhexes) {
+    ctx.setTransform(TERRAIN_CACHE_SCALE, 0, 0, TERRAIN_CACHE_SCALE, -bounds.left * TERRAIN_CACHE_SCALE, -bounds.top * TERRAIN_CACHE_SCALE);
+    ctx.clearRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
+    subhexes.forEach(subhex => {
+      drawCanvasPolygon(ctx, subhex.points, getSubhexTerrainFill(subhex), 0.82);
+    });
+  }
+
+  function renderSubhexTileFeatures(ctx, bounds, subhexes, metrics) {
+    ctx.setTransform(TERRAIN_CACHE_SCALE, 0, 0, TERRAIN_CACHE_SCALE, -bounds.left * TERRAIN_CACHE_SCALE, -bounds.top * TERRAIN_CACHE_SCALE);
+    ctx.clearRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
+    subhexes.forEach(subhex => {
+      const stack = getSubhexFeatureStack(subhex);
+      stack.forEach((item, index) => {
+        const image = getFeatureArtImage(item.file, item.tint, { type: "terrain", hexId: subhex.owner?.id });
+        if (!image) return;
+        drawFeatureArtImage(ctx, image, getSubhexFeatureArtBox(subhex, metrics, index, stack.length), item.opacity);
+      });
+    });
+  }
+
+  function getSubhexDetailTileBounds(hex, metrics) {
+    const pad = Math.max(metrics.radius * 3.2, 8);
+    const xs = hex.points.map(point => point.x);
+    const ys = hex.points.map(point => point.y);
+    return {
+      left: Math.max(0, Math.min(...xs) - pad),
+      right: Math.min(renderer.view.width, Math.max(...xs) + pad),
+      top: Math.max(0, Math.min(...ys) - pad),
+      bottom: Math.min(renderer.view.height, Math.max(...ys) + pad)
+    };
+  }
+
+  function getSubhexDetailTileKey(hex, metrics) {
+    return [
+      hex.id,
+      hex.fill,
+      hex.baseTerrain,
+      Number(hex.elevation || 0),
+      (hex.features || []).join(","),
+      metrics.radius,
+      metrics.hexHeight,
+      renderer.featureAssetsLoaded ? 1 : 0
+    ].join("|");
+  }
+
+  function trimSubhexDetailTileCache() {
+    const maxTiles = Math.max(420, renderer.hexes.length + 40);
+    if (renderer.subhexDetailTileCache.size <= maxTiles) return;
+    const deleteCount = renderer.subhexDetailTileCache.size - maxTiles;
+    let deleted = 0;
+    for (const key of renderer.subhexDetailTileCache.keys()) {
+      renderer.subhexDetailTileCache.delete(key);
+      deleted += 1;
+      if (deleted >= deleteCount) break;
+    }
+  }
+
+  function deferSubhexDetailBuild() {
+    renderer.view.subhexDetailDeferredUntil = performance.now() + SUBHEX_DETAIL_ZOOM_SETTLE_MS;
+    if (renderer.view.subhexDetailSettleTimer) {
+      window.clearTimeout(renderer.view.subhexDetailSettleTimer);
+    }
+    renderer.view.subhexDetailSettleTimer = window.setTimeout(() => {
+      renderer.view.subhexDetailSettleTimer = null;
+      renderer.view.subhexDetailDeferredUntil = 0;
+      if (shouldRunSubhexDetailPrecache()) startSubhexDetailPrecache();
+      if (isActive()) queueMapRender(true);
+    }, SUBHEX_DETAIL_ZOOM_SETTLE_MS);
+  }
+
+  function isSubhexDetailBuildDeferred() {
+    return renderer.view.animatingZoom
+      || renderer.view.pinching
+      || (!renderer.subhexDetailPrecache.complete && performance.now() < renderer.view.subhexDetailDeferredUntil);
+  }
+
+  function renderSubhexRouteProjectionLayer(ctx, visibleHexes = []) {
+    if (!isSubhexLayerActive()) return;
+    if (isSubhexDetailBuildDeferred()) return;
+
+    const progress = getSubhexLayerProgress();
+    const entries = getSubhexRouteProjectionEntries(visibleHexes);
+    if (!entries.length) return;
+
+    withWorldCanvasTransform(ctx, () => {
+      entries.forEach(entry => {
+        drawCanvasOverlayPath(ctx, entry.path, {
+          stroke: entry.stroke,
+          width: entry.width,
+          dash: entry.dash,
+          alpha: entry.alpha * progress,
+          lineCap: "round"
+        });
+        if (entry.innerStroke) {
+          drawCanvasOverlayPath(ctx, entry.path, {
+            stroke: entry.innerStroke,
+            width: entry.innerWidth,
+            dash: entry.dash,
+            alpha: entry.innerAlpha * progress,
+            lineCap: "round"
+          });
+        }
+      });
+    });
+  }
+
+  function getParentRouteLayerOpacity() {
+    if (!isSubhexLayerActive()) return 1;
+    return Math.max(0, 1 - getSubhexLayerProgress() * 1.4);
+  }
+
+  function getParentFeatureLayerOpacity() {
+    if (!isSubhexLayerActive()) return 1;
+    return Math.max(0, 1 - getSubhexLayerProgress() * 1.6);
+  }
+
+  function getSubhexRouteProjectionEntries(visibleHexes = []) {
+    const key = buildSubhexRouteProjectionCacheKey();
+    if (renderer.subhexRouteProjectionCache.key === key) {
+      return renderer.subhexRouteProjectionCache.entries;
+    }
+
+    const entries = [];
+    const overlaysByType = getOverlaysByType();
+
+    if (renderer.drawing.visibleOverlays.path) {
+      connectedPathStrings(overlaysByType.path, "path").forEach(pathData => {
+        entries.push({
+          ...getSubhexRouteProjectionStyle({ type: "path", style: pathData.style, isMajor: pathData.isMajor, routeName: pathData.routeName }),
+          path: pathData.d
+        });
+      });
+    }
+
+    if (renderer.drawing.visibleOverlays.river) {
+      getCanvasRiverPathStrings(overlaysByType.river).forEach(pathData => {
+        entries.push({
+          ...getSubhexRouteProjectionStyle({ type: "river", style: pathData.style, isMajor: pathData.isMajor, routeName: pathData.routeName }),
+          path: pathData.d
+        });
+      });
+    }
+
+    if (renderer.drawing.visibleOverlays.sea_route) {
+      connectedPathStrings(overlaysByType.sea_route, "sea_route").forEach(pathData => {
+        entries.push({
+          ...getSubhexRouteProjectionStyle({ type: "sea_route", style: pathData.style, isMajor: pathData.isMajor, routeName: pathData.routeName }),
+          path: pathData.d
+        });
+      });
+    }
+
+    if (renderer.drawing.visibleOverlays.road) {
+      const roadSegments = overlaysByType.road;
+      const passRoadSegments = roadSegments.filter(isAutoPassRoadSegment);
+      const baseRoadSegments = roadSegments.filter(segment => !isAutoPassRoadSegment(segment));
+      const roadBreakHexIds = new Set([
+        ...getAutoPassConnectorHexIds(passRoadSegments, baseRoadSegments),
+        ...getRoadVisualAnchorBreakHexIds(baseRoadSegments)
+      ]);
+      connectedPathStrings(baseRoadSegments, "road", roadBreakHexIds).forEach(pathData => {
+        entries.push({
+          ...getSubhexRouteProjectionStyle({ type: "road", style: pathData.style, isMajor: pathData.isMajor, routeName: pathData.routeName }),
+          path: pathData.d
+        });
+      });
+    }
+
+    const cachedEntries = entries.filter(entry => entry.path);
+    renderer.subhexRouteProjectionCache = { key, entries: cachedEntries };
+    setRenderPerfValue("subhexRoutesBuilt", true);
+    return cachedEntries;
+  }
+
+  function buildSubhexRouteProjectionCacheKey() {
+    const visible = renderer.drawing.visibleOverlays;
+    return [
+      renderer.overlayRevision,
+      visible.path ? 1 : 0,
+      visible.river ? 1 : 0,
+      visible.sea_route ? 1 : 0,
+      visible.road ? 1 : 0
+    ].join("|");
+  }
+
+  function getSubhexRouteProjectionStyle(group) {
+    if (group.type === "river") {
+      return {
+        stroke: "#28bced",
+        width: group.isMajor ? 3.2 : 2.4,
+        dash: [],
+        alpha: 0.86,
+        innerStroke: group.isMajor ? "rgba(218, 247, 255, 0.72)" : "",
+        innerWidth: 1.2,
+        innerAlpha: 0.72
+      };
+    }
+    if (group.type === "sea_route") {
+      return {
+        stroke: "rgba(236, 227, 176, 0.78)",
+        width: 1.6,
+        dash: [4, 3],
+        alpha: 0.78
+      };
+    }
+    if (group.type === "path") {
+      return {
+        stroke: ROAD_STYLE_COLORS[getOverlayBaseStyle(group.style)] || ROAD_STYLE_COLORS.dark_brown,
+        width: 1.3,
+        dash: [3.5, 2.8],
+        alpha: 0.76
+      };
+    }
+    return {
+      stroke: ROAD_STYLE_COLORS[getOverlayBaseStyle(group.style)] || ROAD_STYLE_COLORS.dark_brown,
+      width: group.isMajor ? 2.7 : 2,
+      dash: [],
+      alpha: 0.88,
+      innerStroke: group.isMajor ? "rgba(245, 205, 118, 0.62)" : "",
+      innerWidth: 0.9,
+      innerAlpha: 0.62
+    };
+  }
+
+  function withWorldCanvasTransform(ctx, draw) {
+    const scale = window.devicePixelRatio || 1;
+    ctx.save();
+    ctx.setTransform(
+      scale * renderer.view.zoom,
+      0,
+      0,
+      scale * renderer.view.zoom,
+      -renderer.view.panX * renderer.view.zoom * scale,
+      -renderer.view.panY * renderer.view.zoom * scale
+    );
+    draw();
+    ctx.restore();
+  }
+
+  function getSubhexFeatureStack(subhex) {
+    const owner = subhex.owner;
+    if (!owner) return [];
+
+    const features = getSubhexSeededFeatures(subhex);
+    return features
+      .map(featureId => {
+        const file = chooseSubhexFeatureArtFile(owner, featureId);
+        if (!file) return null;
+        const item = {
+          featureId,
+          file,
+          opacity: getSubhexFeatureOpacity(subhex, featureId),
+          layer: FEATURE_LAYER_BY_ID[featureId] || 50
+        };
+        return {
+          ...item,
+          tint: getFeatureArtTint(owner, item)
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.layer - right.layer)
+      .slice(0, 2);
+  }
+
+  function getSubhexSeededFeatures(subhex) {
+    const ownerFeatures = Array.isArray(subhex.owner?.features) ? subhex.owner.features : [];
+    const candidates = new Map();
+    ownerFeatures.forEach(featureId => {
+      if (featureId) candidates.set(featureId, { featureId, influence: 1 });
+    });
+    getSubhexNeighborFeatureCandidates(subhex).forEach(candidate => {
+      const existing = candidates.get(candidate.featureId);
+      if (!existing || candidate.influence > existing.influence) {
+        candidates.set(candidate.featureId, candidate);
+      }
+    });
+    const base = subhex.owner?.baseTerrain || "";
+
+    if (WATER_TERRAINS.has(base) && ![...candidates.keys()].some(feature => ["waves", "shoals", "reef", "kelp", "water_rocks", "ice"].includes(feature))) {
+      candidates.set(base === "deep_sea" || base === "sea" ? "waves" : "marsh", {
+        featureId: base === "deep_sea" || base === "sea" ? "waves" : "marsh",
+        influence: 0.72
+      });
+    }
+    if (["rock", "wastes", "bleak_barrens"].includes(base) && ![...candidates.keys()].some(feature => ["ridges", "cliffs"].includes(feature))) {
+      candidates.set("ridges", { featureId: "ridges", influence: 0.68 });
+    }
+
+    return [...candidates.values()]
+      .filter(candidate => candidate.featureId)
+      .filter(candidate => shouldSeedFeatureOnSubhex(subhex, candidate.featureId, candidate.influence))
+      .sort((left, right) => getSubhexFeatureSortValue(subhex, left.featureId) - getSubhexFeatureSortValue(subhex, right.featureId))
+      .map(candidate => candidate.featureId);
+  }
+
+  function getSubhexNeighborFeatureCandidates(subhex) {
+    const owner = subhex.owner;
+    if (!owner) return [];
+    const candidates = [];
+    EDGE_NAMES.forEach(edgeName => {
+      const neighbor = getNeighborHex(owner, edgeName);
+      const influence = getSubhexNeighborInfluence(subhex, owner, edgeName);
+      if (!neighbor || influence <= 0) return;
+      (neighbor.features || []).forEach(featureId => {
+        if (!featureId || !isNeighborFeatureCompatibleWithSubhexOwner(featureId, owner)) return;
+        candidates.push({ featureId, influence });
+      });
+    });
+    return candidates;
+  }
+
+  function getSubhexNeighborInfluence(subhex, owner, edgeName) {
+    const edge = getHexEdgeSegment(owner, edgeName);
+    if (!edge) return 0;
+    const dimensions = getGeneratedMapDimensions();
+    const distance = distanceToSegment(subhex.center, edge.a, edge.b);
+    const edgeProximity = Math.max(0, 1 - distance / Math.max(1, dimensions.radius * 0.72));
+    if (edgeProximity <= 0) return 0;
+    return 0.12 + edgeProximity * 0.34;
+  }
+
+  function isNeighborFeatureCompatibleWithSubhexOwner(featureId, owner) {
+    const base = owner?.baseTerrain || "";
+    const family = getFeatureGroupFamily(featureId);
+    if (family === "water") return WATER_TERRAINS.has(base);
+    if (featureId === "ice") return WATER_TERRAINS.has(base) || base === "snow";
+    if (["waves", "shoals", "reef", "kelp", "water_rocks", "whirlpool"].includes(featureId)) return WATER_TERRAINS.has(base);
+    if (["mountains", "snowcapped_mountains", "lone_mountain", "volcano", "cliffs", "ridges"].includes(featureId)) return LAND_TERRAINS.has(base) && !WATER_TERRAINS.has(base);
+    if (["forest", "woods", "jungle", "shrub", "cactus_scrub", "marsh"].includes(featureId)) return LAND_TERRAINS.has(base) || base === "wetland";
+    return true;
+  }
+
+  function shouldSeedFeatureOnSubhex(subhex, featureId, influence = 1) {
+    const family = getFeatureGroupFamily(featureId);
+    const base = subhex.owner?.baseTerrain || "";
+    if (family === "water" && !WATER_TERRAINS.has(base)) return false;
+    if (["waves", "shoals", "reef", "kelp", "water_rocks", "whirlpool"].includes(featureId) && !WATER_TERRAINS.has(base)) return false;
+    if (["mountains", "snowcapped_mountains", "lone_mountain", "volcano", "cliffs", "ridges"].includes(featureId) && WATER_TERRAINS.has(base)) return false;
+
+    const localElevation = getSubhexGeneratedElevation(subhex);
+    const parentElevation = Number(subhex.owner?.elevation || 0);
+    const reliefBoost = Math.max(-0.16, Math.min(0.22, (localElevation - parentElevation) * 0.055));
+    const waterDampener = WATER_TERRAINS.has(base) ? -0.08 : 0;
+    const threshold = getSubhexFeatureThreshold(featureId, family) + (
+      family === "structure" ? reliefBoost : family === "water" ? waterDampener : 0
+    );
+    return seededUnit(`subhex-feature:${subhex.owner?.id || ""}:${subhex.q}:${subhex.r}:${featureId}`) < threshold * Math.max(0, Math.min(1, influence));
+  }
+
+  function getSubhexFeatureThreshold(featureId, family) {
+    if (["mountains", "snowcapped_mountains"].includes(featureId)) return 0.34;
+    if (["ridges", "cliffs"].includes(featureId)) return 0.44;
+    if (["lone_mountain", "volcano"].includes(featureId)) return 0.18;
+    if (["forest", "jungle"].includes(featureId)) return 0.58;
+    if (featureId === "woods") return 0.46;
+    if (["shrub", "cactus_scrub"].includes(featureId)) return 0.36;
+    if (["marsh", "ice"].includes(featureId)) return 0.42;
+    if (["waves", "shoals", "kelp"].includes(featureId)) return 0.36;
+    if (["reef", "water_rocks"].includes(featureId)) return 0.22;
+    if (["farmland", "sand"].includes(featureId)) return 0.34;
+    if (family === "vegetation") return 0.42;
+    if (family === "structure") return 0.28;
+    if (family === "water") return 0.28;
+    return 0.24;
+  }
+
+  function getSubhexFeatureSortValue(subhex, featureId) {
+    return seededUnit(`subhex-feature-order:${subhex.owner?.id || ""}:${subhex.q}:${subhex.r}:${featureId}`);
+  }
+
+  function chooseSubhexFeatureArtFile(owner, featureId) {
+    const file = chooseFeatureArtFile(owner, featureId, new Set([...(owner.features || []), featureId]));
+    return file || FEATURE_ART_FILES[featureId] || null;
+  }
+
+  function getSubhexFeatureOpacity(subhex, featureId) {
+    const baseOpacity = FEATURE_ART_OPACITY[featureId] || 0.62;
+    const roll = seededUnit(`subhex-feature-opacity:${subhex.owner?.id || ""}:${subhex.q}:${subhex.r}:${featureId}`);
+    return Math.min(0.74, Math.max(0.28, baseOpacity * (0.66 + roll * 0.18)));
+  }
+
+  function getSubhexFeatureArtBox(subhex, metrics, index, total) {
+    const sizeRoll = seededUnit(`subhex-feature-size:${subhex.owner?.id || ""}:${subhex.q}:${subhex.r}:${index}`);
+    const jitterX = (seededUnit(`subhex-feature-x:${subhex.owner?.id || ""}:${subhex.q}:${subhex.r}:${index}`) - 0.5) * metrics.radius * 0.34;
+    const jitterY = (seededUnit(`subhex-feature-y:${subhex.owner?.id || ""}:${subhex.q}:${subhex.r}:${index}`) - 0.5) * metrics.hexHeight * 0.26;
+    const stackOffset = total > 1 ? (index - (total - 1) / 2) * metrics.radius * 0.34 : 0;
+    const size = metrics.radius * (1.72 + sizeRoll * 0.26) * (total > 1 ? 0.84 : 1);
+    return {
+      x: subhex.center.x - size / 2 + jitterX + stackOffset,
+      y: subhex.center.y - size * 0.52 + jitterY,
+      width: size,
+      height: size
+    };
+  }
+
+  function isSubhexLayerActive() {
+    return renderer.view.zoom >= MAX_ZOOM - 0.001 && !renderer.drawing.enabled;
+  }
+
+  function getSubhexLayerProgress() {
+    if (!isSubhexLayerActive()) return 0;
+    return 1;
+  }
+
+  function getSubhexMetrics() {
+    const dimensions = getGeneratedMapDimensions();
+    return {
+      radius: dimensions.radius / SUBHEX_PARENT_SPAN,
+      hexHeight: dimensions.hexHeight / SUBHEX_PARENT_SPAN,
+      origin: getPrototypeHexCenter(0, 0, dimensions)
+    };
+  }
+
+  function getVisibleSubhexes(visibleHexes = []) {
+    if (!isSubhexLayerActive()) return [];
+
+    const metrics = getSubhexMetrics();
+    const bounds = getVisibleBounds(metrics.radius * 4);
+    return getSubhexesForBounds(bounds, visibleHexes?.length ? visibleHexes : renderer.hexes);
+  }
+
+  function getSubhexesForBounds(bounds, ownerCandidates = renderer.hexes) {
+    const metrics = getSubhexMetrics();
+    const qMin = Math.floor((bounds.left - metrics.origin.x) / (metrics.radius * 1.5)) - 2;
+    const qMax = Math.ceil((bounds.right - metrics.origin.x) / (metrics.radius * 1.5)) + 2;
+    const rMin = Math.floor((bounds.top - metrics.origin.y) / metrics.hexHeight) - 2;
+    const rMax = Math.ceil((bounds.bottom - metrics.origin.y) / metrics.hexHeight) + 2;
+    const subhexes = [];
+
+    for (let q = qMin; q <= qMax; q += 1) {
+      const parity = positiveModulo(q, 2);
+      for (let r = rMin; r <= rMax; r += 1) {
+        const center = {
+          x: metrics.origin.x + q * metrics.radius * 1.5,
+          y: metrics.origin.y + r * metrics.hexHeight + parity * metrics.hexHeight * 0.5
+        };
+        if (
+          center.x + metrics.radius < bounds.left ||
+          center.x - metrics.radius > bounds.right ||
+          center.y + metrics.hexHeight * 0.5 < bounds.top ||
+          center.y - metrics.hexHeight * 0.5 > bounds.bottom
+        ) {
+          continue;
+        }
+
+        const owner = getParentHexForSubhexPoint(center, ownerCandidates);
+        if (!owner) continue;
+        subhexes.push({
+          q,
+          r,
+          center,
+          owner,
+          points: makeWorldHex(center.x, center.y, metrics.radius, metrics.hexHeight)
+        });
+      }
+    }
+
+    return subhexes;
+  }
+
+  function getParentHexForSubhexPoint(point, candidates = renderer.hexes) {
+    return (candidates || []).find(hex => pointInPolygon(point, hex.points))
+      || renderer.hexes.find(hex => pointInPolygon(point, hex.points))
+      || null;
+  }
+
+  function getSubhexTerrainFill(subhex) {
+    const baseFill = subhex.owner?.fill || TERRAIN_COLORS[subhex.owner?.baseTerrain] || "#7f7a66";
+    const roll = stableHash(`subhex-fill:${subhex.owner?.id || ""}:${subhex.q}:${subhex.r}`) % 100;
+    const mixTarget = roll < 50 ? "#ffffff" : "#000000";
+    const elevationDelta = getSubhexGeneratedElevation(subhex) - Number(subhex.owner?.elevation || 0);
+    const elevationTarget = elevationDelta >= 0 ? "#000000" : "#ffffff";
+    const elevationAmount = Math.min(0.16, Math.abs(elevationDelta) * 0.035);
+    const noiseAmount = roll < 50 ? 0.035 + roll / 5000 : 0.018 + (roll - 50) / 6500;
+    return mixHexColor(mixHexColor(baseFill, elevationTarget, elevationAmount), mixTarget, noiseAmount);
+  }
+
+  function getSubhexGeneratedElevation(subhex) {
+    const parentElevation = Number(subhex.owner?.elevation || 0);
+    const relief = getSubhexReliefStrength(subhex.owner);
+    const waveA = seededUnit(`subhex-elevation-a:${subhex.owner?.id || ""}:${subhex.q}`) - 0.5;
+    const waveB = seededUnit(`subhex-elevation-b:${subhex.owner?.id || ""}:${subhex.r}`) - 0.5;
+    const local = seededUnit(`subhex-elevation-local:${subhex.owner?.id || ""}:${subhex.q}:${subhex.r}`) - 0.5;
+    const centerBias = getSubhexParentCenterBias(subhex) * 0.34;
+    return parentElevation + (waveA * 0.62 + waveB * 0.48 + local * 0.88 + centerBias) * relief;
+  }
+
+  function getSubhexReliefStrength(owner) {
+    const elevation = Math.abs(Number(owner?.elevation || 0));
+    const features = new Set(owner?.features || []);
+    let strength = 0.75 + Math.min(1.35, elevation * 0.18);
+    if (["mountains", "snowcapped_mountains", "lone_mountain", "volcano", "cliffs"].some(feature => features.has(feature))) strength += 1.2;
+    if (features.has("ridges")) strength += 0.72;
+    if (WATER_TERRAINS.has(owner?.baseTerrain)) strength *= 0.32;
+    if (["plains", "grassland", "lush_grassland"].includes(owner?.baseTerrain)) strength *= 0.68;
+    return Math.max(0.2, Math.min(3, strength));
+  }
+
+  function getSubhexParentCenterBias(subhex) {
+    const owner = subhex.owner;
+    if (!owner) return 0;
+    const dimensions = getGeneratedMapDimensions();
+    const dx = (subhex.center.x - owner.center.x) / Math.max(1, dimensions.radius);
+    const dy = (subhex.center.y - owner.center.y) / Math.max(1, dimensions.hexHeight * 0.5);
+    return Math.max(-1, Math.min(1, 1 - Math.hypot(dx, dy)));
+  }
+
+  function buildSubhexGridPath(subhexes = []) {
+    if (!isSubhexLayerActive()) return "";
+    return buildGridPath(subhexes);
+  }
+
+  function positiveModulo(value, divisor) {
+    return ((value % divisor) + divisor) % divisor;
+  }
+
+  function mixHexColor(color, target, amount = 0.1) {
+    const from = parseHexColor(color);
+    const to = parseHexColor(target);
+    if (!from || !to) return color;
+    const ratio = Math.max(0, Math.min(1, Number(amount) || 0));
+    return `rgb(${Math.round(from.r + (to.r - from.r) * ratio)}, ${Math.round(from.g + (to.g - from.g) * ratio)}, ${Math.round(from.b + (to.b - from.b) * ratio)})`;
+  }
+
+  function parseHexColor(color) {
+    const match = String(color || "").trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (!match) return null;
+    const value = match[1].length === 3
+      ? match[1].split("").map(char => `${char}${char}`).join("")
+      : match[1];
+    return {
+      r: parseInt(value.slice(0, 2), 16),
+      g: parseInt(value.slice(2, 4), 16),
+      b: parseInt(value.slice(4, 6), 16)
+    };
   }
 
   function renderCanvasDrawablePaths(ctx) {
@@ -4731,8 +5643,7 @@
   }
 
   function getElevationBleedOpacityScale() {
-    if (renderer.view.zoom > FEATURE_GROUP_MAX_ZOOM) return 1;
-    return 0.76 - getFeatureGroupCompactness() * 0.22;
+    return 1;
   }
 
   function isWaterBase(baseTerrain) {
@@ -4756,6 +5667,7 @@
       markRouteCacheDirty();
       markFeatureCacheDirty();
       queueMapRender(true);
+      if (!renderer.initialMapLoadingActive && shouldRunSubhexDetailPrecache()) startSubhexDetailPrecache();
     });
 
     return renderer.featureAssetsLoading;
@@ -4910,6 +5822,7 @@
     markFeatureCacheDirty();
     markOverlayCacheDirty();
     queueMapRender(true);
+    if (!renderer.initialMapLoadingActive && shouldRunSubhexDetailPrecache()) startSubhexDetailPrecache();
   }
 
   function markFeatureImageUsageDirty(cacheKey) {
@@ -4996,19 +5909,11 @@
   }
 
   function renderFeatureLayer(ctx, hexes) {
-    const mode = getFeatureRenderMode();
-    if (mode.startsWith("group")) {
-      renderGroupedFeatureArt(ctx, hexes);
-      return;
-    }
     if (!shouldRenderFeatureArt()) return;
     hexes.forEach(hex => renderFeatureArtForHex(ctx, hex));
   }
 
   function getFeatureRenderMode() {
-    if (renderer.view.zoom <= 0.18) return "group-far";
-    if (renderer.view.zoom <= 0.21) return "group-mid";
-    if (renderer.view.zoom <= FEATURE_GROUP_MAX_ZOOM + 0.001) return "group-near";
     return "detail";
   }
 
@@ -5609,7 +6514,7 @@
 
   function getFeatureArtOpacity(hex, item, zoomOpacity) {
     const waterFeatures = new Set(["waves", "shoals", "reef", "kelp", "water_rocks", "rapids", "falls", "whirlpool", "ice"]);
-    if (!waterFeatures.has(item.featureId)) return 1;
+    if (!waterFeatures.has(item.featureId)) return zoomOpacity;
     let opacity = item.opacity * zoomOpacity;
     const darkBases = new Set(["deep_sea", "sea", "coastal_water", "wetland", "jungle_floor", "lush_grassland", "rock", "wastes", "bleak_barrens"]);
     if (darkBases.has(hex.baseTerrain)) opacity *= 1.22;
@@ -5656,13 +6561,29 @@
     };
   }
 
-  function renderSvg({ width, height }, visibleHexes) {
+  function renderSvg({ width, height }, visibleHexes, visibleSubhexes = []) {
     const visibleWidth = width / renderer.view.zoom;
     const visibleHeight = height / renderer.view.zoom;
     renderer.svg.setAttribute("viewBox", `${renderer.view.panX} ${renderer.view.panY} ${visibleWidth} ${visibleHeight}`);
+    if (shouldReuseSvgDuringPan()) {
+      setRenderPerfValue("svgReused", true);
+      return;
+    }
+    setRenderPerfValue("svgRebuilt", true);
     renderer.svg.innerHTML = "";
 
     const fragment = document.createDocumentFragment();
+    const subhexGridPath = timeRenderPerfMark("subhexGridPath", () => (
+      isSubhexDetailBuildDeferred() ? "" : buildVisibleSubhexGridPath(visibleHexes)
+    ));
+    if (subhexGridPath) {
+      const subhexGrid = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      subhexGrid.setAttribute("class", "generated-map-subhex-grid-lines");
+      subhexGrid.setAttribute("d", subhexGridPath);
+      subhexGrid.setAttribute("opacity", String(getSubhexLayerProgress()));
+      fragment.appendChild(subhexGrid);
+    }
+
     const gridPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
     gridPath.setAttribute("class", "generated-map-grid-lines");
     gridPath.setAttribute("d", buildGridPath(visibleHexes));
@@ -5672,13 +6593,17 @@
     renderGeographicRegionOverlay(fragment, visibleHexes);
     renderDrawableOverlays(fragment, visibleHexes);
     renderPoliticalRegionBorders(fragment, visibleHexes);
-    if (renderer.drawing.visibleOverlays.pois) {
-      renderPoiMarkers(fragment, visibleHexes);
-    }
     renderCoordinateLabels(fragment, visibleHexes);
     renderRegionLabels(fragment, visibleHexes);
     if (shouldRenderRouteLabels()) {
       renderRouteLabels(fragment);
+    }
+    if (renderer.drawing.visibleOverlays.pois) {
+      const poiCount = timeRenderPerfMark("pois", () => renderPoiMarkers(fragment, visibleHexes));
+      setRenderPerfValue("poiCount", poiCount);
+      renderer.svg.dataset.poiCount = String(poiCount);
+    } else {
+      renderer.svg.dataset.poiCount = "0";
     }
 
     const selectedHex = hexForPathPoint(renderer.selectedHexId);
@@ -5702,9 +6627,17 @@
     renderer.svg.appendChild(fragment);
   }
 
+  function shouldReuseSvgDuringPan() {
+    return Boolean(renderer.svg?.childNodes?.length)
+      && renderer.view.dragging
+      && renderer.view.dragMoved
+      && !renderer.drawing.enabled
+      && !renderer.view.pinching;
+  }
+
   function getGridLineOpacity() {
-    if (renderer.view.zoom > FEATURE_GROUP_MAX_ZOOM) return 1;
-    return 0.42 - getFeatureGroupCompactness() * 0.24;
+    if (isSubhexLayerActive()) return 0.72;
+    return 1;
   }
 
   function renderCoordinateLabels(fragment, visibleHexes) {
@@ -5969,9 +6902,10 @@
     const markerRadius = markerDiameter / 2;
     const baseIconSize = Math.min(markerDiameter - 12, 54);
     const badgeRadius = Math.max(10, Math.round(markerRadius * 0.34));
+    let renderedCount = 0;
 
-    visibleHexes.forEach(hex => {
-      const pois = renderer.poisByHexId.get(hex.id) || renderer.poisByHexId.get(hex.label);
+    (visibleHexes || []).forEach(hex => {
+      const pois = getPoisForRenderedHex(hex);
       if (!pois?.length) return;
 
       const markerPoi = getPrimaryPoiMarkerRecord(pois);
@@ -5979,29 +6913,43 @@
       const markerX = hex.center.x;
       const markerY = hex.center.y;
       const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-      const clipId = `generated-map-poi-clip-${String(hex.id || hex.label || "hex").replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
-      const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
       const iconGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
       const backgroundNode = createPoiMarkerBackgroundNode(markerProfile, markerX, markerY);
-      const clipNode = createPoiMarkerBackgroundNode(markerProfile, markerX, markerY);
 
       group.setAttribute("class", `generated-map-poi-marker generated-map-poi-marker-${markerProfile.classKey}`);
-      clipPath.setAttribute("id", clipId);
-      clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
-      clipPath.appendChild(clipNode);
-      defs.appendChild(clipPath);
-      iconGroup.setAttribute("clip-path", `url(#${clipId})`);
       iconGroup.appendChild(createPoiMarkerSymbolNode(markerPoi, markerX, markerY, markerProfile.iconSize));
 
-      group.appendChild(defs);
       group.appendChild(backgroundNode);
       group.appendChild(iconGroup);
       if (pois.length > 1) {
         group.appendChild(createPoiMarkerCountNode(pois.length, markerX, markerY, markerRadius, badgeRadius));
       }
       fragment.appendChild(group);
+      renderedCount += pois.length;
     });
+
+    return renderedCount;
+  }
+
+  function getPoisForRenderedHex(hex) {
+    if (!hex?.id || !(renderer.poisByHexId instanceof Map)) return [];
+    const refs = [hex.id, hex.label, hex.record?.__uuid].filter(Boolean);
+    const seen = new Set();
+    const pois = [];
+    refs.forEach(ref => {
+      (renderer.poisByHexId.get(ref) || []).forEach(poi => {
+        const key = poi?.POI_ID || poi?.__uuid || `${ref}:${pois.length}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        pois.push(poi);
+      });
+    });
+    return pois;
+  }
+
+  function getRendererHexByRef(hexRef) {
+    if (!hexRef) return null;
+    return renderer.hexesByRef.get(hexRef) || null;
   }
 
   function getPrimaryPoiMarkerRecord(pois) {
@@ -7190,19 +8138,31 @@
         }
       }
 
+      point = getSubhexAnchoredRoutePoint(hexId, type, point, {
+        previousHexId: chain[index - 1] || "",
+        nextHexId: chain[index + 1] || "",
+        snapHexIds
+      });
       return point ? { hexId, point } : null;
     }).filter(Boolean);
 
-    const shapedPointRecords = getJitteredPathPointRecords(pointRecords, type, snapHexIds);
-    const points = getWobbledPathPoints(shapedPointRecords, type, snapHexIds);
+    return pathForRoutePointRecords(pointRecords, type, snapHexIds);
+  }
 
+  function pathForRoutePointRecords(pointRecords, type, snapHexIds = new Set(), options = {}) {
+    const pathSnapHexIds = options.pathSnapHexIds || snapHexIds;
+    const hardLineSnapHexIds = options.hardLineSnapHexIds || snapHexIds;
+    const shapedPointRecords = getJitteredPathPointRecords(pointRecords, type, pathSnapHexIds);
+    let points = getWobbledPathPoints(shapedPointRecords, type, pathSnapHexIds);
+    if (options.applyLaneOffsets !== false) {
+      points = applyRiverRoadLaneOffsets(points, shapedPointRecords, type);
+    }
     if (points.length < 2) return "";
     if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-
     const commands = [`M ${points[0].x} ${points[0].y}`];
     for (let i = 1; i < points.length - 1; i++) {
       const current = points[i];
-      if (snapHexIds.has(shapedPointRecords[i].hexId)) {
+      if (hardLineSnapHexIds.has(shapedPointRecords[i].hexId)) {
         commands.push(`L ${current.x} ${current.y}`);
         continue;
       }
@@ -7219,6 +8179,71 @@
     return commands.join(" ");
   }
 
+  function getSubhexAnchoredRoutePoint(hexId, type, point, options = {}) {
+    if (!point || !["road", "river", "path"].includes(type)) return point;
+    if (options.snapHexIds?.has(hexId)) return point;
+    const hex = hexForPathPoint(hexId);
+    if (!hex) return point;
+    if (Math.hypot(point.x - hex.center.x, point.y - hex.center.y) > getGeneratedMapDimensions().radius * 0.18) return point;
+
+    const candidates = getSubhexRouteAnchorCandidates(hex);
+    if (!candidates.length) return point;
+
+    const previousHexId = options.previousHexId || "";
+    const nextHexId = options.nextHexId || "";
+    const seed = `route-subhex-anchor:${type}:${previousHexId}:${hexId}:${nextHexId}`;
+    const preferred = candidates[stableHash(seed) % candidates.length];
+    const pull = type === "river" ? 0.78 : type === "path" ? 0.7 : 0.62;
+    return {
+      x: point.x + (preferred.x - point.x) * pull,
+      y: point.y + (preferred.y - point.y) * pull
+    };
+  }
+
+  function getSubhexRouteAnchorCandidates(hex) {
+    if (!hex) return [];
+    const metrics = getSubhexMetrics();
+    const cacheKey = `${hex.id}:${metrics.radius}:${metrics.hexHeight}`;
+    if (!renderer.subhexRouteAnchorCache) renderer.subhexRouteAnchorCache = new Map();
+    const cached = renderer.subhexRouteAnchorCache.get(cacheKey);
+    if (cached) return cached;
+
+    const bounds = {
+      left: Math.min(...hex.points.map(point => point.x)),
+      right: Math.max(...hex.points.map(point => point.x)),
+      top: Math.min(...hex.points.map(point => point.y)),
+      bottom: Math.max(...hex.points.map(point => point.y))
+    };
+    const qMin = Math.floor((bounds.left - metrics.origin.x) / (metrics.radius * 1.5)) - 1;
+    const qMax = Math.ceil((bounds.right - metrics.origin.x) / (metrics.radius * 1.5)) + 1;
+    const rMin = Math.floor((bounds.top - metrics.origin.y) / metrics.hexHeight) - 1;
+    const rMax = Math.ceil((bounds.bottom - metrics.origin.y) / metrics.hexHeight) + 1;
+    const maxDistance = getGeneratedMapDimensions().radius * 0.42;
+    const minDistance = metrics.radius * 0.55;
+    const candidates = [];
+
+    for (let q = qMin; q <= qMax; q += 1) {
+      const parity = positiveModulo(q, 2);
+      for (let r = rMin; r <= rMax; r += 1) {
+        const center = {
+          x: metrics.origin.x + q * metrics.radius * 1.5,
+          y: metrics.origin.y + r * metrics.hexHeight + parity * metrics.hexHeight * 0.5
+        };
+        if (!pointInPolygon(center, hex.points)) continue;
+        const distance = Math.hypot(center.x - hex.center.x, center.y - hex.center.y);
+        if (distance < minDistance || distance > maxDistance) continue;
+        candidates.push(center);
+      }
+    }
+
+    const sortedCandidates = candidates.sort((left, right) => (
+      Math.hypot(left.x - hex.center.x, left.y - hex.center.y) -
+      Math.hypot(right.x - hex.center.x, right.y - hex.center.y)
+    ));
+    renderer.subhexRouteAnchorCache.set(cacheKey, sortedCandidates);
+    return sortedCandidates;
+  }
+
   function getWobbledPathPoints(pointRecords, type, snapHexIds) {
     if (pointRecords.length < 3 || !PATH_OVERLAY_TYPES.has(type)) {
       return pointRecords.map(record => record.point);
@@ -7230,7 +8255,7 @@
     const typeModifier = type === "river" ? 1.55 : type === "path" ? 1.05 * routeWindiness : 1;
     return pointRecords.map((record, index) => {
       const point = record.point;
-      if (index === 0 || index === pointRecords.length - 1 || snapHexIds.has(record.hexId)) return point;
+      if (index === 0 || index === pointRecords.length - 1 || record.fixed || snapHexIds.has(record.hexId)) return point;
 
       const previous = pointRecords[index - 1]?.point;
       const next = pointRecords[index + 1]?.point;
@@ -7264,7 +8289,7 @@
     if (!["path", "river", "road"].includes(type)) return pointRecords;
 
     return pointRecords.map((record, index) => {
-      if (index === 0 || index === pointRecords.length - 1 || snapHexIds.has(record.hexId)) return record;
+      if (index === 0 || index === pointRecords.length - 1 || record.fixed || snapHexIds.has(record.hexId)) return record;
       if (type === "road" && !isRoughPathHex(record.hexId) && getElevationDeltaForPathPoint(record.hexId, pointRecords[index - 1]?.hexId, pointRecords[index + 1]?.hexId) < STEEP_ROUTE_ELEVATION_DELTA) return record;
 
       const seed = `${type}-jitter:${pointRecords[index - 1]?.hexId}:${record.hexId}:${pointRecords[index + 1]?.hexId}`;
@@ -7554,13 +8579,17 @@
     const exitPoint = getHexEdgeExitPoint(hex, segment.Edge);
     if (!hex || !exitPoint) return "";
 
-    const records = [
-      { hexId: `${hex.id}:inner-exit`, point: hex.center },
-      { hexId: `${hex.id}:edge-${segment.Edge}`, point: exitPoint }
-    ];
-    const points = getWobbledPathPoints(records, type, new Set());
-    if (points.length < 2) return "";
-    return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+    const snapHexIds = getSnapHexIdsForPathType(type);
+    return pathForRoutePointRecords([
+      {
+        hexId: hex.id,
+        point: getSubhexAnchoredRoutePoint(hex.id, type, hex.center, { snapHexIds })
+      },
+      {
+        hexId: `${hex.id}:edge-${segment.Edge}`,
+        point: exitPoint
+      }
+    ], type, snapHexIds);
   }
 
   function pathForEraseOverlaySegment(overlay) {
@@ -8135,6 +9164,7 @@
     const graph = new Map();
     const points = new Map();
     const edges = [];
+    const snapHexIds = getSnapHexIdsForPathType(type);
     segments.forEach(segment => {
       const fromHex = hexForPathPoint(segment.From_Hex_ID_Ref);
       const toHex = hexForPathPoint(segment.To_Hex_ID_Ref);
@@ -8145,7 +9175,10 @@
         const exitPoint = getHexEdgeExitPoint(fromHex, segment.Edge);
         if (!exitPoint) return;
         const exitNode = `${segment.__uuid || fromHex.id}:${segment.Edge}:exit`;
-        points.set(fromHex.id, { hexId: fromHex.id, point: fromHex.center });
+        points.set(fromHex.id, {
+          hexId: fromHex.id,
+          point: getSubhexAnchoredRoutePoint(fromHex.id, type, fromHex.center, { snapHexIds })
+        });
         points.set(exitNode, { hexId: exitNode, point: exitPoint });
         addGraphEdge(graph, fromHex.id, exitNode);
         edges.push({ from: fromHex.id, to: exitNode });
@@ -8153,16 +9186,40 @@
       }
 
       if (type === "road" && overlayHasStyleFlag(segment, OVERLAY_STYLE_FLAGS.roadWaterOverride)) {
-        points.set(fromHex.id, { hexId: fromHex.id, point: fromHex.center });
-        points.set(toHex.id, { hexId: toHex.id, point: toHex.center });
+        points.set(fromHex.id, {
+          hexId: fromHex.id,
+          point: getSubhexAnchoredRoutePoint(fromHex.id, type, fromHex.center, {
+            nextHexId: toHex.id,
+            snapHexIds
+          })
+        });
+        points.set(toHex.id, {
+          hexId: toHex.id,
+          point: getSubhexAnchoredRoutePoint(toHex.id, type, toHex.center, {
+            previousHexId: fromHex.id,
+            snapHexIds
+          })
+        });
         addGraphEdge(graph, fromHex.id, toHex.id);
         edges.push({ from: fromHex.id, to: toHex.id });
         return;
       }
 
       if (type === "river" && isMajorRiverTradeContinuationSegment(segment, fromHex, toHex)) {
-        points.set(fromHex.id, { hexId: fromHex.id, point: fromHex.center });
-        points.set(toHex.id, { hexId: toHex.id, point: toHex.center });
+        points.set(fromHex.id, {
+          hexId: fromHex.id,
+          point: getSubhexAnchoredRoutePoint(fromHex.id, type, fromHex.center, {
+            nextHexId: toHex.id,
+            snapHexIds
+          })
+        });
+        points.set(toHex.id, {
+          hexId: toHex.id,
+          point: getSubhexAnchoredRoutePoint(toHex.id, type, toHex.center, {
+            previousHexId: fromHex.id,
+            snapHexIds
+          })
+        });
         addGraphEdge(graph, fromHex.id, toHex.id);
         edges.push({ from: fromHex.id, to: toHex.id });
         return;
@@ -8179,10 +9236,16 @@
 
       const fromPoint = isWaterHex(fromHex)
         ? getWaterCutoffEndpointPoint(type, fromHex, toHex)
-        : fromHex.center;
+        : getSubhexAnchoredRoutePoint(fromHex.id, type, fromHex.center, {
+            nextHexId: toHex.id,
+            snapHexIds
+          });
       const toPoint = isWaterHex(toHex)
         ? getWaterCutoffEndpointPoint(type, toHex, fromHex)
-        : toHex.center;
+        : getSubhexAnchoredRoutePoint(toHex.id, type, toHex.center, {
+            previousHexId: fromHex.id,
+            snapHexIds
+          });
 
       points.set(fromNode, { hexId: fromHex.id, point: fromPoint });
       points.set(toNode, { hexId: toHex.id, point: toPoint });
@@ -8274,29 +9337,10 @@
     const hardLineSnapHexIds = sluiceSnapHexIds.size
       ? new Set([...snapHexIds, ...sluiceSnapHexIds])
       : snapHexIds;
-    const shapedPointRecords = getJitteredPathPointRecords(pointRecords, type, pathSnapHexIds);
-    const points = applyRiverRoadLaneOffsets(getWobbledPathPoints(shapedPointRecords, type, pathSnapHexIds), shapedPointRecords, type);
-    if (points.length < 2) return "";
-    if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-
-    const commands = [`M ${points[0].x} ${points[0].y}`];
-    for (let index = 1; index < points.length - 1; index += 1) {
-      const current = points[index];
-      if (hardLineSnapHexIds.has(shapedPointRecords[index].hexId)) {
-        commands.push(`L ${current.x} ${current.y}`);
-        continue;
-      }
-
-      const next = points[index + 1];
-      const mid = {
-        x: current.x + (next.x - current.x) * 0.42,
-        y: current.y + (next.y - current.y) * 0.42
-      };
-      commands.push(`Q ${current.x} ${current.y} ${mid.x} ${mid.y}`);
-    }
-    const last = points[points.length - 1];
-    commands.push(`T ${last.x} ${last.y}`);
-    return commands.join(" ");
+    return pathForRoutePointRecords(pointRecords, type, snapHexIds, {
+      pathSnapHexIds,
+      hardLineSnapHexIds
+    });
   }
 
   function getSharedRoadRiverLaneSnapHexIds(pointRecords, type) {
@@ -8598,7 +9642,10 @@
   }
 
   function getVisibleHexes() {
-    const bounds = getVisibleBounds();
+    return getHexesForBounds(getVisibleBounds());
+  }
+
+  function getHexesForBounds(bounds) {
     return renderer.hexes.filter(hex => hexIntersectsBounds(hex, bounds));
   }
 
@@ -8658,26 +9705,80 @@
     const now = performance.now();
     if (renderer.view.animatingZoom || now < renderer.view.wheelLockedUntil) return;
 
-    const nextZoom = getNextZoomStep(event.deltaY < 0 ? 1 : -1);
+    if (!renderer.view.wheelStartedAt) renderer.view.wheelStartedAt = now;
+    renderer.view.wheelDeltaY += Number(event.deltaY) || 0;
+    renderer.view.wheelClientX = event.clientX;
+    renderer.view.wheelClientY = event.clientY;
+    if (renderer.view.wheelZoomFrame) return;
+    renderer.view.wheelZoomFrame = requestAnimationFrame(processWheelZoom);
+  }
+
+  function processWheelZoom() {
+    renderer.view.wheelZoomFrame = null;
+    if (!isActive() || renderer.view.animatingZoom) {
+      renderer.view.wheelDeltaY = 0;
+      renderer.view.wheelStartedAt = 0;
+      return;
+    }
+
+    const now = performance.now();
+    if (now < renderer.view.wheelLockedUntil) {
+      renderer.view.wheelDeltaY = 0;
+      renderer.view.wheelStartedAt = 0;
+      return;
+    }
+
+    const deltaY = renderer.view.wheelDeltaY;
+    const elapsed = now - renderer.view.wheelStartedAt;
+    if (Math.abs(deltaY) < WHEEL_ZOOM_DELTA_THRESHOLD && elapsed < WHEEL_ZOOM_SETTLE_MS) {
+      renderer.view.wheelZoomFrame = requestAnimationFrame(processWheelZoom);
+      return;
+    }
+
+    const clientX = renderer.view.wheelClientX;
+    const clientY = renderer.view.wheelClientY;
+    renderer.view.wheelDeltaY = 0;
+    renderer.view.wheelStartedAt = 0;
+    renderer.view.wheelClientX = null;
+    renderer.view.wheelClientY = null;
+
+    if (Math.abs(deltaY) < 0.5) return;
+
+    const nextZoom = getNextZoomStep(deltaY < 0 ? 1 : -1);
     renderer.view.wheelLockedUntil = now + ZOOM_STEP_LOCK_MS;
     if (Math.abs(nextZoom - renderer.view.zoom) < 0.0001) return;
-    animateZoomTo(nextZoom, event.clientX, event.clientY);
+    animateZoomTo(nextZoom, clientX, clientY);
   }
 
   function getNextZoomStep(direction) {
-    const current = renderer.view.zoom;
+    const maxZoom = getCurrentMaxZoom();
+    const steps = ZOOM_STEPS.filter(step => step <= maxZoom + 0.001);
+    const currentIndex = getNearestZoomStepIndex(renderer.view.zoom, steps);
+    const nextIndex = Math.max(0, Math.min(steps.length - 1, currentIndex + (direction > 0 ? 1 : -1)));
+    return steps[nextIndex] ?? renderer.view.zoom;
+  }
 
-    if (direction > 0) {
-      return ZOOM_STEPS.find(step => step > current + 0.01) || MAX_ZOOM;
-    }
+  function getNearestZoomStepIndex(zoom, steps = ZOOM_STEPS) {
+    let nearestIndex = 0;
+    let nearestDistance = Infinity;
+    steps.forEach((step, index) => {
+      const distance = Math.abs(step - zoom);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+    return nearestIndex;
+  }
 
-    return [...ZOOM_STEPS].reverse().find(step => step < current - 0.01) || MIN_ZOOM;
+  function getCurrentMaxZoom() {
+    return renderer.drawing.enabled ? PARENT_MAX_ZOOM : MAX_ZOOM;
   }
 
   function setZoom(nextZoom, anchorClientX = null, anchorClientY = null) {
     const rect = renderer.root.getBoundingClientRect();
     const oldZoom = renderer.view.zoom;
-    const clampedZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nextZoom));
+    const clampedZoom = Math.max(MIN_ZOOM, Math.min(getCurrentMaxZoom(), nextZoom));
     const anchorX = anchorClientX == null ? rect.width / 2 : anchorClientX - rect.left;
     const anchorY = anchorClientY == null ? rect.height / 2 : anchorClientY - rect.top;
     const worldX = renderer.view.panX + anchorX / oldZoom;
@@ -8686,12 +9787,13 @@
     renderer.view.zoom = clampedZoom;
     renderer.view.panX = worldX - anchorX / clampedZoom;
     renderer.view.panY = worldY - anchorY / clampedZoom;
+    deferSubhexDetailBuild();
     render();
   }
 
   function animateZoomTo(nextZoom, anchorClientX = null, anchorClientY = null) {
     const startZoom = renderer.view.zoom;
-    const targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nextZoom));
+    const targetZoom = Math.max(MIN_ZOOM, Math.min(getCurrentMaxZoom(), nextZoom));
     if (Math.abs(targetZoom - startZoom) < 0.0001) return;
 
     cancelPanAnimation();
@@ -8708,6 +9810,7 @@
     const startedAt = performance.now();
 
     renderer.view.animatingZoom = true;
+    deferSubhexDetailBuild();
 
     function step(now) {
       const progress = Math.min(1, (now - startedAt) / duration);
@@ -8717,8 +9820,7 @@
       renderer.view.zoom = zoom;
       renderer.view.panX = anchorWorldX - relativeX / zoom;
       renderer.view.panY = anchorWorldY - relativeY / zoom;
-      clampView();
-      render();
+      render({ skipClamp: true });
 
       if (progress < 1) {
         renderer.view.zoomAnimationFrame = requestAnimationFrame(step);
@@ -8746,6 +9848,17 @@
     renderer.view.animatingZoom = false;
   }
 
+  function cancelQueuedWheelZoom() {
+    if (renderer.view.wheelZoomFrame) {
+      cancelAnimationFrame(renderer.view.wheelZoomFrame);
+      renderer.view.wheelZoomFrame = null;
+    }
+    renderer.view.wheelDeltaY = 0;
+    renderer.view.wheelStartedAt = 0;
+    renderer.view.wheelClientX = null;
+    renderer.view.wheelClientY = null;
+  }
+
   function cancelPanAnimation() {
     if (renderer.view.panAnimationFrame) {
       cancelAnimationFrame(renderer.view.panAnimationFrame);
@@ -8768,6 +9881,7 @@
     const duration = Math.max(420, Math.min(820, Math.max(panDistance * 0.45, zoomDistance)));
     const startedAt = performance.now();
     renderer.view.animatingZoom = Math.abs(targetZoom - startZoom) > 0.0001;
+    if (renderer.view.animatingZoom) deferSubhexDetailBuild();
 
     function step(now) {
       const progress = Math.min(1, (now - startedAt) / duration);
@@ -8777,7 +9891,7 @@
       renderer.view.panX = startPanX + (targetPanX - startPanX) * eased;
       renderer.view.panY = startPanY + (targetPanY - startPanY) * eased;
       clampView();
-      render();
+      render({ skipClamp: true });
 
       if (progress < 1) {
         renderer.view.panAnimationFrame = requestAnimationFrame(step);
@@ -8813,6 +9927,13 @@
     if (!renderer.view.routeLabelRestoreTimer) return;
     window.clearTimeout(renderer.view.routeLabelRestoreTimer);
     renderer.view.routeLabelRestoreTimer = null;
+  }
+
+  function clearSubhexDetailSettleTimer() {
+    if (!renderer.view.subhexDetailSettleTimer) return;
+    window.clearTimeout(renderer.view.subhexDetailSettleTimer);
+    renderer.view.subhexDetailSettleTimer = null;
+    renderer.view.subhexDetailDeferredUntil = 0;
   }
 
   function rememberTouchPointer(event) {
@@ -8900,6 +10021,7 @@
     renderer.view.pinchAnchorWorldX = renderer.view.panX + relativeX / renderer.view.zoom;
     renderer.view.pinchAnchorWorldY = renderer.view.panY + relativeY / renderer.view.zoom;
     renderer.view.suppressClickUntil = performance.now() + 450;
+    deferSubhexDetailBuild();
 
     renderer.drawing.dragLastHexId = null;
     renderer.drawing.paintedThisDrag = new Set();
@@ -8911,7 +10033,7 @@
 
     const distance = Math.max(1, getPointerDistance(first, second));
     const ratio = distance / Math.max(1, renderer.view.pinchStartDistance);
-    const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, renderer.view.pinchStartZoom * ratio));
+    const nextZoom = Math.max(MIN_ZOOM, Math.min(getCurrentMaxZoom(), renderer.view.pinchStartZoom * ratio));
     const rect = renderer.root.getBoundingClientRect();
     const midpoint = getPointerMidpoint(first, second);
     const relativeX = midpoint.x - rect.left;
@@ -8922,6 +10044,7 @@
     renderer.view.panY = renderer.view.pinchAnchorWorldY - relativeY / nextZoom;
     renderer.view.dragMoved = true;
     renderer.view.suppressClickUntil = performance.now() + 450;
+    deferSubhexDetailBuild();
 
     clampView();
     render();
@@ -8933,6 +10056,7 @@
     renderer.view.dragMoved = true;
     renderer.view.touchPointers.clear();
     renderer.view.suppressClickUntil = performance.now() + 450;
+    deferSubhexDetailBuild();
   }
 
   function handlePointerDown(event) {
@@ -9124,8 +10248,10 @@
       return;
     }
 
+    const shouldRefreshAfterPan = renderer.view.dragging && renderer.view.dragMoved;
     renderer.view.dragging = false;
     renderer.root.releasePointerCapture?.(event.pointerId);
+    if (shouldRefreshAfterPan) renderSvgOnly();
   }
 
   function handlePointerCancel(event) {
