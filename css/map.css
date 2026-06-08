@@ -2630,14 +2630,17 @@
 }
 
 #generated-map-renderer.generated-map-wall-brush-active,
-#generated-map-renderer.generated-map-wall-brush-active:active,
-#generated-map-renderer.generated-map-editor-brush-active,
-#generated-map-renderer.generated-map-editor-brush-active:active {
+#generated-map-renderer.generated-map-wall-brush-active:active {
   cursor: none;
 }
 
+#generated-map-renderer.generated-map-editor-brush-active,
+#generated-map-renderer.generated-map-editor-brush-active:active {
+  cursor: crosshair;
+}
+
 .generated-map-terrain-canvas,
-.generated-map-grid-overlay {
+.generated-map-svg-overlay {
   position: absolute;
   inset: 0;
 
@@ -2645,8 +2648,13 @@
   height: 100%;
 }
 
-.generated-map-grid-overlay {
+.generated-map-svg-overlay {
   pointer-events: none;
+}
+
+.generated-map-poi-overlay,
+.generated-map-interaction-overlay {
+  overflow: visible;
 }
 
 .generated-map-grid-lines {

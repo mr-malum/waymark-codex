@@ -456,7 +456,15 @@
     subhexDetailTileCache: new Map(),
     subhexGridPathCache: new Map(),
     subhexGridReady: false,
-    subhexDetailPrecache: { running: false, complete: false, index: 0, frame: null, awaitingImages: false },
+    subhexDetailPrecache: {
+      running: false,
+      complete: false,
+      index: 0,
+      frame: null,
+      awaitingImages: false,
+      priorityIds: [],
+      prioritySet: new Set()
+    },
     subhexRouteProjectionCache: { key: "", entries: [] },
     initialMapLoadingTimer: null,
     overlayCacheCanvas: document.createElement("canvas"),
@@ -486,6 +494,11 @@
     mapOverlays: [],
     routeLabelCache: { key: "", labels: [] },
     svg: null,
+    labelSvg: null,
+    labelLayerKey: "",
+    interactionSvg: null,
+    poiSvg: null,
+    poiLayerKey: "",
     popup: null,
     popupOptions: {},
     perf: {
@@ -500,6 +513,8 @@
     hexesById: new Map(),
     hexesByRef: new Map(),
     hexIdsByUuid: new Map(),
+    hexRenderIndex: new Map(),
+    hexSpatialIndex: { bucketSize: 0, buckets: new Map() },
     hexesByCoord: new Map(),
     overlayRevision: 0,
     overlaysByTypeCache: { revision: -1, groups: null },
@@ -670,6 +685,7 @@
       featureViewportKey: "",
       activePathReveal: null,
       pathRevealFrame: null,
+      deferredMapModeRenderTimer: null,
       pendingTerrainSaves: new Map(),
       terrainSaveRunning: false,
       terrainSaveErrorShown: false,
@@ -696,7 +712,9 @@
     renderer.root.id = "generated-map-renderer";
     renderer.root.innerHTML = `
       <canvas class="generated-map-terrain-canvas"></canvas>
-      <svg class="generated-map-grid-overlay" aria-hidden="true"></svg>
+      <svg class="generated-map-svg-overlay generated-map-grid-overlay generated-map-base-overlay" aria-hidden="true"></svg>
+      <svg class="generated-map-svg-overlay generated-map-poi-overlay" aria-hidden="true"></svg>
+      <svg class="generated-map-svg-overlay generated-map-interaction-overlay" aria-hidden="true"></svg>
       <div class="generated-map-popup" hidden></div>
       <div class="generated-map-loading-veil" hidden>
         <div class="generated-map-loading-message">Map Loading...</div>
@@ -709,7 +727,10 @@
     renderer.routeCacheCtx = renderer.routeCacheCanvas.getContext("2d");
     renderer.featureCacheCtx = renderer.featureCacheCanvas.getContext("2d");
     renderer.overlayCacheCtx = renderer.overlayCacheCanvas.getContext("2d");
-    renderer.svg = renderer.root.querySelector("svg");
+    renderer.svg = renderer.root.querySelector(".generated-map-base-overlay");
+    renderer.labelSvg = null;
+    renderer.interactionSvg = renderer.root.querySelector(".generated-map-interaction-overlay");
+    renderer.poiSvg = renderer.root.querySelector(".generated-map-poi-overlay");
     renderer.popup = renderer.root.querySelector(".generated-map-popup");
     renderer.loadingVeil = renderer.root.querySelector(".generated-map-loading-veil");
     ensureRendererPerfApi();
@@ -917,6 +938,7 @@
 
     renderer.poisByHexId = groupPoisByHexId(db?.raw?.pois || []);
     renderer.poiHexIds = new Set(renderer.poisByHexId.keys());
+    invalidatePoiLayer();
     renderSvgOnly();
   }
 
@@ -1059,7 +1081,7 @@
         updateMapChromeForEdit(false);
         renderer.drawing.tool = "";
         resetDrawingState();
-        render();
+        scheduleDeferredMapModeRender();
       }
     });
 
@@ -1092,7 +1114,7 @@
       event.stopPropagation();
       if ((renderer.drawing.toolsMode || "chooser") === "chooser") await requestCloseMapEditMode();
       else await requestReturnToToolsChooser();
-      render();
+      scheduleDeferredMapModeRender();
     });
 
     button.addEventListener("click", async event => {
@@ -1122,7 +1144,7 @@
       updateDrawRegionControls();
       updateDrawStyleControls();
       updateDrawHint();
-      render();
+      scheduleDeferredMapModeRender();
     });
 
     panel.addEventListener("click", event => event.stopPropagation());
@@ -1226,9 +1248,10 @@
       toggle.addEventListener("change", () => {
         const type = toggle.dataset.mapOverlayToggle;
         if (!type || !(type in renderer.drawing.visibleOverlays)) return;
+        const previousValue = Boolean(renderer.drawing.visibleOverlays[type]);
         renderer.drawing.visibleOverlays[type] = toggle.checked;
         syncMapOverlayToggleInputs();
-        markAllMapCachesDirty();
+        if (previousValue !== Boolean(toggle.checked)) markOverlayVisibilityCachesDirty([type]);
         render();
       });
     });
@@ -1768,7 +1791,7 @@
     if (!confirmed) return false;
     discardGeneratedTerrainPreview({ silent: true });
     setMapToolsMode("chooser");
-    render();
+    scheduleDeferredMapModeRender();
     return true;
   }
 
@@ -2252,11 +2275,13 @@
       renderer.drawing.preEditVisibleOverlays = { ...renderer.drawing.visibleOverlays };
     }
 
+    const changedTypes = [];
     Object.keys(renderer.drawing.visibleOverlays).forEach(type => {
+      if (!renderer.drawing.visibleOverlays[type]) changedTypes.push(type);
       renderer.drawing.visibleOverlays[type] = true;
     });
     syncMapOverlayToggleInputs();
-    markAllMapCachesDirty();
+    if (changedTypes.length) markOverlayVisibilityCachesDirty(changedTypes);
   }
 
   function showMapEditorIntroIfNeeded() {
@@ -2305,10 +2330,13 @@
   function restoreMapEditViewState() {
     if (!renderer.drawing.preEditVisibleOverlays) return;
 
+    const changedTypes = Object.keys(renderer.drawing.visibleOverlays).filter(type => (
+      Boolean(renderer.drawing.visibleOverlays[type]) !== Boolean(renderer.drawing.preEditVisibleOverlays[type])
+    ));
     renderer.drawing.visibleOverlays = { ...renderer.drawing.preEditVisibleOverlays };
     renderer.drawing.preEditVisibleOverlays = null;
     syncMapOverlayToggleInputs();
-    markAllMapCachesDirty();
+    if (changedTypes.length) markOverlayVisibilityCachesDirty(changedTypes);
   }
 
   function updateDrawControlsVisibility() {
@@ -2546,11 +2574,16 @@
     renderer.drawing.visibleOverlays = getDefaultVisibleOverlays();
     renderer.drawing.preEditVisibleOverlays = null;
     renderer.routeLabelCache = { key: "", labels: [] };
+    invalidateLabelLayer();
     if (renderer.drawing.queuedRenderFrame) {
       window.cancelAnimationFrame(renderer.drawing.queuedRenderFrame);
     }
+    if (renderer.drawing.deferredMapModeRenderTimer) {
+      window.clearTimeout(renderer.drawing.deferredMapModeRenderTimer);
+    }
     renderer.drawing.queuedRenderFrame = null;
     renderer.drawing.queuedFullRender = false;
+    renderer.drawing.deferredMapModeRenderTimer = null;
     renderer.initialMapLoadingActive = false;
     renderer.initialMapLoadingStartedAt = 0;
     if (renderer.initialMapLoadingTimer) {
@@ -2563,6 +2596,7 @@
     renderer.routeCacheDirty = true;
     renderer.featureCacheDirty = true;
     renderer.overlayCacheDirty = true;
+    invalidatePoiLayer();
     renderer.featureImageUsage.clear();
     renderer.subhexRouteAnchorCache?.clear?.();
     renderer.subhexDetailTileCache.clear();
@@ -2669,6 +2703,16 @@
     });
   }
 
+  function scheduleDeferredMapModeRender() {
+    if (renderer.drawing.deferredMapModeRenderTimer) {
+      window.clearTimeout(renderer.drawing.deferredMapModeRenderTimer);
+    }
+    renderer.drawing.deferredMapModeRenderTimer = window.setTimeout(() => {
+      renderer.drawing.deferredMapModeRenderTimer = null;
+      render();
+    }, 0);
+  }
+
   function ensureRendererPerfApi() {
     if (renderer.perf.apiReady) return;
     renderer.perf.apiReady = true;
@@ -2730,7 +2774,10 @@
   function finishRenderPerf(frame) {
     if (!frame || renderer.perf.frame !== frame) return;
     frame.durationMs = Number((performance.now() - frame.startedAt).toFixed(2));
-    frame.svgNodeCount = renderer.svg?.querySelectorAll?.("*")?.length || 0;
+    frame.svgNodeCount = (renderer.svg?.querySelectorAll?.("*")?.length || 0)
+      + (renderer.labelSvg?.querySelectorAll?.("*")?.length || 0)
+      + (renderer.interactionSvg?.querySelectorAll?.("*")?.length || 0)
+      + (renderer.poiSvg?.querySelectorAll?.("*")?.length || 0);
     renderer.perf.lastFrame = frame;
     renderer.perf.samples.push(frame);
     if (renderer.perf.samples.length > PERF_SAMPLE_LIMIT) renderer.perf.samples.shift();
@@ -2778,8 +2825,32 @@
     renderer.overlayCacheDirty = true;
   }
 
+  function markOverlayVisibilityCachesDirty(changedTypes = null) {
+    const changed = new Set(changedTypes?.length ? changedTypes : Object.keys(renderer.drawing.visibleOverlays));
+    const routeTypes = new Set(["road", "river", "sea_route", "path", "features"]);
+    const overlayTypes = new Set(["mist"]);
+    const featureTypes = new Set(["features"]);
+
+    if ([...changed].some(type => routeTypes.has(type))) renderer.routeCacheDirty = true;
+    if ([...changed].some(type => overlayTypes.has(type))) renderer.overlayCacheDirty = true;
+    if ([...changed].some(type => featureTypes.has(type))) renderer.featureCacheDirty = true;
+    if ([...changed].some(type => ["coords", "geographicLabels", "politicalLabels", "road", "river", "sea_route"].includes(type))) {
+      invalidateLabelLayer();
+    }
+    if (changed.has("pois")) invalidatePoiLayer();
+  }
+
+  function invalidateLabelLayer() {
+    renderer.labelLayerKey = "";
+  }
+
+  function invalidatePoiLayer() {
+    renderer.poiLayerKey = "";
+  }
+
   function rebuildHexIndexes() {
     renderer.hexesById = new Map(renderer.hexes.map(hex => [hex.id, hex]));
+    renderer.hexRenderIndex = new Map(renderer.hexes.map((hex, index) => [hex.id, index]));
     renderer.hexesByRef = new Map();
     renderer.hexes.forEach(hex => {
       if (hex.id) renderer.hexesByRef.set(hex.id, hex);
@@ -2789,6 +2860,28 @@
     renderer.hexIdsByUuid = new Map(renderer.hexes
       .map(hex => [hex.record?.__uuid, hex.id])
       .filter(([uuid]) => Boolean(uuid)));
+    rebuildHexSpatialIndex();
+  }
+
+  function rebuildHexSpatialIndex() {
+    const dimensions = getGeneratedMapDimensions();
+    const bucketSize = Math.max(1, Math.round(Math.max(dimensions.radius * 4, dimensions.hexHeight * 2)));
+    const buckets = new Map();
+    renderer.hexes.forEach(hex => {
+      if (!hex?.center) return;
+      const key = getHexSpatialBucketKey(hex.center.x, hex.center.y, bucketSize);
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = [];
+        buckets.set(key, bucket);
+      }
+      bucket.push(hex);
+    });
+    renderer.hexSpatialIndex = { bucketSize, buckets };
+  }
+
+  function getHexSpatialBucketKey(x, y, bucketSize) {
+    return `${Math.floor(x / bucketSize)}:${Math.floor(y / bucketSize)}`;
   }
 
   function bumpOverlayRevision() {
@@ -2797,6 +2890,7 @@
     renderer.snapHexIdsCache = { revision: -1, type: "", hexIds: new Set() };
     renderer.riverFallsHexIdsCache = { revision: -1, hexIds: new Set() };
     renderer.subhexRouteProjectionCache = { key: "", entries: [] };
+    invalidateLabelLayer();
   }
 
   function markAllMapCachesDirty() {
@@ -2804,6 +2898,7 @@
     markRouteCacheDirty();
     markFeatureCacheDirty();
     markOverlayCacheDirty();
+    invalidateLabelLayer();
   }
 
   function markTerrainHexesDirty(hexes, radius = 3, enforceThreshold = true) {
@@ -3884,18 +3979,19 @@
     refreshEditorActionControls();
   }
 
-  function applyLocalMapEditAction(action, direction) {
+  function applyLocalMapEditAction(action, direction, options = {}) {
     if (!action?.type) return;
     if (action.type === "batch") {
       const actions = direction === "undo"
         ? [...(action.actions || [])].reverse()
         : (action.actions || []);
-      actions.forEach(childAction => applyLocalMapEditAction(childAction, direction));
+      actions.forEach(childAction => applyLocalMapEditAction(childAction, direction, options));
       return;
     }
 
     if (action.type === "terrain") {
-      applyLocalTerrainSnapshot(action.hexId, direction === "undo" ? action.before : action.after);
+      applyLocalTerrainSnapshot(action.hexId, direction === "undo" ? action.before : action.after, { skipDirty: options.skipTerrainDirty });
+      options.terrainHexIds?.add?.(action.hexId);
       return;
     }
 
@@ -3905,6 +4001,24 @@
         if (shouldRemove) removeLocalOverlayById(overlay.__uuid);
         else upsertLocalOverlay(overlay);
       });
+    }
+  }
+
+  function applyLocalStagedHistoryAction(action, direction) {
+    const terrainHexIds = collectTerrainHexIdsFromAction(action, new Set());
+    const hasOverlays = actionHasOverlayEdits(action);
+    applyLocalMapEditAction(action, direction, {
+      skipTerrainDirty: true,
+      terrainHexIds
+    });
+
+    if (hasOverlays) {
+      markAllMapCachesDirty();
+      return;
+    }
+
+    if (terrainHexIds.size) {
+      markTerrainHexesDirty([...terrainHexIds].map(hexId => renderer.hexesById.get(hexId)).filter(Boolean));
     }
   }
 
@@ -3994,7 +4108,7 @@
       return;
     }
     if (action.type !== "terrain" || !hexIds.has(action.hexId)) return;
-    applyLocalTerrainSnapshot(action.hexId, direction === "undo" ? action.before : action.after);
+    applyLocalTerrainSnapshot(action.hexId, direction === "undo" ? action.before : action.after, { skipDirty: true });
   }
 
   function applyLocalOverlayActions(action, direction) {
@@ -4031,7 +4145,7 @@
     if (affectedTerrainHexIds.size) {
       [...removedUndo].reverse().forEach(action => applyLocalTerrainActionsForHexes(action, "undo", affectedTerrainHexIds));
       getStagedUndoStack().forEach(action => applyLocalTerrainActionsForHexes(action, "redo", affectedTerrainHexIds));
-      affectedTerrainHexIds.forEach(hexId => markTerrainHexDirty(hexId));
+      markTerrainHexesDirty([...affectedTerrainHexIds].map(hexId => renderer.hexesById.get(hexId)).filter(Boolean));
     }
 
     if (affectedOverlays) {
@@ -4309,11 +4423,15 @@
 
     const perf = beginRenderPerf("svg");
     const rect = renderer.root.getBoundingClientRect();
-    const visibleHexes = shouldSkipVisibleHexesForFastPan()
+    const fastPanReuse = shouldSkipVisibleHexesForFastPan();
+    const visibleHexes = fastPanReuse
       ? []
       : timeRenderPerfMark("visibleParents", () => getVisibleHexes());
+    const reuseOverlayLayers = shouldReuseSvgDuringPan();
     setRenderPerfValue("visibleParentHexes", visibleHexes.length);
     renderSvg({ width: rect.width, height: rect.height }, visibleHexes, []);
+    renderPoiLayer({ width: rect.width, height: rect.height }, { reuse: reuseOverlayLayers });
+    renderInteractionLayer({ width: rect.width, height: rect.height }, visibleHexes, { reuse: reuseOverlayLayers });
     positionPopup();
     finishRenderPerf(perf);
   }
@@ -4322,7 +4440,6 @@
     return Boolean(renderer.svg?.childNodes?.length)
       && renderer.view.dragging
       && renderer.view.dragMoved
-      && !renderer.drawing.enabled
       && !isSubhexLayerActive()
       && !renderer.cacheDirty
       && !renderer.routeCacheDirty
@@ -4399,11 +4516,17 @@
     const perf = beginRenderPerf("full");
     const viewport = timeRenderPerfMark("resize", () => resizeCanvas());
     if (!options.skipClamp) clampView();
-    const visibleHexes = timeRenderPerfMark("visibleParents", () => getVisibleHexes());
+    const fastPanReuse = shouldSkipVisibleHexesForFastPan();
+    const visibleHexes = fastPanReuse
+      ? []
+      : timeRenderPerfMark("visibleParents", () => getVisibleHexes());
+    const reuseOverlayLayers = shouldReuseSvgDuringPan();
     setRenderPerfValue("visibleParentHexes", visibleHexes.length);
     const visibleSubhexes = [];
     renderTerrain(viewport, visibleHexes, visibleSubhexes);
     renderSvg(viewport, visibleHexes, visibleSubhexes);
+    renderPoiLayer(viewport, { reuse: reuseOverlayLayers });
+    renderInteractionLayer(viewport, visibleHexes, { reuse: reuseOverlayLayers });
     positionPopup();
     finishRenderPerf(perf);
   }
@@ -4508,7 +4631,7 @@
     } else {
       const dirtyBounds = getTerrainDirtyBounds();
       if (!dirtyBounds) return;
-      const patchHexes = renderer.hexes.filter(hex => hexIntersectsBounds(hex, dirtyBounds));
+      const patchHexes = getHexesForBounds(dirtyBounds);
       ctx.clearRect(
         dirtyBounds.left,
         dirtyBounds.top,
@@ -4582,7 +4705,7 @@
       const dirtyBounds = getTerrainDirtyBounds();
       if (!dirtyBounds) return;
       const contributorBounds = getFeatureDirtyBounds(dirtyBounds);
-      const patchHexes = renderer.hexes.filter(hex => hexIntersectsBounds(hex, contributorBounds));
+      const patchHexes = getHexesForBounds(contributorBounds);
       ctx.save();
       ctx.beginPath();
       ctx.rect(
@@ -4712,13 +4835,12 @@
 
     const progress = getSubhexLayerProgress();
     if (!progress || !visibleHexes.length) return;
-    const allowTileBuild = !isSubhexDetailBuildDeferred();
-
     withWorldCanvasTransform(ctx, () => {
       ctx.save();
       ctx.globalAlpha = progress;
       visibleHexes.forEach(hex => {
-        const tile = getSubhexDetailTile(hex, { allowBuild: allowTileBuild });
+        const tile = getSubhexDetailTile(hex, { allowBuild: false });
+        if (!tile) queueSubhexDetailTilePrecache([hex], { front: true });
         const canvas = layer === "features" ? tile?.featureCanvas : tile?.terrainCanvas;
         if (!tile || !canvas?.width || !canvas?.height) return;
         ctx.drawImage(
@@ -4742,7 +4864,9 @@
       complete: false,
       index: 0,
       frame: null,
-      awaitingImages: false
+      awaitingImages: false,
+      priorityIds: [],
+      prioritySet: new Set()
     };
   }
 
@@ -4755,13 +4879,16 @@
 
   function isSubhexDetailPrecachePending() {
     return Boolean(renderer.hexes.length)
-      && (!renderer.subhexDetailPrecache.complete || renderer.subhexDetailPrecache.running || renderer.subhexDetailPrecache.awaitingImages);
+      && (!renderer.subhexDetailPrecache.complete
+        || renderer.subhexDetailPrecache.running
+        || renderer.subhexDetailPrecache.awaitingImages
+        || renderer.subhexDetailPrecache.priorityIds.length);
   }
 
   function startSubhexDetailPrecache() {
     const state = renderer.subhexDetailPrecache;
     if (!shouldRunSubhexDetailPrecache()) return;
-    if (!renderer.hexes.length || state.running || state.complete) return;
+    if (!renderer.hexes.length || state.running || (state.complete && !state.priorityIds.length)) return;
     if (!renderer.featureAssetsLoaded) {
       state.awaitingImages = true;
       return;
@@ -4774,6 +4901,47 @@
 
     state.running = true;
     state.frame = window.requestAnimationFrame(processSubhexDetailPrecache);
+  }
+
+  function queueSubhexDetailTilePrecache(hexes = [], options = {}) {
+    if (!hexes.length || renderer.drawing.enabled) return;
+    const state = renderer.subhexDetailPrecache;
+    const nextIds = [];
+    hexes.forEach(hex => {
+      if (!hex?.id || isSubhexDetailTileReady(hex)) return;
+      state.prioritySet.add(hex.id);
+      nextIds.push(hex.id);
+    });
+    if (nextIds.length) {
+      const nextSet = new Set(nextIds);
+      state.priorityIds = options.front
+        ? [...nextIds, ...state.priorityIds.filter(hexId => !nextSet.has(hexId))]
+        : [...state.priorityIds.filter(hexId => !nextSet.has(hexId)), ...nextIds];
+      state.complete = false;
+      startSubhexDetailPrecache();
+    }
+  }
+
+  function queueSubhexDetailWarmupForCurrentView(options = {}) {
+    if (renderer.drawing.enabled || !renderer.hexes.length) return;
+    if (renderer.view.zoom < PARENT_MAX_ZOOM - 0.001) return;
+    const dimensions = getGeneratedMapDimensions();
+    const rect = renderer.root?.getBoundingClientRect?.();
+    const centerX = renderer.view.panX + (rect?.width || 0) / (2 * renderer.view.zoom);
+    const centerY = renderer.view.panY + (rect?.height || 0) / (2 * renderer.view.zoom);
+    const warmupHexes = getHexesForBounds(getVisibleBounds(dimensions.radius * 8))
+      .sort((left, right) => (
+        Math.hypot(left.center.x - centerX, left.center.y - centerY)
+        - Math.hypot(right.center.x - centerX, right.center.y - centerY)
+      ));
+    queueSubhexDetailTilePrecache(warmupHexes, { front: options.front !== false });
+  }
+
+  function isSubhexDetailTileReady(hex) {
+    if (!hex?.id) return false;
+    const metrics = getSubhexMetrics();
+    const key = getSubhexDetailTileKey(hex, metrics);
+    return renderer.subhexDetailTileCache.get(hex.id)?.key === key;
   }
 
   function shouldRunSubhexDetailPrecache() {
@@ -4795,14 +4963,29 @@
     }
 
     const startedAt = performance.now();
-    const frameBudgetMs = renderer.initialMapLoadingActive ? 12 : 6;
-    while (state.index < renderer.hexes.length && performance.now() - startedAt < frameBudgetMs) {
+    const frameBudgetMs = renderer.view.dragging ? 2 : renderer.initialMapLoadingActive ? 12 : 5;
+    let builtPriorityTiles = 0;
+    while (performance.now() - startedAt < frameBudgetMs) {
+      const priorityHexId = state.priorityIds.shift();
+      if (!priorityHexId) break;
+      state.prioritySet.delete(priorityHexId);
+      const hex = renderer.hexesById.get(priorityHexId);
+      if (!hex) continue;
+      buildSubhexGridPathForHex(hex);
+      getSubhexDetailTile(hex, { allowBuild: true, skipTrim: true });
+      builtPriorityTiles += 1;
+    }
+
+    while (!state.priorityIds.length && state.index < renderer.hexes.length && performance.now() - startedAt < frameBudgetMs) {
       buildSubhexGridPathForHex(renderer.hexes[state.index]);
       getSubhexDetailTile(renderer.hexes[state.index], { allowBuild: true, skipTrim: true });
       state.index += 1;
     }
 
-    if (state.index < renderer.hexes.length) {
+    if (state.priorityIds.length || state.index < renderer.hexes.length) {
+      if (builtPriorityTiles && isActive() && isSubhexLayerActive() && !renderer.view.dragging) {
+        queueMapRender(true);
+      }
       state.frame = window.requestAnimationFrame(processSubhexDetailPrecache);
       return;
     }
@@ -4815,9 +4998,10 @@
 
     state.running = false;
     state.awaitingImages = false;
-    state.complete = true;
+    state.complete = state.index >= renderer.hexes.length && !state.priorityIds.length;
     buildFullSubhexGridPath();
     trimSubhexDetailTileCache();
+    if (builtPriorityTiles && isActive() && isSubhexLayerActive()) queueMapRender(true);
   }
 
   function getSubhexDetailTile(hex, options = {}) {
@@ -4938,6 +5122,7 @@
     renderer.view.subhexDetailSettleTimer = window.setTimeout(() => {
       renderer.view.subhexDetailSettleTimer = null;
       renderer.view.subhexDetailDeferredUntil = 0;
+      queueSubhexDetailWarmupForCurrentView({ front: true });
       if (shouldRunSubhexDetailPrecache()) startSubhexDetailPrecache();
       if (isActive()) queueMapRender(true);
     }, SUBHEX_DETAIL_ZOOM_SETTLE_MS);
@@ -5857,6 +6042,7 @@
     })).then(() => {
       renderer.routeIconAssetsLoaded = true;
       renderer.routeLabelCache = { key: "", labels: [] };
+      invalidateLabelLayer();
       renderSvgOnly();
     });
 
@@ -6574,7 +6760,9 @@
 
     const fragment = document.createDocumentFragment();
     const subhexGridPath = timeRenderPerfMark("subhexGridPath", () => (
-      isSubhexDetailBuildDeferred() ? "" : buildVisibleSubhexGridPath(visibleHexes)
+      !isSubhexLayerActive() || isSubhexDetailBuildDeferred()
+        ? ""
+        : buildVisibleSubhexGridPath(visibleHexes)
     ));
     if (subhexGridPath) {
       const subhexGrid = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -6598,14 +6786,54 @@
     if (shouldRenderRouteLabels()) {
       renderRouteLabels(fragment);
     }
-    if (renderer.drawing.visibleOverlays.pois) {
-      const poiCount = timeRenderPerfMark("pois", () => renderPoiMarkers(fragment, visibleHexes));
-      setRenderPerfValue("poiCount", poiCount);
-      renderer.svg.dataset.poiCount = String(poiCount);
-    } else {
-      renderer.svg.dataset.poiCount = "0";
-    }
+    renderer.svg.appendChild(fragment);
+  }
 
+  function renderLabelLayer({ width, height }, visibleHexes = [], options = {}) {
+    if (!renderer.labelSvg) return;
+    const visibleWidth = width / renderer.view.zoom;
+    const visibleHeight = height / renderer.view.zoom;
+    renderer.labelSvg.setAttribute("viewBox", `${renderer.view.panX} ${renderer.view.panY} ${visibleWidth} ${visibleHeight}`);
+    if (options.reuse) return;
+
+    const layerKey = buildLabelLayerKey(visibleHexes);
+    if (renderer.labelLayerKey === layerKey) return;
+    renderer.labelLayerKey = layerKey;
+    renderer.labelSvg.innerHTML = "";
+
+    const fragment = document.createDocumentFragment();
+    renderCoordinateLabels(fragment, visibleHexes);
+    renderRegionLabels(fragment, visibleHexes);
+    if (shouldRenderRouteLabels()) {
+      renderRouteLabels(fragment);
+    }
+    renderer.labelSvg.appendChild(fragment);
+  }
+
+  function buildLabelLayerKey(visibleHexes = []) {
+    const visible = renderer.drawing.visibleOverlays;
+    return [
+      renderer.view.zoom >= COORD_LABEL_MIN_ZOOM ? 1 : 0,
+      visible.coords ? 1 : 0,
+      visible.geographicLabels ? 1 : 0,
+      visible.politicalLabels ? 1 : 0,
+      visible.road ? 1 : 0,
+      visible.river ? 1 : 0,
+      visible.sea_route ? 1 : 0,
+      renderer.overlayRevision,
+      visibleHexes.map(hex => hex.id).join("|")
+    ].join(";");
+  }
+
+  function renderInteractionLayer({ width, height }, visibleHexes = [], options = {}) {
+    if (!renderer.interactionSvg) return;
+    const visibleWidth = width / renderer.view.zoom;
+    const visibleHeight = height / renderer.view.zoom;
+    renderer.interactionSvg.setAttribute("viewBox", `${renderer.view.panX} ${renderer.view.panY} ${visibleWidth} ${visibleHeight}`);
+    if (options.reuse) return;
+    renderer.interactionSvg.innerHTML = "";
+
+    const fragment = document.createDocumentFragment();
     const selectedHex = hexForPathPoint(renderer.selectedHexId);
     if (selectedHex) {
       const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
@@ -6623,15 +6851,56 @@
     }
 
     renderDrawingGuides(fragment, visibleHexes);
+    renderer.interactionSvg.appendChild(fragment);
+  }
 
-    renderer.svg.appendChild(fragment);
+  function renderPoiLayer({ width, height }, options = {}) {
+    if (!renderer.poiSvg) return;
+    const visibleWidth = width / renderer.view.zoom;
+    const visibleHeight = height / renderer.view.zoom;
+    renderer.poiSvg.setAttribute("viewBox", `${renderer.view.panX} ${renderer.view.panY} ${visibleWidth} ${visibleHeight}`);
+    if (options.reuse) return;
+
+    const poiHexes = getPoiRenderHexesForView();
+    const layerKey = buildPoiLayerKey(poiHexes);
+    if (renderer.poiLayerKey === layerKey) return;
+    renderer.poiLayerKey = layerKey;
+    renderer.poiSvg.innerHTML = "";
+
+    if (!renderer.drawing.visibleOverlays.pois) {
+      renderer.poiSvg.dataset.poiCount = "0";
+      if (renderer.svg) renderer.svg.dataset.poiCount = "0";
+      setRenderPerfValue("poiCount", 0);
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    const poiCount = timeRenderPerfMark("pois", () => renderPoiMarkers(fragment, poiHexes));
+    renderer.poiSvg.dataset.poiCount = String(poiCount);
+    if (renderer.svg) renderer.svg.dataset.poiCount = String(poiCount);
+    setRenderPerfValue("poiCount", poiCount);
+    renderer.poiSvg.appendChild(fragment);
+  }
+
+  function buildPoiLayerKey(poiHexes = []) {
+    if (!renderer.drawing.visibleOverlays.pois) return "hidden";
+    const poiRefs = [];
+    (poiHexes || []).forEach(hex => {
+      const pois = getPoisForRenderedHex(hex);
+      if (!pois.length) return;
+      poiRefs.push(`${hex.id}:${pois.map(poi => poi?.POI_ID || poi?.__uuid || "").join(",")}`);
+    });
+    return [
+      renderer.poiIconAssetsLoaded ? 1 : 0,
+      renderer.drawing.visibleOverlays.pois ? 1 : 0,
+      poiRefs.join("|")
+    ].join(";");
   }
 
   function shouldReuseSvgDuringPan() {
     return Boolean(renderer.svg?.childNodes?.length)
       && renderer.view.dragging
       && renderer.view.dragMoved
-      && !renderer.drawing.enabled
       && !renderer.view.pinching;
   }
 
@@ -6896,6 +7165,15 @@
     fragment.appendChild(dot);
   }
 
+  function getPoiRenderHexesForView() {
+    if (!(renderer.poisByHexId instanceof Map) || !renderer.poisByHexId.size) return [];
+
+    return renderer.hexes.filter(hex => {
+      if (!hex?.id) return false;
+      return getPoisForRenderedHex(hex).length > 0;
+    });
+  }
+
   function renderPoiMarkers(fragment, visibleHexes) {
     const dimensions = getGeneratedMapDimensions();
     const markerDiameter = Math.min(70, Math.max(56, (dimensions.radius * 2) - 6));
@@ -6913,12 +7191,22 @@
       const markerX = hex.center.x;
       const markerY = hex.center.y;
       const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      const clipId = `generated-map-poi-clip-${String(hex.id || hex.label || "hex").replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
+      const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
       const iconGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
       const backgroundNode = createPoiMarkerBackgroundNode(markerProfile, markerX, markerY);
+      const clipNode = createPoiMarkerBackgroundNode(markerProfile, markerX, markerY);
 
       group.setAttribute("class", `generated-map-poi-marker generated-map-poi-marker-${markerProfile.classKey}`);
+      clipPath.setAttribute("id", clipId);
+      clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
+      clipPath.appendChild(clipNode);
+      defs.appendChild(clipPath);
+      iconGroup.setAttribute("clip-path", `url(#${clipId})`);
       iconGroup.appendChild(createPoiMarkerSymbolNode(markerPoi, markerX, markerY, markerProfile.iconSize));
 
+      group.appendChild(defs);
       group.appendChild(backgroundNode);
       group.appendChild(iconGroup);
       if (pois.length > 1) {
@@ -6945,11 +7233,6 @@
       });
     });
     return pois;
-  }
-
-  function getRendererHexByRef(hexRef) {
-    if (!hexRef) return null;
-    return renderer.hexesByRef.get(hexRef) || null;
   }
 
   function getPrimaryPoiMarkerRecord(pois) {
@@ -9646,15 +9929,48 @@
   }
 
   function getHexesForBounds(bounds) {
-    return renderer.hexes.filter(hex => hexIntersectsBounds(hex, bounds));
+    if (!bounds) return [];
+    const index = renderer.hexSpatialIndex;
+    const bucketSize = index?.bucketSize || 0;
+    const buckets = index?.buckets;
+    if (!bucketSize || !buckets?.size) {
+      return renderer.hexes.filter(hex => hexIntersectsBounds(hex, bounds));
+    }
+
+    const dimensions = getGeneratedMapDimensions();
+    const left = bounds.left - dimensions.radius;
+    const right = bounds.right + dimensions.radius;
+    const top = bounds.top - dimensions.hexHeight * 0.5;
+    const bottom = bounds.bottom + dimensions.hexHeight * 0.5;
+    const minBucketX = Math.floor(left / bucketSize);
+    const maxBucketX = Math.floor(right / bucketSize);
+    const minBucketY = Math.floor(top / bucketSize);
+    const maxBucketY = Math.floor(bottom / bucketSize);
+    const candidates = new Map();
+
+    for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY += 1) {
+      for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX += 1) {
+        const bucket = buckets.get(`${bucketX}:${bucketY}`);
+        if (!bucket) continue;
+        bucket.forEach(hex => {
+          if (hex?.id && !candidates.has(hex.id) && hexIntersectsBounds(hex, bounds, dimensions)) {
+            candidates.set(hex.id, hex);
+          }
+        });
+      }
+    }
+
+    return [...candidates.values()].sort((a, b) => (
+      (renderer.hexRenderIndex.get(a.id) ?? 0) - (renderer.hexRenderIndex.get(b.id) ?? 0)
+    ));
   }
 
-  function hexIntersectsBounds(hex, bounds) {
+  function hexIntersectsBounds(hex, bounds, dimensions = getGeneratedMapDimensions()) {
     return !(
-      hex.center.x + getGeneratedMapDimensions().radius < bounds.left ||
-      hex.center.x - getGeneratedMapDimensions().radius > bounds.right ||
-      hex.center.y + getGeneratedMapDimensions().hexHeight * 0.5 < bounds.top ||
-      hex.center.y - getGeneratedMapDimensions().hexHeight * 0.5 > bounds.bottom
+      hex.center.x + dimensions.radius < bounds.left ||
+      hex.center.x - dimensions.radius > bounds.right ||
+      hex.center.y + dimensions.hexHeight * 0.5 < bounds.top ||
+      hex.center.y - dimensions.hexHeight * 0.5 > bounds.bottom
     );
   }
 
@@ -9788,6 +10104,7 @@
     renderer.view.panX = worldX - anchorX / clampedZoom;
     renderer.view.panY = worldY - anchorY / clampedZoom;
     deferSubhexDetailBuild();
+    queueSubhexDetailWarmupForCurrentView({ front: true });
     render();
   }
 
@@ -9834,6 +10151,7 @@
       renderer.view.zoomAnimationFrame = null;
       renderer.view.animatingZoom = false;
       renderer.view.wheelLockedUntil = Math.max(renderer.view.wheelLockedUntil, performance.now() + 80);
+      queueSubhexDetailWarmupForCurrentView({ front: true });
       render();
     }
 
@@ -10148,6 +10466,11 @@
 
       event.preventDefault();
       const hex = getHexAtWorldPoint(clientToWorld(event));
+      if (event.pointerType !== "touch" && isContinuousPaintBrushTool(renderer.drawing.tool) && (event.buttons & 1) === 1) {
+        updateContinuousPaintBrushHover(hex);
+        applyDrawingAtEvent(event, true);
+        return;
+      }
       const hoverPoint = clientToWorld(event);
       const nextHoverEdge = getDrawingHoverEdge(renderer.drawing.tool, hoverPoint, hex);
       const nextEraseHexId = renderer.drawing.tool === "erase" && hexHasEraseableOverlays(hex?.id) ? hex.id : null;
@@ -10251,7 +10574,10 @@
     const shouldRefreshAfterPan = renderer.view.dragging && renderer.view.dragMoved;
     renderer.view.dragging = false;
     renderer.root.releasePointerCapture?.(event.pointerId);
-    if (shouldRefreshAfterPan) renderSvgOnly();
+    if (shouldRefreshAfterPan) {
+      queueSubhexDetailWarmupForCurrentView({ front: true });
+      render();
+    }
   }
 
   function handlePointerCancel(event) {
@@ -10327,6 +10653,11 @@
       return;
     }
 
+    if (isContinuousPaintBrushTool(tool)) {
+      applyContinuousPaintBrushStroke(tool, hex, fromDrag);
+      return;
+    }
+
     const dragKey = `${tool}:${hex.id}`;
     if (fromDrag && renderer.drawing.paintedThisDrag.has(dragKey)) return;
     renderer.drawing.paintedThisDrag.add(dragKey);
@@ -10379,11 +10710,6 @@
       return;
     }
 
-    if (tool === "terrain") {
-      updateGeneratedHexTerrainBrush(hex);
-      return;
-    }
-
     if (tool === "terrain-fill") {
       fillGeneratedHexTerrainPatch(hex);
       return;
@@ -10391,16 +10717,6 @@
 
     if (tool === "terrain-eyedropper") {
       pickTerrainFromHex(hex.id);
-      return;
-    }
-
-    if (tool === "feature") {
-      updateGeneratedHexFeatureBrush(hex);
-      return;
-    }
-
-    if (tool === "feature-erase") {
-      updateGeneratedHexFeatureEraseBrush(hex);
       return;
     }
 
@@ -10414,12 +10730,65 @@
     }
   }
 
+  function isContinuousPaintBrushTool(tool) {
+    return tool === "terrain" || tool === "feature" || tool === "feature-erase";
+  }
+
+  function applyContinuousPaintBrushStroke(tool, hex, fromDrag = false) {
+    const previousHexId = fromDrag ? renderer.drawing.dragLastHexId : null;
+    const hexIds = previousHexId && previousHexId !== hex.id
+      ? getHexLineSequence(previousHexId, hex.id)
+      : [hex.id];
+    renderer.drawing.dragLastHexId = hex.id;
+    const dirtyHexIds = new Set();
+    let actionCount = 0;
+
+    hexIds.forEach(hexId => {
+      const strokeHex = hexForPathPoint(hexId);
+      if (!strokeHex) return;
+      const dragKey = `${tool}:${strokeHex.id}`;
+      if (fromDrag && renderer.drawing.paintedThisDrag.has(dragKey)) return;
+      renderer.drawing.paintedThisDrag.add(dragKey);
+      actionCount += applyContinuousPaintBrushAtHex(tool, strokeHex, {
+        skipDirty: true,
+        deferRender: true,
+        dirtyHexIds
+      });
+    });
+
+    if (actionCount > 0) {
+      markTerrainHexesDirty([...dirtyHexIds].map(hexId => renderer.hexesById.get(hexId)).filter(Boolean));
+      queueMapRender(true);
+    }
+  }
+
+  function applyContinuousPaintBrushAtHex(tool, hex, options = {}) {
+    if (tool === "terrain") {
+      return updateGeneratedHexTerrainBrush(hex, options);
+    }
+    if (tool === "feature") {
+      return updateGeneratedHexFeatureBrush(hex, options);
+    }
+    if (tool === "feature-erase") {
+      return updateGeneratedHexFeatureEraseBrush(hex, options);
+    }
+    return 0;
+  }
+
+  function updateContinuousPaintBrushHover(hex) {
+    const nextBrushHexIds = getEditorBrushHexIds(hex);
+    renderer.drawing.hoverEdge = null;
+    renderer.drawing.hoverEraseHexId = null;
+    renderer.drawing.hoverMistHexIds = [];
+    renderer.drawing.hoverBrushHexIds = nextBrushHexIds;
+  }
+
   function blurRouteNameInput() {
     const routeNameInput = document.getElementById("map-route-name");
     if (document.activeElement === routeNameInput) routeNameInput.blur();
   }
 
-  function updateGeneratedHexTerrainBrush(centerHex) {
+  function updateGeneratedHexTerrainBrush(centerHex, options = {}) {
     const brushSize = resolveChaosNumber(renderer.drawing.terrainBrushSize, 1, 5, `terrain-size:${centerHex.id}`);
     const brushNoise = resolveChaosNumber(renderer.drawing.terrainNoise, 0, 90, `terrain-noise:${centerHex.id}`, 5);
     const targets = getBrushHexes(centerHex, brushSize, brushNoise, "terrain");
@@ -10428,11 +10797,18 @@
     for (const hex of targets) {
       const action = buildTerrainPaintAction(hex, centerHex, "terrain", brushNoise);
       if (!action) continue;
-      applyLocalTerrainSnapshot(action.hexId, action.after);
+      applyLocalTerrainSnapshot(action.hexId, action.after, { skipDirty: options.skipDirty });
+      options.dirtyHexIds?.add?.(action.hexId);
       actions.push(action);
     }
     pushBrushTerrainActions(actions, "terrain-manual");
-    queueMapRender(true);
+    if (actions.length && !options.deferRender) {
+      if (options.skipDirty) {
+        markTerrainHexesDirty(actions.map(action => renderer.hexesById.get(action.hexId)).filter(Boolean));
+      }
+      queueMapRender(true);
+    }
+    return actions.length;
   }
 
   function fillGeneratedHexTerrainPatch(centerHex) {
@@ -10511,7 +10887,7 @@
     return min + (stableHash(seed) % steps) * step;
   }
 
-  function updateGeneratedHexFeatureBrush(centerHex) {
+  function updateGeneratedHexFeatureBrush(centerHex, options = {}) {
     const brush = FEATURE_BRUSH_OPTIONS.find(option => option.id === renderer.drawing.featureBrush) || FEATURE_BRUSH_OPTIONS[0];
     const brushSize = resolveChaosNumber(renderer.drawing.featureBrushSize, 1, 5, `feature-size:${centerHex.id}`);
     const brushNoise = resolveChaosNumber(renderer.drawing.featureNoise, 0, 90, `feature-noise:${centerHex.id}`, 5);
@@ -10539,14 +10915,21 @@
         elevation: targetBefore.elevation
       }, targetBefore);
       if (!action) continue;
-      applyLocalTerrainSnapshot(action.hexId, action.after);
+      applyLocalTerrainSnapshot(action.hexId, action.after, { skipDirty: options.skipDirty });
+      options.dirtyHexIds?.add?.(action.hexId);
       actions.push(action);
     }
     pushBrushTerrainActions(actions, "features-manual");
-    queueMapRender(true);
+    if (actions.length && !options.deferRender) {
+      if (options.skipDirty) {
+        markTerrainHexesDirty(actions.map(action => renderer.hexesById.get(action.hexId)).filter(Boolean));
+      }
+      queueMapRender(true);
+    }
+    return actions.length;
   }
 
-  function updateGeneratedHexFeatureEraseBrush(centerHex) {
+  function updateGeneratedHexFeatureEraseBrush(centerHex, options = {}) {
     const brushSize = resolveChaosNumber(renderer.drawing.featureBrushSize, 1, 5, `feature-erase-size:${centerHex.id}`);
     const brushNoise = resolveChaosNumber(renderer.drawing.featureNoise, 0, 90, `feature-erase-noise:${centerHex.id}`, 5);
     const targets = getBrushHexes(centerHex, brushSize, brushNoise, "feature-erase");
@@ -10563,11 +10946,18 @@
         elevation: before.elevation
       }, before);
       if (!action) continue;
-      applyLocalTerrainSnapshot(action.hexId, action.after);
+      applyLocalTerrainSnapshot(action.hexId, action.after, { skipDirty: options.skipDirty });
+      options.dirtyHexIds?.add?.(action.hexId);
       actions.push(action);
     }
     pushBrushTerrainActions(actions, "features-manual");
-    queueMapRender(true);
+    if (actions.length && !options.deferRender) {
+      if (options.skipDirty) {
+        markTerrainHexesDirty(actions.map(action => renderer.hexesById.get(action.hexId)).filter(Boolean));
+      }
+      queueMapRender(true);
+    }
+    return actions.length;
   }
 
   async function updateGeneratedHexTerrain(hexId, target, before = null) {
@@ -11013,7 +11403,8 @@
       previewSection: "features",
       actions
     };
-    actions.forEach(action => applyLocalTerrainSnapshot(action.hexId, action.after));
+    actions.forEach(action => applyLocalTerrainSnapshot(action.hexId, action.after, { skipDirty: true }));
+    markTerrainHexesDirty(actions.map(action => renderer.hexesById.get(action.hexId)).filter(Boolean));
     pushStagedMapEditAction(historyAction);
     render();
     updateGenerationControls();
@@ -15973,7 +16364,8 @@
       previewSection: "terrain",
       actions
     };
-    actions.forEach(action => applyLocalTerrainSnapshot(action.hexId, action.after));
+    actions.forEach(action => applyLocalTerrainSnapshot(action.hexId, action.after, { skipDirty: true }));
+    markTerrainHexesDirty(actions.map(action => renderer.hexesById.get(action.hexId)).filter(Boolean));
     pushStagedMapEditAction(historyAction);
     render();
     updateGenerationControls();
@@ -16130,7 +16522,7 @@
     };
   }
 
-  function updateLocalHexTerrain(hexId, rpcRow, fallback) {
+  function updateLocalHexTerrain(hexId, rpcRow, fallback, options = {}) {
     const record = Array.isArray(rpcRow) ? rpcRow[0] : rpcRow;
     const baseTerrain = record?.base_terrain || fallback.baseTerrain;
     const features = Array.isArray(record?.terrain_features) ? record.terrain_features : fallback.features;
@@ -16170,7 +16562,7 @@
       showPopup(hexId);
     }
 
-    markTerrainHexDirty(hexId);
+    if (!options.skipDirty) markTerrainHexDirty(hexId);
   }
 
   function getGeneratedTerrainLabel(baseTerrain, features) {
@@ -16721,9 +17113,8 @@
         updateDrawUndoButton();
         return;
       }
-      applyLocalMapEditAction(action, "undo");
+      applyLocalStagedHistoryAction(action, "undo");
       pushStagedRedoAction(action);
-      markAllMapCachesDirty();
       render();
       refreshEditorActionControls();
       return;
@@ -16773,9 +17164,8 @@
         updateDrawRedoButton();
         return;
       }
-      applyLocalMapEditAction(action, "redo");
+      applyLocalStagedHistoryAction(action, "redo");
       pushStagedUndoAction(action);
-      markTerrainCacheDirty();
       render();
       refreshEditorActionControls();
       return;
@@ -17022,8 +17412,9 @@
     if (error) throw error;
 
     terrainActions.forEach(action => {
-      applyLocalTerrainSnapshot(action.hexId, direction === "undo" ? action.before : action.after);
+      applyLocalTerrainSnapshot(action.hexId, direction === "undo" ? action.before : action.after, { skipDirty: true });
     });
+    markTerrainHexesDirty(terrainActions.map(action => renderer.hexesById.get(action.hexId)).filter(Boolean));
   }
 
   async function applyRegionBatchAction(campaignId, actions, direction, historyAction = {}) {
@@ -17196,9 +17587,9 @@
     updateLocalHexTerrain(hexId, data, snapshot);
   }
 
-  function applyLocalTerrainSnapshot(hexId, snapshot) {
+  function applyLocalTerrainSnapshot(hexId, snapshot, options = {}) {
     if (!snapshot) return;
-    updateLocalHexTerrain(hexId, null, snapshot);
+    updateLocalHexTerrain(hexId, null, snapshot, options);
   }
 
   async function applyRegionSnapshot(campaignId, hexId, snapshot) {
@@ -17294,6 +17685,7 @@
       removeLocalOverlaysById(removed.map(overlay => overlay.__uuid));
       pushOverlayUndoAction(removed);
       renderer.routeLabelCache = { key: "", labels: [] };
+      invalidateLabelLayer();
       markRouteCacheDirty();
       markOverlayCacheDirty();
       render();
@@ -17334,6 +17726,7 @@
       removeLocalOverlaysById(removed.map(overlay => overlay.__uuid));
       pushOverlayUndoAction(removed);
       renderer.routeLabelCache = { key: "", labels: [] };
+      invalidateLabelLayer();
       markRouteCacheDirty();
       markOverlayCacheDirty();
       render();
@@ -17494,6 +17887,7 @@
       if (error) throw error;
     (data || []).map(adaptOverlayRpcRow).filter(Boolean).forEach(upsertLocalOverlay);
       renderer.routeLabelCache = { key: "", labels: [] };
+      invalidateLabelLayer();
       markRouteCacheDirty();
       clearNamedRouteEditForm();
       renderNamedRoutesList();
@@ -17525,6 +17919,7 @@
       }
       pushOverlayUndoAction(removed);
       renderer.routeLabelCache = { key: "", labels: [] };
+      invalidateLabelLayer();
       markRouteCacheDirty();
       renderNamedRoutesList();
       render();
