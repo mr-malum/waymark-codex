@@ -123,6 +123,7 @@
   const SUBHEX_LAYER_MIN_ZOOM = MAX_ZOOM;
   const SUBHEX_PARENT_SPAN = 6;
   const SUBHEX_DETAIL_ZOOM_SETTLE_MS = 180;
+  const SUBHEX_IDLE_WARMUP_DELAY_MS = 160;
   const FEATURE_GROUP_MAX_ZOOM = 0.25;
   const REGION_LABEL_REFERENCE_ZOOM = 0.85;
   const COORD_LABEL_MIN_ZOOM = 0.6;
@@ -491,14 +492,18 @@
     initialMapLoadingStartedAt: 0,
     poiHexIds: new Set(),
     poisByHexId: new Map(),
+    poiRenderHexes: [],
     mapOverlays: [],
     routeLabelCache: { key: "", labels: [] },
     svg: null,
+    svgLayerKey: "",
     labelSvg: null,
     labelLayerKey: "",
     interactionSvg: null,
     poiSvg: null,
     poiLayerKey: "",
+    regionVisualRevision: 0,
+    regionLabelRevision: 0,
     popup: null,
     popupOptions: {},
     perf: {
@@ -545,6 +550,7 @@
       wheelClientY: null,
       subhexDetailDeferredUntil: 0,
       subhexDetailSettleTimer: null,
+      subhexIdleWarmupTimer: null,
       routeLabelsHiddenUntil: 0,
       routeLabelRestoreTimer: null,
       touchPointers: new Map(),
@@ -713,6 +719,7 @@
     renderer.root.innerHTML = `
       <canvas class="generated-map-terrain-canvas"></canvas>
       <svg class="generated-map-svg-overlay generated-map-grid-overlay generated-map-base-overlay" aria-hidden="true"></svg>
+      <svg class="generated-map-svg-overlay generated-map-label-overlay" aria-hidden="true"></svg>
       <svg class="generated-map-svg-overlay generated-map-poi-overlay" aria-hidden="true"></svg>
       <svg class="generated-map-svg-overlay generated-map-interaction-overlay" aria-hidden="true"></svg>
       <div class="generated-map-popup" hidden></div>
@@ -728,9 +735,12 @@
     renderer.featureCacheCtx = renderer.featureCacheCanvas.getContext("2d");
     renderer.overlayCacheCtx = renderer.overlayCacheCanvas.getContext("2d");
     renderer.svg = renderer.root.querySelector(".generated-map-base-overlay");
-    renderer.labelSvg = null;
+    renderer.labelSvg = renderer.root.querySelector(".generated-map-label-overlay");
     renderer.interactionSvg = renderer.root.querySelector(".generated-map-interaction-overlay");
     renderer.poiSvg = renderer.root.querySelector(".generated-map-poi-overlay");
+    renderer.svgLayerKey = "";
+    renderer.labelLayerKey = "";
+    renderer.poiLayerKey = "";
     renderer.popup = renderer.root.querySelector(".generated-map-popup");
     renderer.loadingVeil = renderer.root.querySelector(".generated-map-loading-veil");
     ensureRendererPerfApi();
@@ -881,6 +891,7 @@
     renderer.hexesByCoord = new Map(renderer.hexes.map(hex => [`${hex.x}:${hex.y}`, hex]));
     renderer.poisByHexId = groupPoisByHexId(db?.raw?.pois || []);
     renderer.poiHexIds = new Set(renderer.poisByHexId.keys());
+    rebuildPoiRenderHexes();
     renderer.mapOverlays = db?.raw?.generatedMapOverlays || [];
     bumpOverlayRevision();
     markAllMapCachesDirty();
@@ -917,6 +928,7 @@
     }
     renderer.initialMapLoadingActive = false;
     if (!renderer.drawing.saving) setLoading(false);
+    scheduleSubhexIdleWarmup();
   }
 
   function hasInitialMapLoadingWork() {
@@ -938,6 +950,7 @@
 
     renderer.poisByHexId = groupPoisByHexId(db?.raw?.pois || []);
     renderer.poiHexIds = new Set(renderer.poisByHexId.keys());
+    rebuildPoiRenderHexes();
     invalidatePoiLayer();
     renderSvgOnly();
   }
@@ -945,6 +958,7 @@
   function refreshRegionLayerFromDatabase() {
     if (!isActive()) return;
     syncRenderedHexRegionsFromDatabase();
+    bumpRegionLayerRevisions({ labels: true });
     populateDrawRegionSelect();
     renderSvgOnly();
   }
@@ -2623,6 +2637,7 @@
     cancelQueuedWheelZoom();
     clearRouteLabelRestoreTimer();
     clearSubhexDetailSettleTimer();
+    clearSubhexIdleWarmupTimer();
     renderer.view.touchPointers.clear();
     renderer.view.pinching = false;
     renderer.view.dragging = false;
@@ -2840,12 +2855,36 @@
     if (changed.has("pois")) invalidatePoiLayer();
   }
 
+  function invalidateSvgLayer() {
+    renderer.svgLayerKey = "";
+  }
+
   function invalidateLabelLayer() {
     renderer.labelLayerKey = "";
   }
 
   function invalidatePoiLayer() {
     renderer.poiLayerKey = "";
+  }
+
+  function bumpRegionLayerRevisions(options = {}) {
+    renderer.regionVisualRevision += 1;
+    invalidateSvgLayer();
+    if (options.labels) {
+      renderer.regionLabelRevision += 1;
+      invalidateLabelLayer();
+    }
+  }
+
+  function rebuildPoiRenderHexes() {
+    if (!(renderer.poiHexIds instanceof Set) || !renderer.poiHexIds.size || !renderer.hexes.length) {
+      renderer.poiRenderHexes = [];
+      return;
+    }
+
+    renderer.poiRenderHexes = renderer.hexes.filter(hex => (
+      Boolean(hex?.id) && [hex.id, hex.label, hex.record?.__uuid].some(ref => ref && renderer.poiHexIds.has(ref))
+    ));
   }
 
   function rebuildHexIndexes() {
@@ -3096,6 +3135,7 @@
 
     const previousColor = region.Border_Color;
     region.Border_Color = nextColor;
+    bumpRegionLayerRevisions();
     renderSvgOnly();
 
     try {
@@ -3112,7 +3152,13 @@
 
       const updated = Array.isArray(data) ? data[0] : data;
       region.Region_Name = updated?.name || region.Region_Name || "";
-      region.Border_Color = updated?.border_color || nextColor;
+      const resolvedColor = updated?.border_color || nextColor;
+      if (resolvedColor !== region.Border_Color) {
+        region.Border_Color = resolvedColor;
+        bumpRegionLayerRevisions();
+      } else {
+        region.Border_Color = resolvedColor;
+      }
       region.Region_Type = updated?.region_type || region.Region_Type || normalizedType;
       region.Lore = updated?.lore || region.Lore || "";
       populateDrawRegionSelect();
@@ -3120,6 +3166,7 @@
     } catch (error) {
       console.error("Failed to update region color:", error);
       region.Border_Color = previousColor;
+      bumpRegionLayerRevisions();
       syncRegionColorInputs();
       renderSvgOnly();
       window.alert?.(error.message || "Unable to update region color.");
@@ -4430,10 +4477,12 @@
     const reuseOverlayLayers = shouldReuseSvgDuringPan();
     setRenderPerfValue("visibleParentHexes", visibleHexes.length);
     renderSvg({ width: rect.width, height: rect.height }, visibleHexes, []);
+    renderLabelLayer({ width: rect.width, height: rect.height }, visibleHexes, { reuse: reuseOverlayLayers });
     renderPoiLayer({ width: rect.width, height: rect.height }, { reuse: reuseOverlayLayers });
     renderInteractionLayer({ width: rect.width, height: rect.height }, visibleHexes, { reuse: reuseOverlayLayers });
     positionPopup();
     finishRenderPerf(perf);
+    scheduleSubhexIdleWarmup();
   }
 
   function shouldSkipVisibleHexesForFastPan() {
@@ -4525,10 +4574,12 @@
     const visibleSubhexes = [];
     renderTerrain(viewport, visibleHexes, visibleSubhexes);
     renderSvg(viewport, visibleHexes, visibleSubhexes);
+    renderLabelLayer(viewport, visibleHexes, { reuse: reuseOverlayLayers });
     renderPoiLayer(viewport, { reuse: reuseOverlayLayers });
     renderInteractionLayer(viewport, visibleHexes, { reuse: reuseOverlayLayers });
     positionPopup();
     finishRenderPerf(perf);
+    scheduleSubhexIdleWarmup();
   }
 
   function renderTerrain({ width, height, scale }, visibleHexes, visibleSubhexes = []) {
@@ -4870,6 +4921,46 @@
     };
   }
 
+  function clearSubhexIdleWarmupTimer() {
+    if (!renderer.view.subhexIdleWarmupTimer) return;
+    window.clearTimeout(renderer.view.subhexIdleWarmupTimer);
+    renderer.view.subhexIdleWarmupTimer = null;
+  }
+
+  function shouldRunSubhexDetailPrecache() {
+    return !renderer.initialMapLoadingActive
+      && !renderer.drawing.enabled
+      && !renderer.view.animatingZoom
+      && !renderer.view.pinching
+      && !renderer.view.dragging;
+  }
+
+  function shouldRunFullSubhexDetailPrecache() {
+    return shouldRunSubhexDetailPrecache() && isSubhexLayerActive();
+  }
+
+  function getSubhexIdleWarmupHexLimit() {
+    if (isSubhexLayerActive()) return 96;
+    if (renderer.view.zoom >= PARENT_MAX_ZOOM - 0.001) return 72;
+    if (renderer.view.zoom >= 0.85 - 0.001) return 48;
+    return 24;
+  }
+
+  function scheduleSubhexIdleWarmup() {
+    clearSubhexIdleWarmupTimer();
+    if (!shouldRunSubhexDetailPrecache() || !renderer.hexes.length) return;
+
+    renderer.view.subhexIdleWarmupTimer = window.setTimeout(() => {
+      renderer.view.subhexIdleWarmupTimer = null;
+      if (!shouldRunSubhexDetailPrecache() || !renderer.hexes.length) return;
+      queueSubhexDetailWarmupForCurrentView({
+        front: true,
+        limit: getSubhexIdleWarmupHexLimit()
+      });
+      startSubhexDetailPrecache();
+    }, SUBHEX_IDLE_WARMUP_DELAY_MS);
+  }
+
   function invalidateAllSubhexDetailTiles() {
     renderer.subhexDetailTileCache.clear();
     renderer.subhexGridPathCache.clear();
@@ -4888,7 +4979,9 @@
   function startSubhexDetailPrecache() {
     const state = renderer.subhexDetailPrecache;
     if (!shouldRunSubhexDetailPrecache()) return;
+    const allowFullSweep = shouldRunFullSubhexDetailPrecache();
     if (!renderer.hexes.length || state.running || (state.complete && !state.priorityIds.length)) return;
+    if (!allowFullSweep && !state.priorityIds.length) return;
     if (!renderer.featureAssetsLoaded) {
       state.awaitingImages = true;
       return;
@@ -4924,7 +5017,6 @@
 
   function queueSubhexDetailWarmupForCurrentView(options = {}) {
     if (renderer.drawing.enabled || !renderer.hexes.length) return;
-    if (renderer.view.zoom < PARENT_MAX_ZOOM - 0.001) return;
     const dimensions = getGeneratedMapDimensions();
     const rect = renderer.root?.getBoundingClientRect?.();
     const centerX = renderer.view.panX + (rect?.width || 0) / (2 * renderer.view.zoom);
@@ -4934,27 +5026,18 @@
         Math.hypot(left.center.x - centerX, left.center.y - centerY)
         - Math.hypot(right.center.x - centerX, right.center.y - centerY)
       ));
-    queueSubhexDetailTilePrecache(warmupHexes, { front: options.front !== false });
-  }
-
-  function isSubhexDetailTileReady(hex) {
-    if (!hex?.id) return false;
-    const metrics = getSubhexMetrics();
-    const key = getSubhexDetailTileKey(hex, metrics);
-    return renderer.subhexDetailTileCache.get(hex.id)?.key === key;
-  }
-
-  function shouldRunSubhexDetailPrecache() {
-    return !renderer.drawing.enabled
-      && !renderer.view.animatingZoom
-      && !renderer.view.pinching
-      && renderer.view.zoom >= PARENT_MAX_ZOOM - 0.001;
+    const limit = Math.max(1, Number(options.limit) || warmupHexes.length);
+    queueSubhexDetailTilePrecache(warmupHexes.slice(0, limit), { front: options.front !== false });
   }
 
   function processSubhexDetailPrecache() {
     const state = renderer.subhexDetailPrecache;
     state.frame = null;
     if (!state.running) return;
+    if (!shouldRunSubhexDetailPrecache()) {
+      state.running = false;
+      return;
+    }
 
     if (!renderer.featureAssetsLoaded) {
       state.running = false;
@@ -4962,8 +5045,9 @@
       return;
     }
 
+    const allowFullSweep = shouldRunFullSubhexDetailPrecache();
     const startedAt = performance.now();
-    const frameBudgetMs = renderer.view.dragging ? 2 : renderer.initialMapLoadingActive ? 12 : 5;
+    const frameBudgetMs = allowFullSweep ? 5 : 3;
     let builtPriorityTiles = 0;
     while (performance.now() - startedAt < frameBudgetMs) {
       const priorityHexId = state.priorityIds.shift();
@@ -4976,13 +5060,13 @@
       builtPriorityTiles += 1;
     }
 
-    while (!state.priorityIds.length && state.index < renderer.hexes.length && performance.now() - startedAt < frameBudgetMs) {
+    while (allowFullSweep && !state.priorityIds.length && state.index < renderer.hexes.length && performance.now() - startedAt < frameBudgetMs) {
       buildSubhexGridPathForHex(renderer.hexes[state.index]);
       getSubhexDetailTile(renderer.hexes[state.index], { allowBuild: true, skipTrim: true });
       state.index += 1;
     }
 
-    if (state.priorityIds.length || state.index < renderer.hexes.length) {
+    if (state.priorityIds.length || (allowFullSweep && state.index < renderer.hexes.length)) {
       if (builtPriorityTiles && isActive() && isSubhexLayerActive() && !renderer.view.dragging) {
         queueMapRender(true);
       }
@@ -4998,10 +5082,21 @@
 
     state.running = false;
     state.awaitingImages = false;
+    if (!allowFullSweep) {
+      if (builtPriorityTiles && isActive() && isSubhexLayerActive()) queueMapRender(true);
+      return;
+    }
     state.complete = state.index >= renderer.hexes.length && !state.priorityIds.length;
     buildFullSubhexGridPath();
     trimSubhexDetailTileCache();
     if (builtPriorityTiles && isActive() && isSubhexLayerActive()) queueMapRender(true);
+  }
+
+  function isSubhexDetailTileReady(hex) {
+    if (!hex?.id) return false;
+    const metrics = getSubhexMetrics();
+    const key = getSubhexDetailTileKey(hex, metrics);
+    return renderer.subhexDetailTileCache.get(hex.id)?.key === key;
   }
 
   function getSubhexDetailTile(hex, options = {}) {
@@ -6755,6 +6850,15 @@
       setRenderPerfValue("svgReused", true);
       return;
     }
+    const regionHexes = shouldRenderBufferedRegionLayer()
+      ? getBufferedRegionHexes(width, height, visibleHexes)
+      : visibleHexes;
+    const layerKey = buildSvgLayerKey(visibleHexes, regionHexes);
+    if (renderer.svgLayerKey === layerKey) {
+      setRenderPerfValue("svgReused", true);
+      return;
+    }
+    renderer.svgLayerKey = layerKey;
     setRenderPerfValue("svgRebuilt", true);
     renderer.svg.innerHTML = "";
 
@@ -6778,15 +6882,44 @@
     gridPath.setAttribute("opacity", String(getGridLineOpacity()));
     fragment.appendChild(gridPath);
 
-    renderGeographicRegionOverlay(fragment, visibleHexes);
+    renderGeographicRegionOverlay(fragment, regionHexes);
     renderDrawableOverlays(fragment, visibleHexes);
-    renderPoliticalRegionBorders(fragment, visibleHexes);
-    renderCoordinateLabels(fragment, visibleHexes);
-    renderRegionLabels(fragment, visibleHexes);
-    if (shouldRenderRouteLabels()) {
-      renderRouteLabels(fragment);
-    }
+    renderPoliticalRegionBorders(fragment, regionHexes);
     renderer.svg.appendChild(fragment);
+  }
+
+  function buildSvgLayerKey(visibleHexes = [], regionHexes = []) {
+    const visible = renderer.drawing.visibleOverlays;
+    return [
+      visible.geographic ? 1 : 0,
+      visible.political ? 1 : 0,
+      visible.wall ? 1 : 0,
+      isSubhexLayerActive() ? 1 : 0,
+      isSubhexDetailBuildDeferred() ? 1 : 0,
+      renderer.overlayRevision,
+      renderer.regionVisualRevision,
+      visibleHexes.map(hex => hex.id).join("|"),
+      regionHexes.map(hex => hex.id).join("|")
+    ].join(";");
+  }
+
+  function shouldRenderBufferedRegionLayer() {
+    return Boolean(
+      renderer.drawing.visibleOverlays.geographic
+      || renderer.drawing.visibleOverlays.political
+    );
+  }
+
+  function getBufferedRegionHexes(width, height, fallbackVisibleHexes = []) {
+    if (!renderer.root) return fallbackVisibleHexes;
+    const dimensions = getGeneratedMapDimensions();
+    const zoom = Math.max(renderer.view.zoom || 0, 0.001);
+    const regionBuffer = Math.max(
+      dimensions.radius * 2,
+      (width / zoom) * 0.5,
+      (height / zoom) * 0.5
+    );
+    return getHexesForBounds(getVisibleBounds(regionBuffer));
   }
 
   function renderLabelLayer({ width, height }, visibleHexes = [], options = {}) {
@@ -6821,6 +6954,7 @@
       visible.river ? 1 : 0,
       visible.sea_route ? 1 : 0,
       renderer.overlayRevision,
+      renderer.regionLabelRevision,
       visibleHexes.map(hex => hex.id).join("|")
     ].join(";");
   }
@@ -7166,12 +7300,7 @@
   }
 
   function getPoiRenderHexesForView() {
-    if (!(renderer.poisByHexId instanceof Map) || !renderer.poisByHexId.size) return [];
-
-    return renderer.hexes.filter(hex => {
-      if (!hex?.id) return false;
-      return getPoisForRenderedHex(hex).length > 0;
-    });
+    return Array.isArray(renderer.poiRenderHexes) ? renderer.poiRenderHexes : [];
   }
 
   function renderPoiMarkers(fragment, visibleHexes) {
@@ -16657,6 +16786,14 @@
 
   function updateLocalHexRegion(hexId, regionId, regionType = "geographic") {
     const renderedHex = hexForPathPoint(hexId);
+    const normalizedNext = regionType === "political"
+      ? (regionId || "")
+      : (regionId || UNCLAIMED_REGION_REF);
+    const previousValue = regionType === "political"
+      ? (renderedHex?.politicalRegionId || db?.hexesById?.[hexId]?.Political_Region_ID_Ref || "")
+      : (renderedHex?.regionId || db?.hexesById?.[hexId]?.Region_ID_Ref || UNCLAIMED_REGION_REF);
+    if (previousValue === normalizedNext) return false;
+
     if (renderedHex) {
       if (regionType === "political") {
         renderedHex.politicalRegionId = regionId;
@@ -16678,9 +16815,12 @@
       else db.hexesById[hexId].Region_ID_Ref = regionId;
     }
 
+    bumpRegionLayerRevisions({ labels: true });
+
     if (renderer.selectedHexId === hexId && renderer.popup && !renderer.popup.hidden) {
       showPopup(hexId);
     }
+    return true;
   }
 
   async function persistPathOverlaySequence(tool, fromHexId, toHexId, exitEdge = "") {
