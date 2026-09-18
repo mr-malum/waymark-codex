@@ -132,12 +132,24 @@
   const TERRAIN_CACHE_SCALE = 1.5;
   const SUBHEX_TERRAIN_TILE_SCALE = 2.25;
   const FEATURE_IMAGE_SUPERSAMPLE = 3;
+  // SVG units are much larger than the 94px parent / ~14px subhex draw boxes.
+  const MAP_LITE_FEATURE_IMAGE_SUPERSAMPLE = 2 / 3;
   const SUBHEX_FEATURE_IMAGE_SUPERSAMPLE = 5;
+  const SUBHEX_LITE_FEATURE_IMAGE_SUPERSAMPLE = 0.5;
+  const TOUCH_MAP_TILE_SIZE = 512;
+  const TOUCH_MAP_CACHE_BYTES = 96 * 1024 * 1024;
+  const TOUCH_MAP_FRAME_BUDGET_MS = 5;
   const EXPORT_CANVAS_MAX_PIXELS = 268000000;
   const EXPORT_CANVAS_MAX_SIDE = 32767;
   const EXPORT_COORD_LABEL_SCALE = 1.35;
   const SUBHEX_FEATURE_TILE_SCALE = 3;
   const SUBHEX_FEATURE_TILE_MAX_SCALE = 4;
+  const SUBHEX_LITE_MAX_TILE_CACHE = 72;
+  const SUBHEX_LITE_CACHE_BYTES = 64 * 1024 * 1024;
+  const SUBHEX_LITE_ACTIVE_WARMUP_HEX_LIMIT = 18;
+  const SUBHEX_LITE_PARENT_WARMUP_HEX_LIMIT = 12;
+  const SUBHEX_LITE_PRECACHE_FRAME_BUDGET_MS = 2;
+  const MAP_LITE_FEATURE_IMAGE_BATCH_SIZE = 3;
   const SUBHEX_PARENT_VIEW_WARMUP_HEX_LIMIT = 8;
   const FEATURE_IMAGE_BATCH_SIZE = 8;
   const BULK_OVERLAY_LOADING_THRESHOLD = 10;
@@ -465,7 +477,10 @@
     featureCacheCanvas: document.createElement("canvas"),
     featureCacheCtx: null,
     featureCacheDirty: true,
+    touchMapCache: { tiles: new Map(), visible: [], pending: false, zoom: null, routeCommands: null, routeKey: "", featureDirtyHexIds: new Set(), builds: 0 },
     subhexDetailTileCache: new Map(),
+    subhexVisibleHexIds: new Set(),
+    touchMapRenderer: null,
     subhexGridPathCache: new Map(),
     subhexPoiAnchorCache: new Map(),
     subhexPoiRouteSegmentCache: { key: "", road: [], river: [] },
@@ -852,7 +867,7 @@
     const veil = renderer.loadingVeil;
     if (!veil) return;
     const loadingLockCount = Number(renderer?.drawing?.loadingVeilLockCount || 0);
-    if (!isLoading && loadingLockCount > 0) return;
+    if (!isLoading && (loadingLockCount > 0 || renderer.initialMapLoadingActive)) return;
     veil.hidden = !isLoading;
     renderer.root?.classList.toggle("generated-map-is-loading", Boolean(isLoading));
   }
@@ -1018,6 +1033,9 @@
       || !renderer.featureAssetsLoaded
       || !renderer.routeIconAssetsLoaded
       || !renderer.poiIconAssetsLoaded
+      || (shouldUseMapLiteMode() && (renderer.touchMapCache.pending
+        || renderer.touchMapCache.featureDirtyHexIds.size > 0
+        || renderer.touchMapCache.visible.some(tile => tile.dirty.size > 0)))
       || renderer.featureImageQueue.length > 0
       || renderer.featureImageActiveLoads > 0;
   }
@@ -2704,11 +2722,13 @@
     renderer.cacheDirty = true;
     renderer.routeCacheDirty = true;
     renderer.featureCacheDirty = true;
+    resetTouchMapCache();
     renderer.overlayCacheDirty = true;
     invalidatePoiLayer();
     renderer.featureImageUsage.clear();
     renderer.subhexRouteAnchorCache?.clear?.();
-    renderer.subhexDetailTileCache.clear();
+    renderer.subhexDetailTileCache.forEach((tile, id) => deleteSubhexDetailTile(id));
+    renderer.subhexVisibleHexIds.clear();
     renderer.subhexGridPathCache.clear();
     renderer.parentGridPath = "";
     renderer.mapFillPath = "";
@@ -2852,6 +2872,9 @@
       samples() {
         return [...renderer.perf.samples];
       },
+      memory() {
+        return getRendererCacheMemory();
+      },
       clear() {
         renderer.perf.samples = [];
         renderer.perf.lastFrame = null;
@@ -2931,6 +2954,23 @@
     renderer.featureCacheDirty = true;
     invalidateAllSubhexDetailTiles();
     renderer.drawing.terrainDirtyHexIds.clear();
+  }
+
+  function getRendererCacheMemory() {
+    const bytes = canvas => canvas ? canvas.width * canvas.height * 4 : 0;
+    return {
+      touchRenderer: shouldUseTouchMapRenderer(),
+      parentBytes: [renderer.cacheCanvas, renderer.routeCacheCanvas, renderer.featureCacheCanvas, renderer.overlayCacheCanvas]
+        .reduce((sum, canvas) => sum + bytes(canvas), 0)
+        + [...renderer.touchMapCache.tiles.values()].reduce((sum, tile) => sum + Object.values(tile.layers).reduce((total, canvas) => total + bytes(canvas), 0), 0),
+      featureImageBytes: [...renderer.featureImages.values()].reduce((sum, entry) => sum + bytes(entry.image), 0),
+      subhexBytes: [...renderer.subhexDetailTileCache.values()].reduce((sum, tile) => sum + bytes(tile.terrainCanvas) + bytes(tile.featureCanvas), 0),
+      parentTiles: renderer.touchMapCache.tiles.size,
+      parentTileBuilds: renderer.touchMapCache.builds,
+      subhexTiles: renderer.subhexDetailTileCache.size,
+      queuedImages: renderer.featureImageQueue.length,
+      activeImages: renderer.featureImageActiveLoads
+    };
   }
 
   function markRouteCacheDirty() {
@@ -3075,7 +3115,7 @@
         dirtyHexIds.add(neighbor.id);
       });
     });
-    dirtyHexIds.forEach(hexId => renderer.subhexDetailTileCache.delete(hexId));
+    dirtyHexIds.forEach(deleteSubhexDetailTile);
     if (dirtyHexIds.size) {
       renderer.subhexDetailPrecache.complete = false;
       renderer.subhexDetailPrecache.index = 0;
@@ -5070,6 +5110,7 @@
   }
 
   function renderTerrain({ width, height, scale }, visibleHexes, visibleSubhexes = []) {
+    renderer.subhexVisibleHexIds = new Set(isSubhexLayerActive() ? visibleHexes.map(hex => hex.id) : []);
     const ctx = renderer.ctx;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.clearRect(0, 0, width, height);
@@ -5079,18 +5120,22 @@
     const featureWasDirty = renderer.featureCacheDirty || renderer.drawing.terrainDirtyHexIds.size > 0;
     const routeWasDirty = renderer.routeCacheDirty;
     const overlayWasDirty = renderer.overlayCacheDirty;
-    timeRenderPerfMark("terrainCache", () => updateTerrainCache(visibleHexes));
-    timeRenderPerfMark("featureCache", () => updateFeatureCache());
-    setRenderPerfValue("terrainCacheRebuilt", terrainWasDirty && !renderer.cacheDirty);
-    setRenderPerfValue("featureCacheRebuilt", featureWasDirty && !renderer.featureCacheDirty);
-    // Heavy live overlays should not block the first terrain/feature paint on dense maps.
-    if (deferOverlayCaches) queueMapRender(true);
-    else {
-      // Keep routes in their own under-feature layer so route edits do not rebuild feature art.
-      timeRenderPerfMark("routeCache", () => updateRouteCache());
-      timeRenderPerfMark("overlayCache", () => updateOverlayCache());
-      setRenderPerfValue("routeCacheRebuilt", routeWasDirty && !renderer.routeCacheDirty);
-      setRenderPerfValue("overlayCacheRebuilt", overlayWasDirty && !renderer.overlayCacheDirty);
+    if (shouldUseMapLiteMode()) {
+      timeRenderPerfMark("touchCache", () => updateTouchMapCache(width, height));
+    } else {
+      timeRenderPerfMark("terrainCache", () => updateTerrainCache(visibleHexes));
+      timeRenderPerfMark("featureCache", () => updateFeatureCache());
+      setRenderPerfValue("terrainCacheRebuilt", terrainWasDirty && !renderer.cacheDirty);
+      setRenderPerfValue("featureCacheRebuilt", featureWasDirty && !renderer.featureCacheDirty);
+      // Heavy live overlays should not block the first terrain/feature paint on dense maps.
+      if (deferOverlayCaches) queueMapRender(true);
+      else {
+        // Keep routes in their own under-feature layer so route edits do not rebuild feature art.
+        timeRenderPerfMark("routeCache", () => updateRouteCache());
+        timeRenderPerfMark("overlayCache", () => updateOverlayCache());
+        setRenderPerfValue("routeCacheRebuilt", routeWasDirty && !renderer.routeCacheDirty);
+        setRenderPerfValue("overlayCacheRebuilt", overlayWasDirty && !renderer.overlayCacheDirty);
+      }
     }
     timeRenderPerfMark("drawTerrain", () => drawCacheSlice(ctx, renderer.cacheCanvas, width, height));
     timeRenderPerfMark("drawSubhexTerrain", () => renderSubhexDetailTileLayer(ctx, visibleHexes, "terrain"));
@@ -5702,6 +5747,10 @@
   }
 
   function drawCacheSlice(ctx, sourceCanvas, width, height, opacity = 1) {
+    if (shouldUseMapLiteMode()) {
+      drawTouchMapCacheSlice(ctx, sourceCanvas, opacity);
+      return;
+    }
     const alpha = Math.max(0, Math.min(1, Number(opacity) || 0));
     if (alpha <= 0) return;
 
@@ -5732,6 +5781,229 @@
       destinationWidth,
       destinationHeight
     );
+    ctx.restore();
+  }
+
+  function releaseMapCanvas(canvas) {
+    if (!canvas) return;
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+
+  function resetTouchMapCache() {
+    const cache = renderer.touchMapCache;
+    cache.tiles.forEach(tile => Object.values(tile.layers).forEach(releaseMapCanvas));
+    cache.tiles.clear();
+    cache.visible = [];
+    cache.pending = false;
+    cache.zoom = null;
+    cache.routeCommands = null;
+    cache.routeKey = "";
+    cache.featureDirtyHexIds.clear();
+  }
+
+  function renderBoundsIntersect(a, b) {
+    return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
+  }
+
+  function getRenderPointsBounds(points, pad = 0) {
+    return points.reduce((bounds, point) => ({
+      left: Math.min(bounds.left, point.x - pad),
+      right: Math.max(bounds.right, point.x + pad),
+      top: Math.min(bounds.top, point.y - pad),
+      bottom: Math.max(bounds.bottom, point.y + pad)
+    }), { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity });
+  }
+
+  function getCanvasPathBounds(path, pad = 0) {
+    const points = parseSvgPathCommands(path).flatMap(command => (
+      command.type === "Q"
+        ? [{ x: command.cx, y: command.cy }, { x: command.x, y: command.y }]
+        : [{ x: command.x, y: command.y }]
+    ));
+    return getRenderPointsBounds(points, pad);
+  }
+
+  function getTouchRouteCommands() {
+    const cache = renderer.touchMapCache;
+    const visible = renderer.drawing.visibleOverlays;
+    const key = [renderer.overlayRevision, visible.path, visible.river, visible.road, visible.sea_route].join("|");
+    if (cache.routeCommands && cache.routeKey === key) return cache.routeCommands;
+    const commands = [];
+    // Record the existing path builder once, preserving its curves, crossings and draw order.
+    renderCanvasDrawablePaths({
+      recordPath(d, options) {
+        commands.push({ d, options, bounds: getCanvasPathBounds(d, options.width) });
+      },
+      recordPolygon(points, fill, opacity) {
+        commands.push({ points, fill, opacity, bounds: getRenderPointsBounds(points) });
+      }
+    });
+    cache.routeKey = key;
+    cache.routeCommands = commands;
+    return commands;
+  }
+
+  function updateTouchMapCache(width, height) {
+    const cache = renderer.touchMapCache;
+    const layers = ["terrain", "routes", "features", "overlays"];
+    const dirtyHexes = [...renderer.drawing.terrainDirtyHexIds].map(hexForPathPoint).filter(Boolean);
+    const imageHexes = [...cache.featureDirtyHexIds].map(hexForPathPoint).filter(Boolean);
+    if (renderer.cacheDirty || dirtyHexes.length) cache.routeCommands = null;
+    cache.tiles.forEach(tile => {
+      const contributorBounds = getFeatureDirtyBounds(tile.bounds);
+      const terrainChanged = dirtyHexes.some(hex => hexIntersectsBounds(hex, contributorBounds));
+      if (renderer.cacheDirty || terrainChanged) tile.dirty.add("terrain");
+      if (renderer.routeCacheDirty || terrainChanged) tile.dirty.add("routes");
+      if (renderer.featureCacheDirty || terrainChanged || imageHexes.some(hex => hexIntersectsBounds(hex, contributorBounds))) {
+        tile.dirty.add("features");
+      }
+      if (renderer.overlayCacheDirty) tile.dirty.add("overlays");
+    });
+    cache.featureDirtyHexIds.clear();
+    renderer.cacheDirty = false;
+    renderer.routeCacheDirty = false;
+    renderer.featureCacheDirty = false;
+    renderer.overlayCacheDirty = false;
+    // The desktop backing stores must never be allocated at map size on touch devices.
+    [renderer.cacheCanvas, renderer.routeCacheCanvas, renderer.featureCacheCanvas, renderer.overlayCacheCanvas]
+      .forEach(canvas => { if (canvas.width) releaseMapCanvas(canvas); });
+
+    const size = TOUCH_MAP_TILE_SIZE;
+    const zoom = renderer.view.zoom;
+    const desiredScale = Math.min(TERRAIN_CACHE_SCALE, zoom * Math.min(2, window.devicePixelRatio || 1));
+    const slots = (Math.ceil(width / zoom / size) + 1) * (Math.ceil(height / zoom / size) + 1);
+    const scaleLimit = (Math.sqrt(TOUCH_MAP_CACHE_BYTES / (slots * 4 * 4)) - 3) / size;
+    const scales = [0.125, 0.25, 0.5, 0.75, 1, 1.5];
+    const scale = scales.find(value => value >= desiredScale && value <= scaleLimit)
+      || scales.filter(value => value <= scaleLimit).pop() || Math.min(0.125, scaleLimit);
+    const minX = Math.max(0, Math.floor(renderer.view.panX / size));
+    const maxX = Math.min(Math.ceil(renderer.view.width / size) - 1, Math.floor((renderer.view.panX + width / zoom) / size));
+    const minY = Math.max(0, Math.floor(renderer.view.panY / size));
+    const maxY = Math.min(Math.ceil(renderer.view.height / size) - 1, Math.floor((renderer.view.panY + height / zoom) / size));
+    const visible = [];
+    for (let y = minY; y <= maxY; y += 1) {
+      for (let x = minX; x <= maxX; x += 1) {
+        const key = `${scale}:${x}:${y}`;
+        let tile = cache.tiles.get(key);
+        if (!tile) {
+          tile = { key, x, y, scale, bounds: { left: x * size, top: y * size, right: (x + 1) * size, bottom: (y + 1) * size }, layers: {}, dirty: new Set(layers) };
+        }
+        cache.tiles.delete(key);
+        cache.tiles.set(key, tile);
+        visible.push(tile);
+      }
+    }
+    cache.visible = visible;
+    const protectedKeys = new Set(visible.map(tile => tile.key));
+    const bytesPerTile = 4 * 4 * (Math.ceil(size * scale) + 2) ** 2;
+    let reservedBytes = [...cache.tiles.values()].reduce((total, tile) => (
+      total + (protectedKeys.has(tile.key) ? bytesPerTile : Object.values(tile.layers).reduce((bytes, canvas) => bytes + canvas.width * canvas.height * 4, 0))
+    ), 0);
+    for (const [key, tile] of cache.tiles) {
+      if (reservedBytes <= TOUCH_MAP_CACHE_BYTES) break;
+      if (protectedKeys.has(key)) continue;
+      Object.values(tile.layers).forEach(canvas => {
+        reservedBytes -= canvas.width * canvas.height * 4;
+        releaseMapCanvas(canvas);
+      });
+      cache.tiles.delete(key);
+    }
+
+    const startedAt = performance.now();
+    for (const tile of visible) {
+      if (!tile.dirty.size) continue;
+      buildTouchMapTile(tile);
+      cache.builds += 1;
+      incrementRenderPerfValue("touchTilesBuilt");
+      if (performance.now() - startedAt >= TOUCH_MAP_FRAME_BUDGET_MS) break;
+    }
+    cache.pending = visible.some(tile => tile.dirty.size > 0);
+    const leavingSubhex = cache.zoom >= SUBHEX_LAYER_MIN_ZOOM - 0.001
+      && zoom < SUBHEX_LAYER_MIN_ZOOM - 0.001 && !renderer.drawing.enabled;
+    if (cache.pending && leavingSubhex && !renderer.initialMapLoadingActive) {
+      beginInitialMapLoadingVeil();
+    }
+    cache.zoom = zoom;
+    if (cache.pending) queueMapRender(true);
+  }
+
+  function buildTouchMapTile(tile) {
+    const scale = tile.scale;
+    const bounds = tile.bounds;
+    const contributors = getHexesForBounds(getFeatureDirtyBounds(bounds));
+    const rasterBounds = { left: bounds.left - 2 / scale, right: bounds.right + 2 / scale, top: bounds.top - 2 / scale, bottom: bounds.bottom + 2 / scale };
+    const clipHexes = getHexesForBounds(rasterBounds);
+    for (const layer of tile.dirty) {
+      let canvas = tile.layers[layer];
+      if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(TOUCH_MAP_TILE_SIZE * scale) + 2;
+        canvas.height = canvas.width;
+        tile.layers[layer] = canvas;
+      }
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(scale, 0, 0, scale, 1 - bounds.left * scale, 1 - bounds.top * scale);
+      if (layer === "terrain") {
+        ctx.save();
+        clipToMapHexArea(ctx, clipHexes);
+        clipHexes.forEach(hex => drawCanvasPolygon(ctx, hex.points, hex.fill, 1, 1 / scale));
+        ctx.restore();
+      }
+      if (layer === "routes") {
+        if (renderer.drawing.visibleOverlays.features && shouldRenderFeatureArt()) {
+          contributors.forEach(hex => renderFarmlandOverlayForHex(ctx, hex));
+        }
+        getTouchRouteCommands().forEach(command => {
+          if (!renderBoundsIntersect(command.bounds, rasterBounds)) return;
+          if (command.points) drawCanvasPolygon(ctx, command.points, command.fill, command.opacity);
+          else drawCanvasOverlayPath(ctx, command.d, command.options);
+        });
+      }
+      if (layer === "features") {
+        ctx.save();
+        clipToMapHexArea(ctx, clipHexes);
+        contributors.forEach(hex => renderEdgeBleedForHex(ctx, hex));
+        if (renderer.drawing.visibleOverlays.features) renderFeatureLayer(ctx, contributors);
+        ctx.restore();
+      }
+      if (layer === "overlays" && renderer.drawing.visibleOverlays.mist && shouldRenderFeatureArt()) {
+        renderCanvasMistOverlays(ctx, new Set(contributors.map(hex => hex.id)));
+      }
+    }
+    tile.dirty.clear();
+  }
+
+  function drawTouchMapCacheSlice(ctx, sourceCanvas, opacity) {
+    if (opacity <= 0) return;
+    const layer = sourceCanvas === renderer.cacheCanvas ? "terrain"
+      : sourceCanvas === renderer.routeCacheCanvas ? "routes"
+        : sourceCanvas === renderer.featureCacheCanvas ? "features" : "overlays";
+    const cache = renderer.touchMapCache;
+    const transform = ctx.getTransform();
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    cache.visible.forEach(tile => {
+      const readyTile = tile.layers[layer] ? tile : [...cache.tiles.values()].find(previous => (
+        previous.x === tile.x && previous.y === tile.y && previous.layers[layer]?.width
+      ));
+      const canvas = readyTile?.layers[layer];
+      if (!canvas?.width) return;
+      const size = TOUCH_MAP_TILE_SIZE;
+      const zoom = renderer.view.zoom;
+      const left = (tile.bounds.left - renderer.view.panX) * zoom;
+      const top = (tile.bounds.top - renderer.view.panY) * zoom;
+      // Share exact device-pixel edges, sampling the gutter instead of overlapping translucent layers.
+      const x0 = (Math.round(left * transform.a + transform.e) - transform.e) / transform.a;
+      const y0 = (Math.round(top * transform.d + transform.f) - transform.f) / transform.d;
+      const x1 = (Math.round((left + size * zoom) * transform.a + transform.e) - transform.e) / transform.a;
+      const y1 = (Math.round((top + size * zoom) * transform.d + transform.f) - transform.f) / transform.d;
+      const sourceScale = readyTile.scale / zoom;
+      ctx.drawImage(canvas, 1 + (x0 - left) * sourceScale, 1 + (y0 - top) * sourceScale,
+        (x1 - x0) * sourceScale, (y1 - y0) * sourceScale, x0, y0, x1 - x0, y1 - y0);
+    });
     ctx.restore();
   }
 
@@ -5858,9 +6130,9 @@
     renderer.featureCacheDirty = false;
   }
 
-  function clipToMapHexArea(ctx) {
+  function clipToMapHexArea(ctx, hexes = renderer.hexes) {
     ctx.beginPath();
-    renderer.hexes.forEach(hex => {
+    hexes.forEach(hex => {
       if (!hex?.points?.length) return;
       ctx.moveTo(hex.points[0].x, hex.points[0].y);
       hex.points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
@@ -5944,7 +6216,8 @@
     renderer.overlayCacheDirty = false;
   }
 
-  function drawCanvasPolygon(ctx, points, fill, opacity = 1) {
+  function drawCanvasPolygon(ctx, points, fill, opacity = 1, edgeWidth = 0) {
+    if (ctx.recordPolygon) return ctx.recordPolygon(points, fill, opacity);
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.beginPath();
@@ -5952,6 +6225,11 @@
     points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
     ctx.closePath();
     ctx.fillStyle = fill;
+    if (edgeWidth > 0) {
+      ctx.strokeStyle = fill;
+      ctx.lineWidth = edgeWidth;
+      ctx.stroke();
+    }
     ctx.fill();
     ctx.restore();
   }
@@ -5974,8 +6252,13 @@
           ? (tile?.featureReady ? tile.featureCanvas : null)
           : tile?.terrainCanvas;
         if (!tile || !canvas?.width || !canvas?.height) return;
+        const tileScale = layer === "features" ? tile.featureScale : tile.terrainScale;
+        ctx.globalAlpha = progress * (layer === "terrain" ? tile.terrainOpacity : 1);
         ctx.drawImage(
           canvas,
+          0, 0,
+          (tile.bounds.right - tile.bounds.left) * tileScale,
+          (tile.bounds.bottom - tile.bounds.top) * tileScale,
           tile.bounds.left,
           tile.bounds.top,
           tile.bounds.right - tile.bounds.left,
@@ -5984,6 +6267,24 @@
       });
       ctx.restore();
     });
+  }
+
+  function shouldUseSubhexLiteMode() {
+    return shouldUseTouchMapRenderer();
+  }
+
+  function shouldUseMapLiteMode() {
+    return shouldUseTouchMapRenderer();
+  }
+
+  function shouldUseTouchMapRenderer() {
+    if (renderer.touchMapRenderer !== null) return renderer.touchMapRenderer;
+    const memory = Number(window.navigator?.deviceMemory || 0);
+    const hasLimitedMemory = memory > 0 && memory <= 4;
+    const hasTouch = Number(window.navigator?.maxTouchPoints || 0) > 0;
+    const hasCoarsePointer = Boolean(window.matchMedia?.("(pointer: coarse)")?.matches);
+    renderer.touchMapRenderer = hasLimitedMemory || hasTouch || hasCoarsePointer;
+    return renderer.touchMapRenderer;
   }
 
   function resetSubhexDetailPrecache() {
@@ -6092,10 +6393,13 @@
   }
 
   function shouldRunFullSubhexDetailPrecache() {
-    return shouldRunSubhexDetailPrecache() && isSubhexLayerActive();
+    return shouldRunSubhexDetailPrecache() && isSubhexLayerActive() && !shouldUseSubhexLiteMode();
   }
 
   function getSubhexIdleWarmupHexLimit() {
+    if (shouldUseSubhexLiteMode()) {
+      return isSubhexLayerActive() ? SUBHEX_LITE_ACTIVE_WARMUP_HEX_LIMIT : SUBHEX_LITE_PARENT_WARMUP_HEX_LIMIT;
+    }
     if (isSubhexLayerActive()) return 96;
     if (renderer.view.zoom >= PARENT_MAX_ZOOM - 0.001) return 72;
     if (renderer.view.zoom >= 0.85 - 0.001) return 48;
@@ -6114,7 +6418,7 @@
         limit: getSubhexIdleWarmupHexLimit()
       });
       startSubhexDetailPrecache();
-      if (renderer.view.zoom >= PARENT_MAX_ZOOM - 0.001) {
+      if (renderer.view.zoom >= PARENT_MAX_ZOOM - 0.001 && !shouldUseSubhexLiteMode()) {
         scheduleSubhexRouteProjectionWarmup({ prewarm: true });
         scheduleSubhexPoiCrossingWarmup({ prewarm: true });
       }
@@ -6156,13 +6460,14 @@
     if (renderer.view.subhexRouteProjectionWarmTimer || hasSubhexRouteProjectionCache()) return;
     if (!shouldWarmSubhexRouteProjection(options)) return;
 
+    const delayMs = shouldUseSubhexLiteMode() ? SUBHEX_IDLE_WARMUP_DELAY_MS : 0;
     renderer.view.subhexRouteProjectionWarmTimer = window.setTimeout(() => {
       renderer.view.subhexRouteProjectionWarmTimer = null;
       if (!shouldWarmSubhexRouteProjection(options) || hasSubhexRouteProjectionCache()) return;
 
       getSubhexRouteProjectionEntries(getVisibleHexes());
       if (isActive() && !options.prewarm) queueMapRender(true);
-    }, 0);
+    }, delayMs);
   }
 
   function shouldWarmSubhexPoiCrossings(options = {}) {
@@ -6198,6 +6503,7 @@
     if (renderer.view.subhexPoiCrossingWarmTimer || hasSubhexPoiCrossingProjectionCache()) return;
     if (!shouldWarmSubhexPoiCrossings(options)) return;
 
+    const delayMs = shouldUseSubhexLiteMode() ? SUBHEX_IDLE_WARMUP_DELAY_MS : 0;
     renderer.view.subhexPoiCrossingWarmTimer = window.setTimeout(() => {
       renderer.view.subhexPoiCrossingWarmTimer = null;
       if (!shouldWarmSubhexPoiCrossings(options) || hasSubhexPoiCrossingProjectionCache()) return;
@@ -6213,7 +6519,7 @@
         });
 
       if (isActive() && !options.prewarm) queueMapRender(true);
-    }, 0);
+    }, delayMs);
   }
 
   function getSubhexTransitionProgress(startedAtKey) {
@@ -6275,7 +6581,7 @@
   }
 
   function invalidateAllSubhexDetailTiles() {
-    renderer.subhexDetailTileCache.clear();
+    renderer.subhexDetailTileCache.forEach((tile, id) => deleteSubhexDetailTile(id));
     renderer.subhexGridPathCache.clear();
     renderer.subhexFullGridPath = "";
     invalidateGridLayer();
@@ -6341,7 +6647,10 @@
         Math.hypot(left.center.x - centerX, left.center.y - centerY)
         - Math.hypot(right.center.x - centerX, right.center.y - centerY)
       ));
-    const limit = Math.max(1, Number(options.limit) || warmupHexes.length);
+    const defaultLimit = shouldUseSubhexLiteMode()
+      ? getSubhexIdleWarmupHexLimit()
+      : warmupHexes.length;
+    const limit = Math.max(1, Number(options.limit) || defaultLimit);
     const prioritizedHexes = warmupHexes.slice(0, limit);
     if (!isSubhexLayerActive() && renderer.view.zoom >= PARENT_MAX_ZOOM - 0.001) {
       queueSubhexFeatureArtWarmupForHexes(prioritizedHexes);
@@ -6357,41 +6666,49 @@
     };
   }
 
-  function areSubhexFeatureImagesReadyForHex(hex, subhexes = null, options = {}) {
-    if (!hex?.id) return true;
-    const metrics = getSubhexMetrics();
-    const localSubhexes = Array.isArray(subhexes)
-      ? subhexes
-      : getSubhexesForBounds(getSubhexDetailTileBounds(hex, metrics), [hex]);
+  function areSubhexFeatureImagesReadyForTile(tile, hexId, options = {}) {
+    if (tile.featureReady) return true;
+    const usage = { type: "subhex", hexId, cacheVariant: "subhex" };
     let ready = true;
-
-    localSubhexes.forEach(subhex => {
-      const usage = getSubhexFeatureImageUsage(subhex);
-      const seededFeatures = getSubhexSeededFeatures(subhex);
-      if (shouldRenderSubhexFarmland(subhex, seededFeatures)) {
-        const file = FEATURE_ART_FILES.farmland;
-        if (!getFeatureArtImageEntry(
-          file,
-          getFeatureArtTint(subhex.owner, { featureId: "farmland", file }),
-          usage,
-          options
-        ).loaded) {
-          ready = false;
-        }
-      }
-
-      getSubhexFeatureStack(subhex, seededFeatures).forEach(item => {
-        if (!getFeatureArtImageEntry(item.file, item.tint, usage, options).loaded) {
-          ready = false;
-        }
-      });
+    // Register each unique image against the consuming tile, including neighboring detail.
+    tile.featurePlan.images.forEach(item => {
+      if (!getFeatureArtImageEntry(item.file, item.tint, usage, options).loaded) ready = false;
     });
-
     return ready;
   }
 
+  function buildSubhexFeaturePlan(subhexes, metrics) {
+    const commands = [];
+    const images = new Map();
+    subhexes.forEach(subhex => {
+      const seededFeatures = getSubhexSeededFeatures(subhex);
+      if (shouldRenderSubhexFarmland(subhex, seededFeatures)) {
+        const file = FEATURE_ART_FILES.farmland;
+        commands.push({ file, tint: getFeatureArtTint(subhex.owner, { featureId: "farmland", file }),
+          box: getSubhexFarmlandArtBox(subhex, metrics), opacity: 0.64 });
+      }
+      const stack = getSubhexFeatureStack(subhex, seededFeatures);
+      stack.forEach((item, index) => commands.push({ file: item.file, tint: item.tint,
+        box: getSubhexFeatureArtBox(subhex, metrics, index, stack.length), opacity: item.opacity }));
+    });
+    commands.forEach(item => images.set(getFeatureImageCacheKey(item.file, item.tint, "subhex"), { file: item.file, tint: item.tint }));
+    return { commands, images: [...images.values()] };
+  }
+
   function getSubhexFeatureTileScale() {
-    return SUBHEX_FEATURE_TILE_MAX_SCALE;
+    if (!shouldUseSubhexLiteMode()) return SUBHEX_FEATURE_TILE_MAX_SCALE;
+    const metrics = getSubhexMetrics();
+    const dimensions = getGeneratedMapDimensions();
+    const pad = Math.max(metrics.radius * 3.2, 8);
+    const tilePixels = (dimensions.radius * 2 + pad * 2 + 1) * (dimensions.hexHeight + pad * 2 + 1);
+    const rect = renderer.root?.getBoundingClientRect();
+    const zoom = Math.max(SUBHEX_LAYER_MIN_ZOOM, renderer.view.zoom);
+    const columns = Math.ceil(((rect?.width || 0) / zoom + dimensions.radius * 4) / (dimensions.radius * 1.5)) + 2;
+    const rows = Math.ceil(((rect?.height || 0) / zoom + dimensions.radius * 4) / dimensions.hexHeight) + 2;
+    // Use the viewport's worst-case tile count so a small pan cannot change cache resolution.
+    const count = Math.max(SUBHEX_LITE_MAX_TILE_CACHE, columns * rows);
+    const scaleLimit = Math.sqrt(Math.max(1, SUBHEX_LITE_CACHE_BYTES / (count * tilePixels * 4) - TERRAIN_CACHE_SCALE ** 2));
+    return Math.min(SUBHEX_FEATURE_TILE_SCALE, Math.floor(scaleLimit * 2) / 2);
   }
 
   function queueSubhexWarmupAfterViewChange(options = {}) {
@@ -6406,26 +6723,9 @@
 
   function queueSubhexFeatureArtWarmupForHexes(hexes = []) {
     if (!renderer.featureAssetsLoaded || !hexes.length) return;
-    const metrics = getSubhexMetrics();
     (hexes || []).forEach(hex => {
       if (!hex?.id) return;
-      const subhexes = getSubhexesForBounds(getSubhexDetailTileBounds(hex, metrics), [hex]);
-      subhexes.forEach(subhex => {
-        const usage = getSubhexFeatureImageUsage(subhex);
-        const seededFeatures = getSubhexSeededFeatures(subhex);
-        if (shouldRenderSubhexFarmland(subhex, seededFeatures)) {
-          const file = FEATURE_ART_FILES.farmland;
-          getFeatureArtImageEntry(
-            file,
-            getFeatureArtTint(subhex.owner, { featureId: "farmland", file }),
-            usage,
-            { front: true }
-          );
-        }
-        getSubhexFeatureStack(subhex, seededFeatures).forEach(item => {
-          getFeatureArtImageEntry(item.file, item.tint, usage, { front: true });
-        });
-      });
+      areSubhexFeatureImagesReadyForTile(getSubhexDetailTileState(hex), hex.id, { front: true });
     });
   }
 
@@ -6446,7 +6746,9 @@
 
     const allowFullSweep = shouldRunFullSubhexDetailPrecache();
     const startedAt = performance.now();
-    const frameBudgetMs = allowFullSweep ? 5 : 3;
+    const frameBudgetMs = shouldUseSubhexLiteMode()
+      ? SUBHEX_LITE_PRECACHE_FRAME_BUDGET_MS
+      : (allowFullSweep ? 5 : 3);
     let builtPriorityTiles = 0;
     while (performance.now() - startedAt < frameBudgetMs) {
       const priorityHexId = state.priorityIds.shift();
@@ -6495,44 +6797,66 @@
     if (!hex?.id) return false;
     const metrics = getSubhexMetrics();
     const key = getSubhexDetailTileKey(hex, metrics);
-    return renderer.subhexDetailTileCache.get(hex.id)?.key === key;
+    const tile = renderer.subhexDetailTileCache.get(hex.id);
+    return tile?.key === key && Boolean(tile.terrainCanvas) && !tile.featureBuildPending;
+  }
+
+  function getSubhexDetailTileState(hex) {
+    const metrics = getSubhexMetrics();
+    const key = getSubhexDetailTileKey(hex, metrics);
+    const cached = renderer.subhexDetailTileCache.get(hex.id);
+    if (cached?.key === key) {
+      renderer.subhexDetailTileCache.delete(hex.id);
+      renderer.subhexDetailTileCache.set(hex.id, cached);
+      return cached;
+    }
+    if (cached) deleteSubhexDetailTile(hex.id);
+
+    const bounds = getSubhexDetailTileBounds(hex, metrics);
+    const terrainScale = TERRAIN_CACHE_SCALE;
+    const featureScale = getSubhexFeatureTileScale();
+    const localSubhexes = getSubhexesForBounds(bounds, [hex]);
+    const tile = { key, bounds, terrainCanvas: null, featureCanvas: null, featureReady: false,
+      featureBuildPending: false, terrainScale, featureScale, subhexes: localSubhexes,
+      featurePlan: buildSubhexFeaturePlan(localSubhexes, metrics),
+      terrainOpacity: shouldUseSubhexLiteMode() ? 0.82 : 1 };
+    renderer.subhexDetailTileCache.set(hex.id, tile);
+    trimSubhexDetailTileCache();
+    return tile;
   }
 
   function getSubhexDetailTile(hex, options = {}) {
     if (!hex?.id) return null;
-    const metrics = getSubhexMetrics();
-    const key = getSubhexDetailTileKey(hex, metrics);
-    const cached = renderer.subhexDetailTileCache.get(hex.id);
-    if (cached?.key === key) return cached;
-    if (options.allowBuild === false) return null;
-
-    const bounds = getSubhexDetailTileBounds(hex, metrics);
-    const terrainCanvas = document.createElement("canvas");
-    const featureCanvas = document.createElement("canvas");
-    const terrainScale = TERRAIN_CACHE_SCALE;
-    const featureScale = getSubhexFeatureTileScale();
-    const terrainWidth = Math.max(1, Math.ceil((bounds.right - bounds.left) * terrainScale));
-    const terrainHeight = Math.max(1, Math.ceil((bounds.bottom - bounds.top) * terrainScale));
-    const featureWidth = Math.max(1, Math.ceil((bounds.right - bounds.left) * featureScale));
-    const featureHeight = Math.max(1, Math.ceil((bounds.bottom - bounds.top) * featureScale));
-    terrainCanvas.width = terrainWidth;
-    terrainCanvas.height = terrainHeight;
-    featureCanvas.width = featureWidth;
-    featureCanvas.height = featureHeight;
-
-    const subhexes = getSubhexesForBounds(bounds, [hex]);
-    const featureReady = areSubhexFeatureImagesReadyForHex(hex, subhexes, {
+    if (options.allowBuild === false) {
+      const cached = renderer.subhexDetailTileCache.get(hex.id);
+      if (!cached?.terrainCanvas || cached.key !== getSubhexDetailTileKey(hex, getSubhexMetrics())) return null;
+      renderer.subhexDetailTileCache.delete(hex.id);
+      renderer.subhexDetailTileCache.set(hex.id, cached);
+      return cached;
+    }
+    const tile = getSubhexDetailTileState(hex);
+    const { bounds, terrainScale, featureScale } = tile;
+    if (!tile.terrainCanvas) {
+      tile.terrainCanvas = document.createElement("canvas");
+      tile.terrainCanvas.width = Math.max(1, Math.ceil((bounds.right - bounds.left) * terrainScale));
+      tile.terrainCanvas.height = Math.max(1, Math.ceil((bounds.bottom - bounds.top) * terrainScale));
+      renderSubhexTileTerrain(tile.terrainCanvas.getContext("2d"), bounds, tile.subhexes, terrainScale);
+      tile.subhexes = null;
+      incrementRenderPerfValue("subhexTilesBuilt");
+    }
+    if (!tile.featureReady && areSubhexFeatureImagesReadyForTile(tile, hex.id, {
       queueMissing: true,
       front: isSubhexLayerActive()
-    });
-    renderSubhexTileTerrain(terrainCanvas.getContext("2d"), bounds, subhexes, terrainScale);
-    if (featureReady) {
-      renderSubhexTileFeatures(featureCanvas.getContext("2d"), bounds, subhexes, metrics, featureScale);
+    })) {
+      tile.featureCanvas = document.createElement("canvas");
+      tile.featureCanvas.width = Math.max(1, Math.ceil((bounds.right - bounds.left) * featureScale));
+      tile.featureCanvas.height = Math.max(1, Math.ceil((bounds.bottom - bounds.top) * featureScale));
+      renderSubhexTileFeatures(tile.featureCanvas.getContext("2d"), bounds, tile.featurePlan, featureScale);
+      tile.featureReady = true;
+      tile.featureBuildPending = false;
+      tile.featurePlan = null;
+      incrementRenderPerfValue("subhexFeatureTilesBuilt");
     }
-
-    const tile = { key, bounds, terrainCanvas, featureCanvas, featureReady };
-    renderer.subhexDetailTileCache.set(hex.id, tile);
-    incrementRenderPerfValue("subhexTilesBuilt");
     trimSubhexDetailTileCache();
     return tile;
   }
@@ -6565,27 +6889,23 @@
     ctx.setTransform(terrainScale, 0, 0, terrainScale, -bounds.left * terrainScale, -bounds.top * terrainScale);
     ctx.clearRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
     ctx.save();
-    clipToMapHexArea(ctx);
+    clipToMapHexArea(ctx, getHexesForBounds(bounds));
+    const sealEdges = shouldUseSubhexLiteMode();
     subhexes.forEach(subhex => {
-      drawCanvasPolygon(ctx, subhex.points, getSubhexTerrainFill(subhex), 0.82);
+      // Apply touch terrain opacity when compositing the tile, so shared edges stay uniformly covered.
+      drawCanvasPolygon(ctx, subhex.points, getSubhexTerrainFill(subhex), sealEdges ? 1 : 0.82, sealEdges ? 1 / terrainScale : 0);
     });
     ctx.restore();
   }
 
-  function renderSubhexTileFeatures(ctx, bounds, subhexes, metrics, featureScale = getSubhexFeatureTileScale()) {
+  function renderSubhexTileFeatures(ctx, bounds, plan, featureScale = getSubhexFeatureTileScale()) {
     ctx.setTransform(featureScale, 0, 0, featureScale, -bounds.left * featureScale, -bounds.top * featureScale);
     ctx.clearRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
     ctx.save();
-    clipToMapHexArea(ctx);
-    subhexes.forEach(subhex => {
-      const seededFeatures = getSubhexSeededFeatures(subhex);
-      renderSubhexFarmlandOverlay(ctx, subhex, metrics, seededFeatures);
-      const stack = getSubhexFeatureStack(subhex, seededFeatures);
-      stack.forEach((item, index) => {
-        const image = getFeatureArtImage(item.file, item.tint, getSubhexFeatureImageUsage(subhex));
-        if (!image) return;
-        drawFeatureArtImage(ctx, image, getSubhexFeatureArtBox(subhex, metrics, index, stack.length), item.opacity);
-      });
+    clipToMapHexArea(ctx, getHexesForBounds(bounds));
+    plan.commands.forEach(item => {
+      const image = renderer.featureImages.get(getFeatureImageCacheKey(item.file, item.tint, "subhex"))?.image;
+      if (image) drawFeatureArtImage(ctx, image, item.box, item.opacity);
     });
     ctx.restore();
   }
@@ -6604,6 +6924,7 @@
 
   function getSubhexDetailTileKey(hex, metrics) {
     const featureScale = getSubhexFeatureTileScale();
+    const featureSupersample = getFeatureImageSupersample("subhex");
     return [
       hex.id,
       hex.fill,
@@ -6616,19 +6937,31 @@
       renderer.featureAssetsLoaded ? 1 : 0,
       TERRAIN_CACHE_SCALE,
       featureScale,
-      SUBHEX_FEATURE_IMAGE_SUPERSAMPLE
+      featureSupersample
     ].join("|");
   }
 
+  function deleteSubhexDetailTile(hexId) {
+    const tile = renderer.subhexDetailTileCache.get(hexId);
+    if (!tile) return;
+    releaseMapCanvas(tile.terrainCanvas);
+    releaseMapCanvas(tile.featureCanvas);
+    renderer.subhexDetailTileCache.delete(hexId);
+  }
+
   function trimSubhexDetailTileCache() {
-    const maxTiles = Math.max(420, renderer.hexes.length + 40);
-    if (renderer.subhexDetailTileCache.size <= maxTiles) return;
-    const deleteCount = renderer.subhexDetailTileCache.size - maxTiles;
-    let deleted = 0;
-    for (const key of renderer.subhexDetailTileCache.keys()) {
-      renderer.subhexDetailTileCache.delete(key);
-      deleted += 1;
-      if (deleted >= deleteCount) break;
+    const liteMode = shouldUseSubhexLiteMode();
+    const maxTiles = liteMode
+      ? Math.max(SUBHEX_LITE_MAX_TILE_CACHE, renderer.subhexVisibleHexIds.size)
+      : Math.max(420, renderer.hexes.length + 40);
+    const tileBytes = tile => [tile.terrainCanvas, tile.featureCanvas]
+      .reduce((bytes, canvas) => bytes + (canvas ? canvas.width * canvas.height * 4 : 0), 0);
+    let bytes = liteMode ? [...renderer.subhexDetailTileCache.values()].reduce((sum, tile) => sum + tileBytes(tile), 0) : 0;
+    for (const [key, tile] of renderer.subhexDetailTileCache) {
+      if (renderer.subhexDetailTileCache.size <= maxTiles && (!liteMode || bytes <= SUBHEX_LITE_CACHE_BYTES)) break;
+      if (liteMode && renderer.subhexVisibleHexIds.has(key)) continue;
+      bytes -= tileBytes(tile);
+      deleteSubhexDetailTile(key);
     }
   }
 
@@ -6664,9 +6997,11 @@
     }
     const entries = getSubhexRouteProjectionEntries(visibleHexes);
     if (!entries.length) return;
+    const visibleBounds = shouldUseSubhexLiteMode() ? getVisibleBounds(0) : null;
 
     withWorldCanvasTransform(ctx, () => {
       entries.forEach(entry => {
+        if (visibleBounds && entry.bounds && !renderBoundsIntersect(entry.bounds, visibleBounds)) return;
         drawCanvasOverlayPath(ctx, entry.path, {
           stroke: entry.stroke,
           width: entry.width,
@@ -6752,6 +7087,9 @@
     }
 
     const cachedEntries = entries.filter(entry => entry.path);
+    if (shouldUseSubhexLiteMode()) {
+      cachedEntries.forEach(entry => { entry.bounds = getCanvasPathBounds(entry.path, entry.width); });
+    }
     renderer.subhexRouteProjectionCache = { key, entries: cachedEntries };
     setRenderPerfValue("subhexRoutesBuilt", true);
     return cachedEntries;
@@ -7094,7 +7432,8 @@
 
   function getParentHexForSubhexPoint(point, candidates = renderer.hexes) {
     return (candidates || []).find(hex => pointInPolygon(point, hex.points))
-      || renderer.hexes.find(hex => pointInPolygon(point, hex.points))
+      || getHexesForBounds({ left: point.x, right: point.x, top: point.y, bottom: point.y })
+        .find(hex => pointInPolygon(point, hex.points))
       || null;
   }
 
@@ -7274,6 +7613,7 @@
   }
 
   function drawCanvasOverlayPath(ctx, pathData, options) {
+    if (ctx.recordPath) return ctx.recordPath(pathData, options);
     const commands = parseSvgPathCommands(pathData);
     if (!commands.length) return;
 
@@ -7427,6 +7767,8 @@
   }
 
   function getFeatureImageSupersample(cacheVariant = "") {
+    if (cacheVariant === "subhex" && shouldUseSubhexLiteMode()) return SUBHEX_LITE_FEATURE_IMAGE_SUPERSAMPLE;
+    if (!renderer.exportingMap && !cacheVariant && shouldUseMapLiteMode()) return MAP_LITE_FEATURE_IMAGE_SUPERSAMPLE;
     return cacheVariant === "subhex" ? SUBHEX_FEATURE_IMAGE_SUPERSAMPLE : FEATURE_IMAGE_SUPERSAMPLE;
   }
 
@@ -7460,8 +7802,13 @@
   }
 
   function getFeatureImageBatchSize() {
-    if (!renderer.initialMapLoadingActive && isSubhexLayerActive()) return Math.max(FEATURE_IMAGE_BATCH_SIZE, 12);
-    if (!renderer.initialMapLoadingActive && renderer.view.zoom >= PARENT_MAX_ZOOM - 0.001) return Math.max(FEATURE_IMAGE_BATCH_SIZE, 10);
+    if (shouldUseMapLiteMode()) return MAP_LITE_FEATURE_IMAGE_BATCH_SIZE;
+    if (!renderer.initialMapLoadingActive && isSubhexLayerActive()) {
+      return shouldUseSubhexLiteMode() ? Math.max(3, Math.floor(FEATURE_IMAGE_BATCH_SIZE / 2)) : Math.max(FEATURE_IMAGE_BATCH_SIZE, 12);
+    }
+    if (!renderer.initialMapLoadingActive && renderer.view.zoom >= PARENT_MAX_ZOOM - 0.001) {
+      return shouldUseSubhexLiteMode() ? Math.max(3, Math.floor(FEATURE_IMAGE_BATCH_SIZE / 2)) : Math.max(FEATURE_IMAGE_BATCH_SIZE, 10);
+    }
     return FEATURE_IMAGE_BATCH_SIZE;
   }
 
@@ -7531,7 +7878,7 @@
         const current = renderer.featureImages.get(cacheKey);
         if (!current) {
           renderer.featureImageActiveLoads = Math.max(0, renderer.featureImageActiveLoads - 1);
-          processFeatureImageQueue();
+          scheduleFeatureImageQueue();
           flushInitialFeatureImageBatchIfReady();
           return;
         }
@@ -7541,19 +7888,19 @@
         current.loaded = Boolean(canvas);
         current.loading = false;
         renderer.featureImageActiveLoads = Math.max(0, renderer.featureImageActiveLoads - 1);
-        if (renderer.initialMapLoadingActive) {
+        if (renderer.initialMapLoadingActive && !shouldUseMapLiteMode()) {
           renderer.featureImageStartupBatchDirty = true;
         } else {
           markFeatureImageUsageDirty(cacheKey);
         }
-        processFeatureImageQueue();
+        scheduleFeatureImageQueue();
         flushInitialFeatureImageBatchIfReady();
       })
       .catch(() => {
         const current = renderer.featureImages.get(cacheKey);
         if (current) current.loading = false;
         renderer.featureImageActiveLoads = Math.max(0, renderer.featureImageActiveLoads - 1);
-        processFeatureImageQueue();
+        scheduleFeatureImageQueue();
         flushInitialFeatureImageBatchIfReady();
       });
   }
@@ -7620,18 +7967,26 @@
       const affectedHexes = [...usage.terrainHexIds]
         .map(hexId => hexForPathPoint(hexId))
         .filter(Boolean);
-      markTerrainHexesDirty(affectedHexes, 0, false);
+      if (shouldUseMapLiteMode()) {
+        affectedHexes.forEach(hex => renderer.touchMapCache.featureDirtyHexIds.add(hex.id));
+      } else {
+        markTerrainHexesDirty(affectedHexes, 0, false);
+      }
       shouldQueueRender = true;
     }
     if (usage.subhexHexIds.size) {
       const affectedHexes = [...usage.subhexHexIds]
         .map(hexId => hexForPathPoint(hexId))
-        .filter(Boolean);
+        .filter(hex => {
+          const tile = hex && renderer.subhexDetailTileCache.get(hex.id);
+          return tile && !tile.featureReady && !tile.featureBuildPending
+            && tile.key === getSubhexDetailTileKey(hex, getSubhexMetrics());
+        });
       const readyHexes = affectedHexes.filter(hex => (
-        areSubhexFeatureImagesReadyForHex(hex, null, { queueMissing: false })
+        areSubhexFeatureImagesReadyForTile(renderer.subhexDetailTileCache.get(hex.id), hex.id, { queueMissing: false })
       ));
       if (readyHexes.length) {
-        readyHexes.forEach(hex => renderer.subhexDetailTileCache.delete(hex.id));
+        readyHexes.forEach(hex => { renderer.subhexDetailTileCache.get(hex.id).featureBuildPending = true; });
         queueSubhexDetailTilePrecache(readyHexes, { front: true });
       }
     }
@@ -10218,7 +10573,7 @@
     };
   }
 
-  function renderCanvasMistOverlays(ctx) {
+  function renderCanvasMistOverlays(ctx, hexIds = null) {
     const image = getFeatureArtImage(FEATURE_ART_FILES.mist, "#f0f0e8", { type: "overlay", overlayType: "mist" });
     if (!image) return;
 
@@ -10226,7 +10581,7 @@
       .filter(overlay => overlay.Hex_ID_Ref)
       .forEach(overlay => {
         const hex = hexForPathPoint(overlay.Hex_ID_Ref);
-        if (!hex) return;
+        if (!hex || (hexIds && !hexIds.has(hex.id))) return;
         const box = applyFeatureArtSizeMultiplier(featureArtDrawBox(hex, 0), "mist");
         drawFeatureArtImage(ctx, image, box, FEATURE_ART_OPACITY.mist || 0.24);
       });
