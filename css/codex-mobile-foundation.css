@@ -588,10 +588,13 @@
 @media (max-width: 1099px), (max-height: 699px) {
   #codex-overlay #codex-header {
     display: grid !important;
-    grid-template-columns: minmax(22px, 1fr) minmax(0, auto) minmax(22px, 1fr) !important;
+    grid-template-columns:
+      minmax(24px, 0.78fr)
+      minmax(0, calc(var(--codex-mobile-image-width) * 0.48))
+      minmax(24px, 0.78fr) !important;
     align-items: center !important;
     justify-items: center !important;
-    column-gap: clamp(8px, calc(var(--codex-mobile-image-width) * 0.025), 18px) !important;
+    column-gap: clamp(14px, calc(var(--codex-mobile-image-width) * 0.04), 26px) !important;
 
     padding: 0 clamp(8px, calc(var(--codex-mobile-image-width) * 0.035), 24px) !important;
     overflow: visible !important;
@@ -628,7 +631,8 @@
     grid-column: 2 !important;
     position: relative !important;
 
-    max-width: min(100%, calc(var(--codex-mobile-image-width) * 0.56)) !important;
+    width: 100% !important;
+    max-width: 100% !important;
     margin: 0 !important;
 
     font-size: clamp(1.12rem, calc(var(--codex-mobile-image-width) * 0.056), 2rem) !important;
@@ -636,10 +640,10 @@
     letter-spacing: clamp(0.08em, 1vw, 0.14em) !important;
     text-align: center !important;
 
-    white-space: nowrap !important;
+    white-space: normal !important;
     overflow: visible !important;
     overflow-wrap: normal !important;
-    text-wrap: nowrap;
+    text-wrap: balance;
   }
 
   #codex-overlay #codex-title > div,
@@ -648,10 +652,10 @@
   #codex-overlay #codex-title .codex-subheader {
     display: block !important;
     max-width: 100% !important;
-    white-space: nowrap !important;
+    white-space: normal !important;
     overflow: visible !important;
     overflow-wrap: normal !important;
-    text-wrap: nowrap;
+    text-wrap: balance;
   }
 
   #codex-overlay #codex-title::after {
@@ -678,8 +682,11 @@
 
 @media (max-width: 420px) {
   #codex-overlay #codex-header {
-    grid-template-columns: minmax(14px, 0.8fr) minmax(0, auto) minmax(14px, 0.8fr) !important;
-    column-gap: 7px !important;
+    grid-template-columns:
+      minmax(14px, 0.8fr)
+      minmax(0, calc(var(--codex-mobile-image-width) * 0.58))
+      minmax(14px, 0.8fr) !important;
+    column-gap: 10px !important;
     padding-inline: 6px !important;
   }
 
@@ -690,7 +697,6 @@
   }
 
   #codex-overlay #codex-title {
-    max-width: min(100%, calc(var(--codex-mobile-image-width) * 0.64)) !important;
     font-size: clamp(1rem, calc(var(--codex-mobile-image-width) * 0.052), 1.55rem) !important;
     letter-spacing: 0.08em !important;
   }

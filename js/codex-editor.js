@@ -3420,7 +3420,7 @@ function updateCodexContextAction(type) {
       if (isEditableDetailPage) {
         mobileButton.hidden = false;
         mobileButton.onclick = () => {
-          if (window.isMobileCodexNav?.() && isDeletableDetailPage) {
+          if (window.isMobileCodexNav?.()) {
             if (window.isCodexNavPocketOpen?.("codex-mobile-action-pocket")) {
               window.closeCodexNavPockets?.();
             } else {

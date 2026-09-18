@@ -374,6 +374,7 @@
 }
 
 #map-draw-button.active::before,
+#map-draw-button.map-tools-label-visible::before,
 #map-draw-button:hover::before {
   opacity: 1;
 }
@@ -624,9 +625,12 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.map-edit-rail-main[data-map-tool-mode-panel="chooser"],
 .map-edit-rail-main[data-map-tool-mode-panel="cartographer"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.map-edit-rail-main[data-map-tool-mode-panel="chooser"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .map-edit-rail-main[data-map-tool-mode-panel="surveyor"] {
@@ -1556,7 +1560,7 @@
   }
 
   #map-view-button {
-    top: calc(max(12px, env(safe-area-inset-top)) + 52px);
+    top: calc(max(12px, env(safe-area-inset-top)) + 64px);
     left: max(12px, env(safe-area-inset-left));
     bottom: auto;
   }
@@ -1655,10 +1659,13 @@
   }
 
   .map-edit-rail-utility,
-  .map-edit-rail-main[data-map-tool-mode-panel="chooser"],
   .map-edit-rail-main[data-map-tool-mode-panel="surveyor"],
   .map-edit-rail-main[data-map-tool-mode-panel="cartographer"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .map-edit-rail-main[data-map-tool-mode-panel="chooser"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .map-edit-rail-utility {

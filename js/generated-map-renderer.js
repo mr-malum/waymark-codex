@@ -294,7 +294,7 @@
     },
     nuke: {
       title: "Archive",
-      copy: "Placeholder for future map import and export tools."
+      copy: "Export archive-ready or player-facing map images with their own layer settings."
     },
     generation: {
       title: "Generation",
@@ -624,6 +624,9 @@
       surveyorGenerationSection: "pois",
       cartographerMode: "manual",
       cartographerSection: "terrain",
+      exportVisibleOverlays: null,
+      exportGrid: true,
+      exportNotorietyThreshold: 0,
       subhexEditorHexId: "",
       tool: "road",
       roadStyle: "dark_brown",
@@ -730,6 +733,7 @@
         pois: true
       },
       preEditVisibleOverlays: null,
+      preArchiveVisibleOverlays: null,
       lastHexId: null,
       dragLastHexId: null,
       paintedThisDrag: new Set(),
@@ -772,8 +776,8 @@
     renderer.root.innerHTML = `
       <canvas class="generated-map-terrain-canvas"></canvas>
       <svg class="generated-map-svg-overlay generated-map-grid-overlay generated-map-base-overlay" aria-hidden="true"></svg>
-      <svg class="generated-map-svg-overlay generated-map-label-overlay" aria-hidden="true"></svg>
       <svg class="generated-map-svg-overlay generated-map-poi-overlay" aria-hidden="true"></svg>
+      <svg class="generated-map-svg-overlay generated-map-label-overlay" aria-hidden="true"></svg>
       <svg class="generated-map-svg-overlay generated-map-interaction-overlay" aria-hidden="true"></svg>
       <div class="generated-map-popup" hidden></div>
       <div class="generated-map-subhex-editor-shell" hidden>
@@ -1127,10 +1131,10 @@
     const modeViewButton = document.getElementById("map-edit-view-button");
     const surveyorModeButton = document.getElementById("map-tools-surveyor-button");
     const cartographerModeButton = document.getElementById("map-tools-cartographer-button");
+    const archiveModeButton = document.getElementById("map-tools-archive-button");
     const surveyorOverlayButton = document.getElementById("map-surveyor-overlay-button");
     const surveyorPoisButton = document.getElementById("map-surveyor-pois-button");
     const surveyorRegionsButton = document.getElementById("map-surveyor-regions-button");
-    const surveyorUtilitiesButton = document.getElementById("map-surveyor-utilities-button");
     const cartographerManualButton = document.getElementById("map-cartographer-terrain-button");
     const cartographerGenerationButton = document.getElementById("map-cartographer-features-button");
     const cartographerTerrainSectionButton = document.getElementById("map-cartographer-subsection-paint");
@@ -1168,6 +1172,7 @@
     const generationPreviewTerrain = document.getElementById("map-generation-preview-terrain");
     const exportPngButton = document.getElementById("map-export-png");
     const exportScaleSelect = document.getElementById("map-export-scale");
+    const exportNotorietyThresholdSelect = document.getElementById("map-export-notoriety-threshold");
     const sharedApplyButton = document.getElementById("map-editor-apply-staged");
     const sharedDiscardButton = document.getElementById("map-editor-discard-staged");
     const introCloseButton = document.getElementById("map-editor-intro-close");
@@ -1186,8 +1191,9 @@
       viewButton.classList.toggle("active", Boolean(isOpening));
       if (isOpening) {
         panel.hidden = true;
-        button.classList.remove("active");
+        button.classList.remove("active", "map-tools-label-visible");
         renderer.drawing.enabled = false;
+        restoreArchivePreviewVisibility();
         restoreMapEditViewState();
         updateMapChromeForEdit(false);
         renderer.drawing.tool = "";
@@ -1232,6 +1238,12 @@
       event.preventDefault();
       event.stopPropagation();
       const isOpening = panel.hidden;
+      if (isOpening && isTouchDevice && !button.classList.contains("map-tools-label-visible")) {
+        button.classList.add("map-tools-label-visible");
+        document.getElementById("codex-button")?.classList.remove("codex-label-visible");
+        return;
+      }
+      button.classList.remove("map-tools-label-visible");
       panel.hidden = !isOpening;
       button.classList.toggle("active", isOpening);
       renderer.drawing.enabled = isOpening;
@@ -1284,10 +1296,10 @@
       event.stopPropagation();
       activateSurveyorMode("generation");
     });
-    surveyorUtilitiesButton?.addEventListener("click", event => {
+    archiveModeButton?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      activateSurveyorMode("archive");
+      setMapToolsMode("archive");
     });
     exportPngButton?.addEventListener("click", event => {
       event.preventDefault();
@@ -1370,6 +1382,26 @@
         if (previousValue !== Boolean(toggle.checked)) markOverlayVisibilityCachesDirty([type]);
         render();
       });
+    });
+    document.querySelectorAll("[data-map-export-toggle]").forEach(toggle => {
+      toggle.addEventListener("change", () => {
+        const type = toggle.dataset.mapExportToggle;
+        const exportVisible = getExportVisibleOverlays();
+        if (!type || !(type in exportVisible)) return;
+        exportVisible[type] = toggle.checked;
+        syncMapExportControls();
+        applyArchivePreviewVisibility();
+      });
+    });
+    document.querySelector("[data-map-export-grid]")?.addEventListener("change", event => {
+      renderer.drawing.exportGrid = Boolean(event.currentTarget?.checked);
+      syncMapExportControls();
+      refreshArchivePreviewDisplay({ grid: true });
+    });
+    exportNotorietyThresholdSelect?.addEventListener("change", () => {
+      renderer.drawing.exportNotorietyThreshold = getMapExportNotorietyThreshold(exportNotorietyThresholdSelect.value);
+      syncMapExportControls();
+      refreshArchivePreviewDisplay({ pois: true });
     });
 
     roadStyle?.addEventListener("change", () => {
@@ -1891,6 +1923,7 @@
     button?.classList.remove("active");
     document.getElementById("map-edit-view-button")?.classList.remove("active");
     renderer.drawing.enabled = false;
+    restoreArchivePreviewVisibility();
     renderer.drawing.toolsMode = "chooser";
     renderer.drawing.tool = "";
     restoreMapEditViewState();
@@ -2073,6 +2106,7 @@
 
   function getVisibleMapEditSection() {
     const mode = renderer.drawing.toolsMode || "chooser";
+    if (mode === "archive") return "nuke";
     if (mode === "surveyor") {
       const surveyorMode = getSurveyorMode();
       if (surveyorMode === "generation") {
@@ -2100,10 +2134,10 @@
     });
     document.getElementById("map-tools-surveyor-button")?.classList.toggle("active", mode === "surveyor");
     document.getElementById("map-tools-cartographer-button")?.classList.toggle("active", mode === "cartographer");
+    document.getElementById("map-tools-archive-button")?.classList.toggle("active", mode === "archive");
     document.getElementById("map-surveyor-overlay-button")?.classList.toggle("active", mode === "surveyor" && getSurveyorMode() === "manual");
     document.getElementById("map-surveyor-pois-button")?.classList.toggle("active", mode === "surveyor" && getSurveyorMode() === "generation");
     document.getElementById("map-surveyor-regions-button")?.classList.toggle("active", mode === "surveyor" && getSurveyorMode() === "purge");
-    document.getElementById("map-surveyor-utilities-button")?.classList.toggle("active", mode === "surveyor" && getSurveyorMode() === "archive");
     document.getElementById("map-cartographer-terrain-button")?.classList.toggle("active", mode === "cartographer" && getCartographerMode() === "manual");
     document.getElementById("map-cartographer-features-button")?.classList.toggle("active", mode === "cartographer" && getCartographerMode() === "generation");
   }
@@ -2166,6 +2200,8 @@
       ? MAP_EDIT_SECTION_COPY.chooser
       : mode === "surveyor"
       ? MAP_EDIT_SECTION_COPY.surveyor
+      : mode === "archive"
+      ? MAP_EDIT_SECTION_COPY.nuke
       : MAP_EDIT_SECTION_COPY.cartographer;
     let detailSection = section;
     if (section === "generation") {
@@ -2178,7 +2214,7 @@
     const kicker = document.querySelector(".map-edit-pane-kicker");
     document.getElementById("map-surveyor-mode-help")?.toggleAttribute("hidden", mode !== "surveyor");
     document.getElementById("map-cartographer-mode-help")?.toggleAttribute("hidden", mode !== "cartographer");
-    if (kicker) kicker.textContent = mode === "surveyor" ? "Surveyor" : mode === "cartographer" ? "Cartographer" : "Hex Mapper";
+    if (kicker) kicker.textContent = mode === "surveyor" ? "Surveyor" : mode === "cartographer" ? "Cartographer" : mode === "archive" ? "Archive" : "Hex Mapper";
     if (heading) heading.textContent = detailMeta?.title || meta.title;
     if (copy) copy.textContent = detailMeta?.copy || meta.copy;
   }
@@ -2259,10 +2295,13 @@
   }
 
   function setMapToolsMode(mode) {
-    const normalized = ["chooser", "surveyor", "cartographer"].includes(mode) ? mode : "chooser";
+    const normalized = ["chooser", "surveyor", "cartographer", "archive"].includes(mode) ? mode : "chooser";
     const previousMode = renderer.drawing.toolsMode || "chooser";
     if (previousMode !== normalized && renderer.drawing.subhexEditorHexId) {
       closeSubhexEditor({ skipRender: true });
+    }
+    if (previousMode === "archive" && normalized !== "archive") {
+      restoreArchivePreviewVisibility();
     }
     renderer.drawing.toolsMode = normalized;
     if (previousMode !== normalized) {
@@ -2271,6 +2310,12 @@
     }
     if (normalized === "surveyor") {
       syncSurveyorSectionFromMode();
+    }
+    if (normalized === "archive") {
+      renderer.drawing.tool = "";
+      resetDrawingState();
+      syncMapExportControls();
+      applyArchivePreviewVisibility();
     }
     if (normalized === "cartographer") {
       showMapEditorIntroIfNeeded();
@@ -2313,8 +2358,7 @@
       return;
     }
     if (normalized === "nuke") {
-      setSurveyorMode("archive");
-      setMapToolsMode("surveyor");
+      setMapToolsMode("archive");
       return;
     }
     if (normalized === "generation") {
@@ -2376,7 +2420,9 @@
     document.getElementById("codex-button")?.toggleAttribute("hidden", Boolean(isEditing));
     document.getElementById("map-reset-button")?.toggleAttribute("hidden", Boolean(isEditing));
     document.getElementById("map-view-button")?.toggleAttribute("hidden", Boolean(isEditing || !canView));
-    document.getElementById("map-draw-button")?.toggleAttribute("hidden", Boolean(isEditing || !canDraw));
+    const drawButton = document.getElementById("map-draw-button");
+    drawButton?.toggleAttribute("hidden", Boolean(isEditing || !canDraw));
+    if (isEditing || !canDraw) drawButton?.classList.remove("map-tools-label-visible");
   }
 
   function canCurrentUserShapeWorld() {
@@ -2479,7 +2525,7 @@
     if (!canDraw) {
       if (panel) panel.hidden = true;
       renderer.drawing.enabled = false;
-      button?.classList.remove("active");
+      button?.classList.remove("active", "map-tools-label-visible");
       restoreMapEditViewState();
       updateMapChromeForEdit(false);
       renderer.drawing.tool = "";
@@ -2657,6 +2703,9 @@
     renderer.drawing.surveyorGenerationSection = "pois";
     renderer.drawing.cartographerMode = "manual";
     renderer.drawing.cartographerSection = "terrain";
+    renderer.drawing.exportVisibleOverlays = null;
+    renderer.drawing.exportGrid = true;
+    renderer.drawing.exportNotorietyThreshold = 0;
     renderer.drawing.subhexEditorHexId = "";
     renderer.drawing.generationSeed = "";
     renderer.drawing.generationRegionStyle = "balanced";
@@ -2700,6 +2749,7 @@
     renderer.drawing.redoStack = [];
     renderer.drawing.visibleOverlays = getDefaultVisibleOverlays();
     renderer.drawing.preEditVisibleOverlays = null;
+    renderer.drawing.preArchiveVisibleOverlays = null;
     renderer.routeLabelCache = { key: "", labels: [] };
     invalidateLabelLayer();
     if (renderer.drawing.queuedRenderFrame) {
@@ -2820,6 +2870,101 @@
       features: true,
       pois: true
     };
+  }
+
+  function getDefaultExportVisibleOverlays() {
+    return { ...getDefaultVisibleOverlays() };
+  }
+
+  function getExportVisibleOverlays() {
+    if (!renderer.drawing.exportVisibleOverlays) {
+      renderer.drawing.exportVisibleOverlays = getDefaultExportVisibleOverlays();
+    }
+    return renderer.drawing.exportVisibleOverlays;
+  }
+
+  function getMapExportNotorietyThreshold(value) {
+    const threshold = Math.round(Number(value) || 0);
+    return Math.max(0, Math.min(10, threshold));
+  }
+
+  function syncMapExportControls() {
+    const exportVisible = getExportVisibleOverlays();
+    document.querySelectorAll("[data-map-export-toggle]").forEach(toggle => {
+      const type = toggle.dataset.mapExportToggle;
+      if (!type || !(type in exportVisible)) return;
+      toggle.checked = Boolean(exportVisible[type]);
+    });
+    const gridToggle = document.querySelector("[data-map-export-grid]");
+    if (gridToggle) gridToggle.checked = renderer.drawing.exportGrid !== false;
+    const thresholdSelect = document.getElementById("map-export-notoriety-threshold");
+    if (thresholdSelect) {
+      thresholdSelect.value = String(getMapExportNotorietyThreshold(renderer.drawing.exportNotorietyThreshold));
+    }
+  }
+
+  function getOverlayVisibilityChanges(left = {}, right = {}) {
+    const keys = new Set([...Object.keys(left || {}), ...Object.keys(right || {})]);
+    return [...keys].filter(type => Boolean(left?.[type]) !== Boolean(right?.[type]));
+  }
+
+  function applyArchivePreviewVisibility() {
+    if ((renderer.drawing.toolsMode || "chooser") !== "archive") return;
+    if (!renderer.drawing.preArchiveVisibleOverlays) {
+      renderer.drawing.preArchiveVisibleOverlays = { ...renderer.drawing.visibleOverlays };
+    }
+    const nextVisible = { ...renderer.drawing.visibleOverlays, ...getExportVisibleOverlays() };
+    const changedTypes = getOverlayVisibilityChanges(renderer.drawing.visibleOverlays, nextVisible);
+    renderer.drawing.visibleOverlays = nextVisible;
+    invalidateGridLayer();
+    invalidateSvgLayer();
+    invalidatePoiLayer();
+    if (changedTypes.length) {
+      markOverlayVisibilityCachesDirty(changedTypes);
+    }
+    render();
+  }
+
+  function isArchivePreviewActive() {
+    return (renderer.drawing.toolsMode || "chooser") === "archive"
+      && Boolean(renderer.drawing.preArchiveVisibleOverlays);
+  }
+
+  function shouldRenderArchivePreviewGrid() {
+    return !isArchivePreviewActive() || renderer.drawing.exportGrid !== false;
+  }
+
+  function getArchivePreviewNotorietyThreshold() {
+    if (!isArchivePreviewActive()) return 0;
+    return getMapExportNotorietyThreshold(renderer.drawing.exportNotorietyThreshold);
+  }
+
+  function refreshArchivePreviewDisplay(options = {}) {
+    if (!isArchivePreviewActive()) return;
+    if (options.grid) {
+      invalidateGridLayer();
+      invalidateSvgLayer();
+    }
+    if (options.pois) invalidatePoiLayer();
+    render();
+  }
+
+  function restoreArchivePreviewVisibility() {
+    const previousVisible = renderer.drawing.preArchiveVisibleOverlays;
+    if (!previousVisible) return;
+    const changedTypes = getOverlayVisibilityChanges(renderer.drawing.visibleOverlays, previousVisible);
+    renderer.drawing.visibleOverlays = { ...previousVisible };
+    renderer.drawing.preArchiveVisibleOverlays = null;
+    syncMapOverlayToggleInputs();
+    invalidateGridLayer();
+    invalidateSvgLayer();
+    invalidatePoiLayer();
+    if (changedTypes.length) {
+      markOverlayVisibilityCachesDirty(changedTypes);
+      render();
+    } else {
+      render();
+    }
   }
 
   function clearPathRevealAnimation() {
@@ -4638,8 +4783,8 @@
     const reuseOverlayLayers = shouldReuseSvgDuringPan();
     setRenderPerfValue("visibleParentHexes", visibleHexes.length);
     renderSvg({ width: rect.width, height: rect.height }, visibleHexes, []);
-    renderLabelLayer({ width: rect.width, height: rect.height }, visibleHexes, { reuse: reuseOverlayLayers });
     renderPoiLayer({ width: rect.width, height: rect.height }, { reuse: reuseOverlayLayers, visibleHexes });
+    renderLabelLayer({ width: rect.width, height: rect.height }, visibleHexes, { reuse: reuseOverlayLayers });
     renderInteractionLayer({ width: rect.width, height: rect.height }, visibleHexes, { reuse: reuseOverlayLayers });
     positionPopup();
     finishRenderPerf(perf);
@@ -4735,8 +4880,8 @@
     const visibleSubhexes = [];
     renderTerrain(viewport, visibleHexes, visibleSubhexes);
     renderSvg(viewport, visibleHexes, visibleSubhexes);
-    renderLabelLayer(viewport, visibleHexes, { reuse: reuseOverlayLayers });
     renderPoiLayer(viewport, { reuse: reuseOverlayLayers, visibleHexes });
+    renderLabelLayer(viewport, visibleHexes, { reuse: reuseOverlayLayers });
     renderInteractionLayer(viewport, visibleHexes, { reuse: reuseOverlayLayers });
     renderSubhexEditorShell();
     positionPopup();
@@ -4758,6 +4903,7 @@
     if (renderer.gridLayerKey === layerKey) return;
     renderer.gridLayerKey = layerKey;
     renderer.gridSvg.innerHTML = "";
+    if (!shouldRenderArchivePreviewGrid()) return;
 
     const fragment = document.createDocumentFragment();
     const parentGridPath = getCachedParentGridPath();
@@ -4797,6 +4943,7 @@
   function buildGridLayerKey(visibleHexes = []) {
     const waitingForFullSubhexGrid = isSubhexLayerActive() && !renderer.subhexGridReady;
     return [
+      shouldRenderArchivePreviewGrid() ? 1 : 0,
       renderer.hexes.length,
       isSubhexLayerActive() ? 1 : 0,
       renderer.subhexGridReady ? 1 : 0,
@@ -5184,6 +5331,7 @@
     }
 
     const scale = getMapExportScale(rawScale);
+    const exportOptions = getMapExportOptions();
     const pixelWidth = Math.ceil(renderer.view.width * scale);
     const pixelHeight = Math.ceil(renderer.view.height * scale);
     const exportPixels = pixelWidth * pixelHeight;
@@ -5203,7 +5351,7 @@
         loadRouteIconAssets(),
         loadPoiIconAssets()
       ]);
-      const exportResult = await buildGeneratedMapExportCanvas(scale);
+      const exportResult = await buildGeneratedMapExportCanvas(scale, exportOptions);
       const canvas = exportResult.canvas || exportResult;
       await downloadCanvasPng(canvas, getMapExportFilename(scale));
       if (exportResult.warnings?.length) {
@@ -5220,33 +5368,49 @@
     }
   }
 
-  async function buildGeneratedMapExportCanvas(scale) {
+  function getMapExportOptions() {
+    return {
+      visibleOverlays: { ...getExportVisibleOverlays() },
+      grid: renderer.drawing.exportGrid !== false,
+      notorietyThreshold: getMapExportNotorietyThreshold(renderer.drawing.exportNotorietyThreshold)
+    };
+  }
+
+  async function buildGeneratedMapExportCanvas(scale, exportOptions = getMapExportOptions()) {
+    const savedVisibleOverlays = renderer.drawing.visibleOverlays;
+    renderer.drawing.visibleOverlays = { ...savedVisibleOverlays, ...exportOptions.visibleOverlays };
     const width = Math.ceil(renderer.view.width * scale);
     const height = Math.ceil(renderer.view.height * scale);
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas export is not available.");
 
-    drawGeneratedMapExportRaster(ctx, scale, width, height);
-    await waitForFeatureImagesForExport();
-    drawGeneratedMapExportRaster(ctx, scale, width, height);
-    ctx.save();
-    ctx.scale(scale, scale);
-    drawGeneratedMapExportGridLines(ctx);
-    ctx.restore();
-    ctx.save();
-    ctx.scale(scale, scale);
-    drawGeneratedMapExportGeographicRegionLayer(ctx, { fills: true, outlines: true });
-    ctx.restore();
-    const warnings = await drawGeneratedMapExportSvgLayers(ctx, scale, width, height);
-    ctx.save();
-    ctx.scale(scale, scale);
-    drawGeneratedMapExportPoliticalRegionBorders(ctx);
-    await drawGeneratedMapExportPoiMarkers(ctx);
-    ctx.restore();
-    return { canvas, warnings };
+    try {
+      if (!ctx) throw new Error("Canvas export is not available.");
+      drawGeneratedMapExportRaster(ctx, scale, width, height);
+      await waitForFeatureImagesForExport();
+      drawGeneratedMapExportRaster(ctx, scale, width, height);
+      if (exportOptions.grid !== false) {
+        ctx.save();
+        ctx.scale(scale, scale);
+        drawGeneratedMapExportGridLines(ctx);
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.scale(scale, scale);
+      drawGeneratedMapExportGeographicRegionLayer(ctx, { fills: true, outlines: true });
+      ctx.restore();
+      const warnings = await drawGeneratedMapExportSvgLayers(ctx, scale, width, height);
+      ctx.save();
+      ctx.scale(scale, scale);
+      drawGeneratedMapExportPoliticalRegionBorders(ctx);
+      await drawGeneratedMapExportPoiMarkers(ctx, exportOptions);
+      ctx.restore();
+      return { canvas, warnings };
+    } finally {
+      renderer.drawing.visibleOverlays = savedVisibleOverlays;
+    }
   }
 
   function drawGeneratedMapExportRaster(ctx, scale, width, height) {
@@ -5299,24 +5463,61 @@
     ctx.restore();
   }
 
-  async function drawGeneratedMapExportPoiMarkers(ctx) {
+  async function drawGeneratedMapExportPoiMarkers(ctx, exportOptions = getMapExportOptions()) {
     if (!renderer.drawing.visibleOverlays.pois) return;
+    const threshold = getMapExportNotorietyThreshold(exportOptions.notorietyThreshold);
     const dimensions = getGeneratedMapDimensions();
-    const markerDiameter = Math.min(70, Math.max(56, (dimensions.radius * 2) - 6));
+    const markerDiameter = Math.min(62, Math.max(48, (dimensions.radius * 2) - 14));
     const markerRadius = markerDiameter / 2;
-    const baseIconSize = Math.min(markerDiameter - 12, 54);
-    const badgeRadius = Math.max(10, Math.round(markerRadius * 0.34));
+    const baseIconSize = Math.min(markerDiameter - 11, 48);
+    const badgeRadius = Math.max(9, Math.round(markerRadius * 0.32));
+    const markerOffsetY = dimensions.hexHeight * 0.08;
+    const markerEntries = [];
 
     for (const hex of renderer.hexes) {
-      const pois = getPoisForRenderedHex(hex);
+      const pois = getPoisForRenderedHex(hex)
+        .filter(poi => threshold <= 0 || isPoiVisibleForExportThreshold(poi, threshold));
       if (!pois?.length) continue;
       const markerPoi = getPrimaryPoiMarkerRecord(pois);
       const profile = getPoiMarkerShapeProfile(markerPoi, markerRadius, baseIconSize);
-      await drawExportPoiMarker(ctx, markerPoi, hex.center.x, hex.center.y, profile, pois.length, badgeRadius);
+      markerEntries.push({
+        hex,
+        pois,
+        markerPoi,
+        markerProfile: profile,
+        markerX: hex.center.x,
+        markerY: hex.center.y + markerOffsetY,
+        markerRadius,
+        badgeRadius,
+        groupIds: getPoiGroupIdsForMarker(pois)
+      });
+    }
+
+    drawExportGroupedPoiConnectors(ctx, markerEntries, markerRadius);
+    markerEntries.forEach(entry => {
+      drawExportPoiMarkerFill(ctx, entry.markerX, entry.markerY, entry.markerProfile);
+    });
+    drawExportPoiMarkerBorders(ctx, markerEntries, markerRadius);
+    for (const entry of markerEntries) {
+      await drawExportPoiMarkerContent(
+        ctx,
+        entry.markerPoi,
+        entry.markerX,
+        entry.markerY,
+        entry.markerProfile,
+        entry.pois.length,
+        entry.badgeRadius
+      );
     }
   }
 
   async function drawExportPoiMarker(ctx, poi, centerX, centerY, profile, count = 1, badgeRadius = 10) {
+    drawExportPoiMarkerFill(ctx, centerX, centerY, profile);
+    drawExportPoiMarkerBorder(ctx, centerX, centerY, profile);
+    await drawExportPoiMarkerContent(ctx, poi, centerX, centerY, profile, count, badgeRadius);
+  }
+
+  function drawExportPoiMarkerFill(ctx, centerX, centerY, profile) {
     ctx.save();
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
@@ -5324,14 +5525,144 @@
     ctx.shadowBlur = 5;
     ctx.shadowOffsetY = 2;
     ctx.fillStyle = getExportPoiMarkerFill(profile);
-    ctx.strokeStyle = "rgba(16, 11, 7, 0.96)";
-    ctx.lineWidth = 2.25;
     drawExportPoiMarkerShape(ctx, centerX, centerY, profile);
     ctx.fill();
+    ctx.restore();
+  }
+
+  function drawExportPoiMarkerBorder(ctx, centerX, centerY, profile) {
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(16, 11, 7, 0.96)";
+    ctx.lineWidth = profile.kind === "dungeon_complex" ? 2.5 : 2.25;
+    drawExportPoiMarkerShape(ctx, centerX, centerY, profile);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawExportPoiMarkerBorders(ctx, markerEntries = [], markerRadius = 0) {
+    if (!markerEntries.length) return;
+    const borderCanvas = document.createElement("canvas");
+    borderCanvas.width = ctx.canvas.width;
+    borderCanvas.height = ctx.canvas.height;
+    const borderCtx = borderCanvas.getContext("2d");
+    if (!borderCtx) return;
+
+    borderCtx.setTransform(ctx.getTransform());
+    markerEntries.forEach(entry => {
+      drawExportPoiMarkerBorder(borderCtx, entry.markerX, entry.markerY, entry.markerProfile);
+    });
+
+    const lineWidth = Math.max(8, Math.min(14, markerRadius * 0.38));
+    const cutWidth = lineWidth + 2.25;
+    borderCtx.save();
+    borderCtx.globalCompositeOperation = "destination-out";
+    borderCtx.lineWidth = cutWidth;
+    borderCtx.lineCap = "round";
+    borderCtx.lineJoin = "round";
+    markerEntries.forEach(entry => {
+      const drawnPairs = new Set();
+      markerEntries.forEach(otherEntry => {
+        if (!otherEntry || otherEntry === entry) return;
+        const sharedGroupId = (entry.groupIds || []).find(groupId => (otherEntry.groupIds || []).includes(groupId));
+        if (!sharedGroupId || !areRenderedHexesAdjacent(entry.hex, otherEntry.hex)) return;
+        const pairKey = getGroupedPoiConnectorPairKey(sharedGroupId, entry.hex, otherEntry.hex);
+        if (drawnPairs.has(pairKey)) return;
+        drawnPairs.add(pairKey);
+        const connector = getGroupedPoiConnectorGeometry(entry, otherEntry, lineWidth);
+        if (!connector) return;
+        const edgePoint = connector.leftEdge;
+        const cutHalfLength = Math.max(5, Math.min(8, lineWidth * 0.66));
+        borderCtx.beginPath();
+        borderCtx.moveTo(edgePoint.x - connector.unit.x * cutHalfLength, edgePoint.y - connector.unit.y * cutHalfLength);
+        borderCtx.lineTo(edgePoint.x + connector.unit.x * cutHalfLength, edgePoint.y + connector.unit.y * cutHalfLength);
+        borderCtx.stroke();
+      });
+    });
+    borderCtx.restore();
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(borderCanvas, 0, 0);
+    ctx.restore();
+  }
+
+  async function drawExportPoiMarkerContent(ctx, poi, centerX, centerY, profile, count = 1, badgeRadius = 10) {
+    ctx.save();
     ctx.shadowColor = "transparent";
     await drawExportPoiMarkerSymbol(ctx, poi, centerX, centerY, profile, profile.iconSize || 22);
     if (count > 1) drawExportPoiCountBadge(ctx, centerX, centerY, profile, count, badgeRadius);
+    ctx.restore();
+  }
+
+  function drawExportGroupedPoiConnectors(ctx, markerEntries = [], markerRadius = 0) {
+    const entriesByGroup = new Map();
+    markerEntries.forEach(entry => {
+      (entry.groupIds || []).forEach(groupId => {
+        if (!entriesByGroup.has(groupId)) entriesByGroup.set(groupId, []);
+        entriesByGroup.get(groupId).push(entry);
+      });
+    });
+    if (!entriesByGroup.size) return;
+
+    const drawnPairs = new Set();
+    const lineWidth = Math.max(8, Math.min(14, markerRadius * 0.38));
+    const connectorCanvas = document.createElement("canvas");
+    connectorCanvas.width = ctx.canvas.width;
+    connectorCanvas.height = ctx.canvas.height;
+    const connectorCtx = connectorCanvas.getContext("2d");
+    if (!connectorCtx) return;
+    connectorCtx.setTransform(ctx.getTransform());
+    connectorCtx.lineWidth = lineWidth;
+    connectorCtx.lineCap = "round";
+    connectorCtx.lineJoin = "round";
+
+    entriesByGroup.forEach((entries, groupId) => {
+      if (!Array.isArray(entries) || entries.length < 2) return;
+      for (let index = 0; index < entries.length - 1; index += 1) {
+        for (let nextIndex = index + 1; nextIndex < entries.length; nextIndex += 1) {
+          const left = entries[index];
+          const right = entries[nextIndex];
+          if (!areRenderedHexesAdjacent(left.hex, right.hex)) continue;
+          const pairKey = getGroupedPoiConnectorPairKey(groupId, left.hex, right.hex);
+          if (drawnPairs.has(pairKey)) continue;
+          drawnPairs.add(pairKey);
+          const connector = getGroupedPoiConnectorGeometry(left, right, lineWidth);
+          if (!connector) continue;
+          const segment = connector.segment;
+          const gradientStops = getGroupedPoiConnectorGradientStops(connector);
+          const gradient = connectorCtx.createLinearGradient(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
+          gradientStops.forEach(stop => {
+            gradient.addColorStop(stop.offset, `rgba(255, 255, 255, ${stop.opacity})`);
+          });
+          connectorCtx.strokeStyle = gradient;
+          connectorCtx.beginPath();
+          connectorCtx.moveTo(segment.start.x, segment.start.y);
+          connectorCtx.lineTo(segment.end.x, segment.end.y);
+          connectorCtx.stroke();
+        }
+      }
+    });
+
+    cutExportPoiConnectorInteriors(connectorCtx, markerEntries, markerRadius);
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 0.78;
+    ctx.drawImage(connectorCanvas, 0, 0);
+    ctx.restore();
+  }
+
+  function cutExportPoiConnectorInteriors(ctx, markerEntries = [], markerRadius = 0) {
+    if (!markerEntries.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    markerEntries.forEach(entry => {
+      drawExportPoiMarkerShape(ctx, entry.markerX, entry.markerY, entry.markerProfile);
+      ctx.fillStyle = "#000";
+      ctx.fill();
+    });
     ctx.restore();
   }
 
@@ -8772,11 +9103,13 @@
       fragment.appendChild(subhexGrid);
     }
 
-    const gridPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    gridPath.setAttribute("class", "generated-map-grid-lines");
-    gridPath.setAttribute("d", buildGridPath(visibleHexes));
-    gridPath.setAttribute("opacity", String(getGridLineOpacity()));
-    fragment.appendChild(gridPath);
+    if (shouldRenderArchivePreviewGrid()) {
+      const gridPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      gridPath.setAttribute("class", "generated-map-grid-lines");
+      gridPath.setAttribute("d", buildGridPath(visibleHexes));
+      gridPath.setAttribute("opacity", String(getGridLineOpacity()));
+      fragment.appendChild(gridPath);
+    }
 
     renderGeographicRegionOverlay(fragment, regionHexes);
     renderDrawableOverlays(fragment, visibleHexes);
@@ -8787,6 +9120,7 @@
   function buildSvgLayerKey(visibleHexes = [], regionHexes = []) {
     const visible = renderer.drawing.visibleOverlays;
     return [
+      shouldRenderArchivePreviewGrid() ? 1 : 0,
       visible.geographic ? 1 : 0,
       visible.political ? 1 : 0,
       visible.wall ? 1 : 0,
@@ -8908,7 +9242,18 @@
     }
 
     const fragment = document.createDocumentFragment();
-    const poiCount = timeRenderPerfMark("pois", () => renderPoiMarkers(fragment, poiHexes, poiProjectionMode, options.visibleHexes || []));
+    const poiCount = timeRenderPerfMark("pois", () => renderPoiMarkers(
+      fragment,
+      poiHexes,
+      poiProjectionMode,
+      options.visibleHexes || [],
+      {
+        x: renderer.view.panX,
+        y: renderer.view.panY,
+        width: visibleWidth,
+        height: visibleHeight
+      }
+    ));
     renderer.poiSvg.dataset.poiCount = String(poiCount);
     if (renderer.svg) renderer.svg.dataset.poiCount = String(poiCount);
     setRenderPerfValue("poiCount", poiCount);
@@ -8926,7 +9271,7 @@
     if (!renderer.drawing.visibleOverlays.pois) return "hidden";
     const poiRefs = [];
     (poiHexes || []).forEach(hex => {
-      const pois = getPoisForRenderedHex(hex);
+      const pois = getPoisForLivePoiRender(hex);
       if (!pois.length) return;
       const refs = pois
         .map((poi, index) => {
@@ -8940,6 +9285,8 @@
     return [
       renderer.poiIconAssetsLoaded ? 1 : 0,
       renderer.drawing.visibleOverlays.pois ? 1 : 0,
+      getArchivePreviewNotorietyThreshold(),
+      "group-connectors-v2",
       projectionMode,
       transitionToken,
       projectionMode === "subhex" ? renderer.overlayRevision : "",
@@ -9225,7 +9572,7 @@
     return Array.isArray(renderer.poiRenderHexes) ? renderer.poiRenderHexes : [];
   }
 
-  function renderPoiMarkers(fragment, visibleHexes, projectionMode = "parent", viewVisibleHexes = []) {
+  function renderPoiMarkers(fragment, visibleHexes, projectionMode = "parent", viewVisibleHexes = [], viewport = null) {
     if (projectionMode === "subhex") {
       return renderSubhexPoiMarkers(fragment, visibleHexes);
     }
@@ -9235,58 +9582,387 @@
       const parentOpacity = Math.max(0, 1 - progress);
       const subhexOpacity = Math.max(0, progress);
       let renderedCount = 0;
-      if (parentOpacity > 0.001) renderedCount = renderParentPoiMarkers(fragment, visibleHexes, parentOpacity);
+      if (parentOpacity > 0.001) renderedCount = renderParentPoiMarkers(fragment, visibleHexes, parentOpacity, viewport);
       if (subhexOpacity > 0.001) renderedCount = Math.max(renderedCount, renderSubhexPoiMarkers(fragment, visibleHexes, subhexOpacity));
       return renderedCount;
     }
 
-    return renderParentPoiMarkers(fragment, visibleHexes);
+    return renderParentPoiMarkers(fragment, visibleHexes, 1, viewport);
   }
 
-  function renderParentPoiMarkers(fragment, visibleHexes, opacity = 1) {
+  function renderParentPoiMarkers(fragment, visibleHexes, opacity = 1, viewport = null) {
     const dimensions = getGeneratedMapDimensions();
-    const markerDiameter = Math.min(70, Math.max(56, (dimensions.radius * 2) - 6));
+    const markerDiameter = Math.min(62, Math.max(48, (dimensions.radius * 2) - 14));
     const markerRadius = markerDiameter / 2;
-    const baseIconSize = Math.min(markerDiameter - 12, 54);
-    const badgeRadius = Math.max(10, Math.round(markerRadius * 0.34));
+    const baseIconSize = Math.min(markerDiameter - 11, 48);
+    const badgeRadius = Math.max(9, Math.round(markerRadius * 0.32));
+    const markerOffsetY = dimensions.hexHeight * 0.08;
+    const markerEntries = [];
     let renderedCount = 0;
 
     (visibleHexes || []).forEach(hex => {
-      const pois = getPoisForRenderedHex(hex);
+      const pois = getPoisForLivePoiRender(hex);
       if (!pois?.length) return;
 
       const markerPoi = getPrimaryPoiMarkerRecord(pois);
       const markerProfile = getPoiMarkerShapeProfile(markerPoi, markerRadius, baseIconSize);
       const markerX = hex.center.x;
-      const markerY = hex.center.y;
-      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      const markerY = hex.center.y + markerOffsetY;
       const clipId = `generated-map-poi-clip-${String(hex.id || hex.label || "hex").replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
-      const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
-      const iconGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      const backgroundNode = createPoiMarkerBackgroundNode(markerProfile, markerX, markerY);
-      const clipNode = createPoiMarkerBackgroundNode(markerProfile, markerX, markerY);
 
-      group.setAttribute("class", `generated-map-poi-marker generated-map-poi-marker-${markerProfile.classKey}`);
-      clipPath.setAttribute("id", clipId);
-      clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
-      clipPath.appendChild(clipNode);
-      defs.appendChild(clipPath);
-      iconGroup.setAttribute("clip-path", `url(#${clipId})`);
-      iconGroup.appendChild(createPoiMarkerSymbolNode(markerPoi, markerX, markerY, markerProfile.iconSize));
-
-      group.appendChild(defs);
-      group.appendChild(backgroundNode);
-      group.appendChild(iconGroup);
-      if (opacity < 0.999) group.setAttribute("opacity", String(opacity));
-      if (pois.length > 1) {
-        group.appendChild(createPoiMarkerCountNode(pois.length, markerX, markerY, markerRadius, badgeRadius));
-      }
-      fragment.appendChild(group);
+      markerEntries.push({
+        hex,
+        pois,
+        markerPoi,
+        markerProfile,
+        markerX,
+        markerY,
+        markerRadius,
+        badgeRadius,
+        clipId,
+        groupIds: getPoiGroupIdsForMarker(pois)
+      });
       renderedCount += pois.length;
     });
 
+    appendGroupedPoiConnectorPaths(fragment, markerEntries, markerRadius, opacity, viewport);
+
+    markerEntries.forEach(entry => {
+      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      const backgroundNode = createPoiMarkerBackgroundNode(entry.markerProfile, entry.markerX, entry.markerY, { variant: "fill" });
+      group.setAttribute("class", `generated-map-poi-marker generated-map-poi-marker-${entry.markerProfile.classKey}`);
+      group.appendChild(backgroundNode);
+      if (opacity < 0.999) group.setAttribute("opacity", String(opacity));
+      fragment.appendChild(group);
+    });
+
+    markerEntries.forEach(entry => {
+      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+      const iconGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      const clipNode = createPoiMarkerBackgroundNode(entry.markerProfile, entry.markerX, entry.markerY);
+      const borderNode = createPoiMarkerBackgroundNode(entry.markerProfile, entry.markerX, entry.markerY, { variant: "stroke" });
+      const maskId = `${entry.clipId}-border-mask`;
+
+      group.setAttribute("class", `generated-map-poi-marker generated-map-poi-marker-${entry.markerProfile.classKey}`);
+      clipPath.setAttribute("id", entry.clipId);
+      clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
+      clipPath.appendChild(clipNode);
+      defs.appendChild(clipPath);
+      appendPoiMarkerBorderMask(defs, maskId, entry, markerEntries, markerRadius, viewport);
+      borderNode.setAttribute("mask", `url(#${maskId})`);
+      iconGroup.setAttribute("clip-path", `url(#${entry.clipId})`);
+      iconGroup.appendChild(createPoiMarkerSymbolNode(entry.markerPoi, entry.markerX, entry.markerY, entry.markerProfile.iconSize));
+
+      group.appendChild(defs);
+      group.appendChild(borderNode);
+      group.appendChild(iconGroup);
+      if (opacity < 0.999) group.setAttribute("opacity", String(opacity));
+      if (entry.pois.length > 1) {
+        group.appendChild(createPoiMarkerCountNode(entry.pois.length, entry.markerX, entry.markerY, entry.markerRadius, entry.badgeRadius));
+      }
+      fragment.appendChild(group);
+    });
+
     return renderedCount;
+  }
+
+  function getPoiParentGroupId(poi) {
+    return String(
+      poi?.POI_Group_ID
+      || poi?.POI_Group_ID_Ref
+      || poi?.Parent_Group_ID
+      || poi?.poi_group_id
+      || poi?.parent_group_id
+      || ""
+    ).trim();
+  }
+
+  function getPoiGroupIdsForMarker(pois = []) {
+    const seen = new Set();
+    const groupIds = [];
+    (pois || []).forEach(poi => {
+      const groupId = getPoiParentGroupId(poi);
+      if (!groupId || seen.has(groupId)) return;
+      seen.add(groupId);
+      groupIds.push(groupId);
+    });
+    return groupIds;
+  }
+
+  function appendPoiMarkerBorderMask(defs, maskId, entry, markerEntries = [], markerRadius = 0, viewport = null) {
+    const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
+    const bounds = getPoiLayerMaskBounds(markerRadius, viewport);
+    const padding = Math.max(24, markerRadius * 2);
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    const lineWidth = Math.max(8, Math.min(14, markerRadius * 0.38));
+    const cutWidth = lineWidth + 2.25;
+    const drawnPairs = new Set();
+
+    mask.setAttribute("id", maskId);
+    mask.setAttribute("maskUnits", "userSpaceOnUse");
+    mask.setAttribute("x", String(bounds.x - padding));
+    mask.setAttribute("y", String(bounds.y - padding));
+    mask.setAttribute("width", String(bounds.width + padding * 2));
+    mask.setAttribute("height", String(bounds.height + padding * 2));
+    rect.setAttribute("x", String(bounds.x - padding));
+    rect.setAttribute("y", String(bounds.y - padding));
+    rect.setAttribute("width", String(bounds.width + padding * 2));
+    rect.setAttribute("height", String(bounds.height + padding * 2));
+    rect.setAttribute("fill", "#fff");
+    mask.appendChild(rect);
+
+    markerEntries.forEach(otherEntry => {
+      if (!otherEntry || otherEntry === entry) return;
+      const sharedGroupId = (entry.groupIds || []).find(groupId => (otherEntry.groupIds || []).includes(groupId));
+      if (!sharedGroupId || !areRenderedHexesAdjacent(entry.hex, otherEntry.hex)) return;
+      const pairKey = getGroupedPoiConnectorPairKey(sharedGroupId, entry.hex, otherEntry.hex);
+      if (drawnPairs.has(pairKey)) return;
+      drawnPairs.add(pairKey);
+
+      const connector = getGroupedPoiConnectorGeometry(entry, otherEntry, lineWidth);
+      if (!connector) return;
+      const edgePoint = connector.leftEdge;
+      const cutHalfLength = Math.max(5, Math.min(8, lineWidth * 0.66));
+      const cutPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      cutPath.setAttribute("d", `M ${(edgePoint.x - connector.unit.x * cutHalfLength).toFixed(2)} ${(edgePoint.y - connector.unit.y * cutHalfLength).toFixed(2)} L ${(edgePoint.x + connector.unit.x * cutHalfLength).toFixed(2)} ${(edgePoint.y + connector.unit.y * cutHalfLength).toFixed(2)}`);
+      cutPath.setAttribute("fill", "none");
+      cutPath.setAttribute("stroke", "#000");
+      cutPath.setAttribute("stroke-width", String(cutWidth));
+      cutPath.setAttribute("stroke-linecap", "round");
+      cutPath.setAttribute("stroke-linejoin", "round");
+      mask.appendChild(cutPath);
+    });
+
+    defs.appendChild(mask);
+  }
+
+  function appendGroupedPoiConnectorPaths(fragment, markerEntries = [], markerRadius = 0, opacity = 1, viewport = null) {
+    const entriesByGroup = new Map();
+    markerEntries.forEach(entry => {
+      (entry.groupIds || []).forEach(groupId => {
+        if (!entriesByGroup.has(groupId)) entriesByGroup.set(groupId, []);
+        entriesByGroup.get(groupId).push(entry);
+      });
+    });
+    if (!entriesByGroup.size) return;
+
+    const connectorGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const connectorDefs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    const drawnPairs = new Set();
+    const lineWidth = Math.max(8, Math.min(14, markerRadius * 0.38));
+    let gradientIndex = 0;
+    const maskId = `generated-map-poi-group-connector-mask-${String(renderer.poiLayerKey || Date.now()).replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
+    connectorGroup.setAttribute("class", "generated-map-poi-group-connectors");
+    connectorGroup.setAttribute("opacity", String(Math.max(0, Math.min(1, opacity * 0.78))));
+    connectorGroup.setAttribute("mask", `url(#${maskId})`);
+    appendPoiConnectorInteriorMask(connectorDefs, maskId, markerEntries, markerRadius, viewport);
+
+    entriesByGroup.forEach((entries, groupId) => {
+      if (!Array.isArray(entries) || entries.length < 2) return;
+      for (let index = 0; index < entries.length - 1; index += 1) {
+        for (let nextIndex = index + 1; nextIndex < entries.length; nextIndex += 1) {
+          const left = entries[index];
+          const right = entries[nextIndex];
+          if (!areRenderedHexesAdjacent(left.hex, right.hex)) continue;
+          const pairKey = getGroupedPoiConnectorPairKey(groupId, left.hex, right.hex);
+          if (drawnPairs.has(pairKey)) continue;
+          drawnPairs.add(pairKey);
+
+          const connector = getGroupedPoiConnectorGeometry(left, right, lineWidth);
+          if (!connector) continue;
+          const segment = connector.segment;
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          const gradientId = appendGroupedPoiConnectorGradient(connectorDefs, connector, gradientIndex);
+          gradientIndex += 1;
+          path.setAttribute("class", "generated-map-poi-group-connector");
+          path.setAttribute("d", `M ${segment.start.x.toFixed(2)} ${segment.start.y.toFixed(2)} L ${segment.end.x.toFixed(2)} ${segment.end.y.toFixed(2)}`);
+          path.setAttribute("fill", "none");
+          path.setAttribute("stroke", `url(#${gradientId})`);
+          path.setAttribute("stroke-width", String(lineWidth));
+          path.setAttribute("stroke-linecap", "round");
+          path.setAttribute("stroke-linejoin", "round");
+          path.setAttribute("pointer-events", "none");
+          connectorGroup.appendChild(path);
+        }
+      }
+    });
+
+    if (connectorDefs.childNodes.length) connectorGroup.insertBefore(connectorDefs, connectorGroup.firstChild);
+    if (connectorGroup.childNodes.length) fragment.appendChild(connectorGroup);
+  }
+
+  function appendPoiConnectorInteriorMask(defs, maskId, markerEntries = [], markerRadius = 0, viewport = null) {
+    const mask = document.createElementNS("http://www.w3.org/2000/svg", "mask");
+    const bounds = getPoiLayerMaskBounds(markerRadius, viewport);
+    const padding = Math.max(24, markerRadius * 2);
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+
+    mask.setAttribute("id", maskId);
+    mask.setAttribute("maskUnits", "userSpaceOnUse");
+    mask.setAttribute("x", String(bounds.x - padding));
+    mask.setAttribute("y", String(bounds.y - padding));
+    mask.setAttribute("width", String(bounds.width + padding * 2));
+    mask.setAttribute("height", String(bounds.height + padding * 2));
+    rect.setAttribute("x", String(bounds.x - padding));
+    rect.setAttribute("y", String(bounds.y - padding));
+    rect.setAttribute("width", String(bounds.width + padding * 2));
+    rect.setAttribute("height", String(bounds.height + padding * 2));
+    rect.setAttribute("fill", "#fff");
+    mask.appendChild(rect);
+
+    markerEntries.forEach(entry => {
+      const interiorNode = createPoiMarkerBackgroundNode(
+        entry.markerProfile,
+        entry.markerX,
+        entry.markerY,
+        { variant: "fill" }
+      );
+      interiorNode.setAttribute("fill", "#000");
+      interiorNode.style.fill = "#000";
+      interiorNode.style.stroke = "none";
+      mask.appendChild(interiorNode);
+    });
+
+    defs.appendChild(mask);
+  }
+
+  function getPoiLayerMaskBounds(markerRadius = 0, fallbackViewport = null) {
+    const points = (renderer.hexes || []).flatMap(hex => Array.isArray(hex?.points) ? hex.points : []);
+    if (points.length) {
+      const bounds = getRenderPointsBounds(points, Math.max(48, markerRadius * 3));
+      return {
+        x: bounds.left,
+        y: bounds.top,
+        width: Math.max(1, bounds.right - bounds.left),
+        height: Math.max(1, bounds.bottom - bounds.top)
+      };
+    }
+
+    const viewport = fallbackViewport || {
+      x: renderer.view.panX,
+      y: renderer.view.panY,
+      width: renderer.view.width / Math.max(0.001, renderer.view.zoom),
+      height: renderer.view.height / Math.max(0.001, renderer.view.zoom)
+    };
+    return {
+      x: Number(viewport.x) || 0,
+      y: Number(viewport.y) || 0,
+      width: Math.max(1, Number(viewport.width) || 1),
+      height: Math.max(1, Number(viewport.height) || 1)
+    };
+  }
+
+  function getGroupedPoiConnectorPairKey(groupId, leftHex, rightHex) {
+    const leftKey = String(leftHex?.id || leftHex?.label || `${leftHex?.x}:${leftHex?.y}`);
+    const rightKey = String(rightHex?.id || rightHex?.label || `${rightHex?.x}:${rightHex?.y}`);
+    return [String(groupId), ...[leftKey, rightKey].sort()].join("::");
+  }
+
+  function appendGroupedPoiConnectorGradient(defs, connector, index) {
+    const segment = connector.segment;
+    const gradientId = `generated-map-poi-group-connector-gradient-${index}`;
+    const gradient = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+    gradient.setAttribute("id", gradientId);
+    gradient.setAttribute("gradientUnits", "userSpaceOnUse");
+    gradient.setAttribute("x1", String(segment.start.x));
+    gradient.setAttribute("y1", String(segment.start.y));
+    gradient.setAttribute("x2", String(segment.end.x));
+    gradient.setAttribute("y2", String(segment.end.y));
+    getGroupedPoiConnectorGradientStops(connector).forEach(stopDef => {
+      const stop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+      stop.setAttribute("offset", `${(stopDef.offset * 100).toFixed(2)}%`);
+      stop.setAttribute("stop-color", "#fff");
+      stop.setAttribute("stop-opacity", String(stopDef.opacity));
+      gradient.appendChild(stop);
+    });
+    defs.appendChild(gradient);
+    return gradientId;
+  }
+
+  function getGroupedPoiConnectorGradientStops(connector) {
+    const segment = connector?.segment;
+    if (!segment) {
+      return [
+        { offset: 0, opacity: 1 },
+        { offset: 1, opacity: 1 }
+      ];
+    }
+    const total = Math.max(0.001, Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y));
+    const startToLeftEdge = Math.hypot(connector.leftEdge.x - segment.start.x, connector.leftEdge.y - segment.start.y);
+    const startToRightEdge = Math.hypot(connector.rightEdge.x - segment.start.x, connector.rightEdge.y - segment.start.y);
+    const leftSolidOffset = Math.max(0, Math.min(0.48, startToLeftEdge / total));
+    const rightSolidOffset = Math.max(0.52, Math.min(1, startToRightEdge / total));
+    return [
+      { offset: 0, opacity: 0 },
+      { offset: leftSolidOffset, opacity: 1 },
+      { offset: rightSolidOffset, opacity: 1 },
+      { offset: 1, opacity: 0 }
+    ];
+  }
+
+  function getGroupedPoiConnectorGeometry(leftEntry, rightEntry, lineWidth = 8) {
+    const dx = Number(rightEntry?.markerX) - Number(leftEntry?.markerX);
+    const dy = Number(rightEntry?.markerY) - Number(leftEntry?.markerY);
+    const distance = Math.hypot(dx, dy);
+    if (!Number.isFinite(distance) || distance <= 0.001) return null;
+
+    const unitX = dx / distance;
+    const unitY = dy / distance;
+    const leftEdgeRadius = getPoiConnectorEdgeRadius(leftEntry);
+    const rightEdgeRadius = getPoiConnectorEdgeRadius(rightEntry);
+    if (leftEdgeRadius + rightEdgeRadius >= distance - 2) return null;
+    const fadeInset = Math.max(7, Math.min(12, lineWidth * 0.95));
+
+    return {
+      segment: {
+        start: {
+          x: leftEntry.markerX + unitX * Math.max(0, leftEdgeRadius - fadeInset),
+          y: leftEntry.markerY + unitY * Math.max(0, leftEdgeRadius - fadeInset)
+        },
+        end: {
+          x: rightEntry.markerX - unitX * Math.max(0, rightEdgeRadius - fadeInset),
+          y: rightEntry.markerY - unitY * Math.max(0, rightEdgeRadius - fadeInset)
+        }
+      },
+      leftEdge: {
+        x: leftEntry.markerX + unitX * leftEdgeRadius,
+        y: leftEntry.markerY + unitY * leftEdgeRadius
+      },
+      rightEdge: {
+        x: rightEntry.markerX - unitX * rightEdgeRadius,
+        y: rightEntry.markerY - unitY * rightEdgeRadius
+      },
+      unit: {
+        x: unitX,
+        y: unitY
+      }
+    };
+  }
+
+  function getPoiConnectorEdgeRadius(entry) {
+    const profile = entry?.markerProfile || {};
+    if (Number.isFinite(Number(profile.radius))) return Math.max(0, Number(profile.radius));
+    if (Number.isFinite(Number(profile.outerRadius))) return Math.max(0, Number(profile.outerRadius));
+    if (Number.isFinite(Number(profile.size))) return Math.max(0, Number(profile.size) / 2);
+    const widthRadius = Number(profile.widthRadius) || 0;
+    const heightRadius = Number(profile.heightRadius) || 0;
+    if (widthRadius || heightRadius) return Math.max(widthRadius, heightRadius) * 0.92;
+    return Math.max(0, Number(entry?.markerRadius) || 0);
+  }
+
+  function areRenderedHexesAdjacent(leftHex, rightHex) {
+    if (!leftHex || !rightHex || leftHex === rightHex) return false;
+    return EDGE_NAMES.some(edgeName => isSameRenderedHex(getNeighborHex(leftHex, edgeName), rightHex));
+  }
+
+  function isSameRenderedHex(leftHex, rightHex) {
+    if (!leftHex || !rightHex) return false;
+    if (leftHex === rightHex) return true;
+    if (leftHex.id && rightHex.id && leftHex.id === rightHex.id) return true;
+    if (leftHex.label && rightHex.label && leftHex.label === rightHex.label) return true;
+    return Number(leftHex.x) === Number(rightHex.x) && Number(leftHex.y) === Number(rightHex.y);
   }
 
   function renderSubhexPoiMarkers(fragment, visibleHexes, opacity = 1) {
@@ -9297,7 +9973,7 @@
     let renderedCount = 0;
 
     (visibleHexes || []).forEach(hex => {
-      const pois = getPoisForRenderedHex(hex);
+      const pois = getPoisForLivePoiRender(hex);
       if (!pois?.length) return;
 
       const assignments = getPoiSubhexAnchorAssignments(hex, pois);
@@ -9420,6 +10096,13 @@
     return pois;
   }
 
+  function getPoisForLivePoiRender(hex) {
+    const pois = getPoisForRenderedHex(hex);
+    const threshold = getArchivePreviewNotorietyThreshold();
+    if (threshold <= 0) return pois;
+    return pois.filter(poi => isPoiVisibleForExportThreshold(poi, threshold));
+  }
+
   function getPrimaryPoiMarkerRecord(pois) {
     return [...(pois || [])].sort((left, right) => {
       const primaryDelta = getPoiMarkerPrimaryDisplayRank(left) - getPoiMarkerPrimaryDisplayRank(right);
@@ -9432,10 +10115,20 @@
   }
 
   function getPoiMarkerNotorietyRank(poi) {
+    const tier = getPoiMarkerNotorietyTier(poi);
+    return tier > 0 ? tier : 99;
+  }
+
+  function getPoiMarkerNotorietyTier(poi) {
     const rawValue = String(poi?.["Notoriety Tier_Value"] || poi?.["Notoriety Tier"] || "");
     const matchedValue = rawValue.match(/\d+/)?.[0] || "";
     const rank = Number.parseInt(matchedValue, 10);
-    return Number.isFinite(rank) && rank > 0 ? rank : 99;
+    return Number.isFinite(rank) && rank > 0 ? rank : 0;
+  }
+
+  function isPoiVisibleForExportThreshold(poi, threshold) {
+    const tier = getPoiMarkerNotorietyTier(poi);
+    return tier > 0 && tier <= threshold;
   }
 
   function getPoiMarkerIconValue(poi) {
@@ -9499,8 +10192,8 @@
         return {
           kind,
           classKey: "settlement",
-          iconSize: Math.max(minIconSize, Math.round(baseIconSize)),
-          radius: markerRadius
+          iconSize: Math.max(minIconSize, Math.round(baseIconSize * 0.95)),
+          radius: markerRadius * 0.95
         };
       case "waypoint":
         return {
@@ -9529,9 +10222,9 @@
         return {
           kind,
           classKey: "dungeon-complex",
-          iconSize: Math.max(minIconSize, Math.round(baseIconSize * 0.78)),
-          outerRadius: markerRadius * 0.98,
-          innerRadius: markerRadius * 0.82
+          iconSize: Math.max(minIconSize, Math.round(baseIconSize * 0.74)),
+          outerRadius: markerRadius * 0.93,
+          innerRadius: markerRadius * 0.78
         };
       case "dungeon":
         return {
@@ -9558,15 +10251,30 @@
     }
   }
 
-  function createPoiMarkerBackgroundNode(profile, centerX, centerY) {
+  function createPoiMarkerBackgroundNode(profile, centerX, centerY, options = {}) {
     const className = `generated-map-poi-bg generated-map-poi-bg-${profile.classKey}`;
+    const variant = options.variant || "default";
+    const configureNode = node => {
+      if (variant === "fill") {
+        node.style.fill = "rgba(255, 255, 255, 0.8)";
+        node.style.stroke = "none";
+      } else if (variant === "stroke") {
+        node.style.fill = "none";
+        node.style.stroke = "rgba(16, 11, 7, 0.96)";
+        node.style.strokeWidth = profile.kind === "dungeon_complex" ? "2.5" : "2.25";
+        node.style.strokeLinejoin = "round";
+        node.style.strokeLinecap = "round";
+        node.style.vectorEffect = "non-scaling-stroke";
+      }
+      return node;
+    };
     if (profile.kind === "settlement" || profile.kind === "waypoint") {
       const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       circle.setAttribute("class", className);
       circle.setAttribute("cx", String(centerX));
       circle.setAttribute("cy", String(centerY));
       circle.setAttribute("r", String(profile.radius));
-      return circle;
+      return configureNode(circle);
     }
 
     if (profile.kind === "resource") {
@@ -9578,7 +10286,7 @@
       rect.setAttribute("height", String(profile.size));
       rect.setAttribute("rx", String(profile.cornerRadius));
       rect.setAttribute("ry", String(profile.cornerRadius));
-      return rect;
+      return configureNode(rect);
     }
 
     if (profile.kind === "stronghold") {
@@ -9586,7 +10294,7 @@
       const vertices = buildRegularPolygonVertices(centerX, centerY, 6, profile.radius, 0);
       path.setAttribute("class", className);
       path.setAttribute("d", buildRoundedPolygonPath(vertices, profile.cornerRadius));
-      return path;
+      return configureNode(path);
     }
 
     if (profile.kind === "site") {
@@ -9604,20 +10312,20 @@
       );
       path.setAttribute("class", className);
       path.setAttribute("d", buildRoundedPolygonPath(vertices, profile.cornerRadius));
-      return path;
+      return configureNode(path);
     }
 
     if (profile.kind === "dungeon") {
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("class", className);
       path.setAttribute("d", buildPointedCurvedDiamondPath(centerX, centerY, profile.widthRadius, profile.heightRadius, profile.faceBulge, profile.compactGeometry));
-      return path;
+      return configureNode(path);
     }
 
     const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
     polygon.setAttribute("class", className);
     polygon.setAttribute("points", buildStarPolygonPoints(centerX, centerY, 8, profile.outerRadius, profile.innerRadius, -Math.PI / 2));
-    return polygon;
+    return configureNode(polygon);
   }
 
   function buildRegularPolygonVertices(centerX, centerY, sides, radius, rotation = 0) {

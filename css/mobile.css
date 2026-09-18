@@ -884,3 +884,9 @@
     line-height: inherit;
   }
 }
+
+@media (max-width: 1099px), (max-height: 699px) {
+  .campaign-settings-shell.codex-map-settings-hidden {
+    display: none;
+  }
+}

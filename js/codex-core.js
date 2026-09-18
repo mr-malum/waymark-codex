@@ -89,7 +89,7 @@ function getCodexHeaderFitLines() {
 
 function shouldFitCodexHeaderTextForMobile() {
   return window.matchMedia?.(
-    "(hover: none) and (pointer: coarse), (max-width: 700px)"
+    "(max-width: 1099px), (max-height: 699px)"
   )?.matches === true;
 }
 
@@ -131,13 +131,17 @@ function fitCodexHeaderText() {
 
     const baseFontSize = Number(line.dataset.codexBaseFontSize) || 16;
     line.style.fontSize = `${baseFontSize}px`;
-    line.style.whiteSpace = "nowrap";
+    line.style.setProperty("white-space", "nowrap", "important");
 
     const lineWidth = line.scrollWidth;
-    if (lineWidth <= availableWidth) return;
+    if (lineWidth <= availableWidth) {
+      line.style.setProperty("white-space", "normal", "important");
+      return;
+    }
 
-    const nextFontSize = Math.max(10, baseFontSize * (availableWidth / lineWidth));
+    const nextFontSize = Math.max(14, baseFontSize * (availableWidth / lineWidth));
     line.style.fontSize = `${nextFontSize}px`;
+    line.style.setProperty("white-space", "normal", "important");
   });
 }
 

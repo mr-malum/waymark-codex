@@ -50,6 +50,12 @@
    - Consider internal route adjustment points only after terrain, features, and POI anchors are stable; boundary anchors remain locked.
    - Use the planned hybrid persistence model: parent hex remains authoritative, with later nullable subhex snapshots and local POI/route anchor data.
 
+5. Desktop preview guardrails for mobile/tablet polish
+
+   - Add a desktop-accessible device preview or screenshot workflow for common phone/tablet viewports.
+   - Add optional debug outlines for mobile Codex/map control safe zones.
+   - Move repeated floating-control offsets into shared CSS variables so desktop-tested spacing stays aligned with mobile/tablet layouts.
+
 ## Verification
 
 `tests/generated-map-renderer-memory.cjs` uses installed Playwright and a local Chromium/Edge executable. It loads the real production renderer and SVG assets with synthetic data; it does not contact Supabase or mutate campaign records.

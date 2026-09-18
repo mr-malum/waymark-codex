@@ -426,6 +426,11 @@
         <span class="map-edit-mode-label">Cartographer</span>
         <span class="map-tools-mode-tooltip" role="tooltip">Staged editing: terrain and feature painting/generation preview locally first. Use Apply Preview to save or Discard All to revert.</span>
       </button>
+      <button id="map-tools-archive-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">▣</span>
+        <span class="map-edit-mode-label">Archive</span>
+        <span class="map-tools-mode-tooltip" role="tooltip">Export player-facing or archive-ready map images without changing the live map view.</span>
+      </button>
     </div>
     <div class="map-edit-rail-main" data-map-tool-mode-panel="surveyor" hidden>
       <button id="map-surveyor-overlay-button" type="button" class="map-edit-mode-button">
@@ -439,10 +444,6 @@
       <button id="map-surveyor-regions-button" type="button" class="map-edit-mode-button">
         <span class="map-edit-mode-icon" aria-hidden="true">⌫</span>
         <span class="map-edit-mode-label">Purge</span>
-      </button>
-      <button id="map-surveyor-utilities-button" type="button" class="map-edit-mode-button">
-        <span class="map-edit-mode-icon" aria-hidden="true">▣</span>
-        <span class="map-edit-mode-label">Archive</span>
       </button>
     </div>
     <div class="map-edit-rail-main" data-map-tool-mode-panel="cartographer" hidden>
@@ -816,6 +817,39 @@
               <option value="4">Poster Resolution 4x</option>
             </select>
           </label>
+          <label class="map-draw-style-row" for="map-export-notoriety-threshold">
+            <span>Notoriety Threshold</span>
+            <select id="map-export-notoriety-threshold">
+              <option value="0" selected>Show All POIs</option>
+              <option value="1">Tier 1 Only</option>
+              <option value="2">Tier 1-2</option>
+              <option value="3">Tier 1-3</option>
+              <option value="4">Tier 1-4</option>
+              <option value="5">Tier 1-5</option>
+              <option value="6">Tier 1-6</option>
+              <option value="7">Tier 1-7</option>
+              <option value="8">Tier 1-8</option>
+              <option value="9">Tier 1-9</option>
+              <option value="10">Tier 1-10</option>
+            </select>
+          </label>
+          <div class="map-draw-section-title map-draw-subsection-title">Export Layers</div>
+          <div class="map-draw-layer-toggles" aria-label="Archive export layers">
+            <label><input type="checkbox" data-map-export-toggle="road" checked> Roads</label>
+            <label><input type="checkbox" data-map-export-toggle="river" checked> Rivers</label>
+            <label><input type="checkbox" data-map-export-toggle="sea_route" checked> Sea Routes</label>
+            <label><input type="checkbox" data-map-export-toggle="path" checked> Paths</label>
+            <label><input type="checkbox" data-map-export-toggle="wall" checked> Walls</label>
+            <label><input type="checkbox" data-map-export-toggle="mist" checked> Mist</label>
+            <label><input type="checkbox" data-map-export-toggle="geographic"> Geographic Borders</label>
+            <label><input type="checkbox" data-map-export-toggle="political" checked> Political Borders</label>
+            <label><input type="checkbox" data-map-export-toggle="politicalLabels" checked> Political Labels</label>
+            <label><input type="checkbox" data-map-export-toggle="geographicLabels" checked> Geographic Labels</label>
+            <label><input type="checkbox" data-map-export-toggle="coords" checked> Hex Labels</label>
+            <label><input type="checkbox" data-map-export-toggle="features" checked> Features</label>
+            <label><input type="checkbox" data-map-export-toggle="pois" checked> POIs</label>
+            <label><input type="checkbox" data-map-export-grid checked> Gridlines</label>
+          </div>
           <button id="map-export-png" class="map-draw-secondary-button" type="button">Export PNG</button>
           <div id="map-export-status" class="map-export-status" aria-live="polite"></div>
         </div>

@@ -12,7 +12,7 @@ let codexDesktopLiveSearchTimer = null;
 document.addEventListener("contextmenu", event => event.preventDefault());
 
 function isMobileCodexNav() {
-  return window.matchMedia?.("(max-width: 700px)")?.matches === true;
+  return window.matchMedia?.("(max-width: 1099px), (max-height: 699px)")?.matches === true;
 }
 
 function closeCodexNavPockets(exceptPocket = null) {
@@ -362,6 +362,7 @@ function handleCodexButtonClick(event) {
   const codexButton = document.getElementById("codex-button");
 
   window.generatedMapRenderer?.closePopup?.();
+  document.getElementById("map-draw-button")?.classList.remove("map-tools-label-visible");
 
   if (isTouchDevice && !codexButton.classList.contains("codex-label-visible")) {
     codexButton.classList.add("codex-label-visible");
@@ -371,6 +372,15 @@ function handleCodexButtonClick(event) {
   codexButton.classList.remove("codex-label-visible");
   closePanel({ syncHistory: false });
   resetCodexToIndex();
+}
+
+function bindFloatingControlLabelDismissal() {
+  document.addEventListener("pointerdown", event => {
+    const target = event.target;
+    if (target?.closest?.("#codex-button, #map-draw-button")) return;
+    document.getElementById("codex-button")?.classList.remove("codex-label-visible");
+    document.getElementById("map-draw-button")?.classList.remove("map-tools-label-visible");
+  }, true);
 }
 
 function bindKeyboardEasterEggEvents() {
@@ -522,6 +532,7 @@ function initializeApp() {
   bindMapEvents();
   bindPanelEvents();
   bindCodexEvents();
+  bindFloatingControlLabelDismissal();
   initializeCodexMobileUtility?.();
   bindCodexLongPressEvents();
   bindKeyboardEasterEggEvents();
