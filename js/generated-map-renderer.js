@@ -463,6 +463,24 @@
     lair: "▲",
     camp: "♢"
   };
+  const LEGACY_POI_ICON_ALIASES = Object.freeze({
+    tower: "stone_tower",
+    ruined_tower: "buried_ruins",
+    ruin_tower: "buried_ruins",
+    tower_ruin: "buried_ruins",
+    tower_ruins: "buried_ruins",
+    ruined_keep: "ruins",
+    ruined_castle: "ruins",
+    ruined_fort: "ruins",
+    ruined_stronghold: "ruins",
+    old_ruins: "ruins",
+    ruin: "ruins",
+    cave_entrance: "cave",
+    grave: "graveyard",
+    stones: "standing_stones",
+    standing_stone: "standing_stones",
+    wizard_tower_ruin: "buried_ruins"
+  });
 
   const renderer = {
     root: null,
@@ -558,6 +576,7 @@
     subhexEditorSvg: null,
     subhexEditorStage: null,
     subhexEditorTitle: null,
+    subhexEditorLayout: null,
     hexes: [],
     hexesById: new Map(),
     hexesByRef: new Map(),
@@ -628,6 +647,10 @@
       exportGrid: true,
       exportNotorietyThreshold: 0,
       subhexEditorHexId: "",
+      subhexEditorReturnTarget: null,
+      subhexEditorTool: "inspect",
+      subhexEditorHoverKey: "",
+      subhexEditorSelectedKey: "",
       tool: "road",
       roadStyle: "dark_brown",
       wallStyle: "wall",
@@ -788,6 +811,12 @@
             <div class="generated-map-subhex-editor-title">Hex</div>
             <button type="button" class="generated-map-subhex-editor-close" aria-label="Close sub-hex editor">×</button>
           </div>
+          <div class="generated-map-subhex-editor-toolbar" role="group" aria-label="Sub-hex editor tools">
+            <button type="button" class="generated-map-subhex-editor-tool is-active" data-subhex-editor-tool="inspect">Inspect</button>
+            <button type="button" class="generated-map-subhex-editor-tool" data-subhex-editor-tool="terrain" disabled>Terrain</button>
+            <button type="button" class="generated-map-subhex-editor-tool" data-subhex-editor-tool="feature" disabled>Feature</button>
+            <button type="button" class="generated-map-subhex-editor-tool" data-subhex-editor-tool="poi" disabled>POI Anchor</button>
+          </div>
           <div class="generated-map-subhex-editor-stage">
             <canvas class="generated-map-subhex-editor-canvas"></canvas>
             <svg class="generated-map-subhex-editor-svg" aria-hidden="true"></svg>
@@ -839,13 +868,25 @@
     renderer.subhexEditorShell?.querySelector(".generated-map-subhex-editor-close")?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      closeSubhexEditor();
+      closeSubhexEditor({ returnToCodex: true });
     });
     renderer.subhexEditorShell?.querySelector('[data-subhex-editor-action="cancel"]')?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      closeSubhexEditor();
+      closeSubhexEditor({ returnToCodex: true });
     });
+    renderer.subhexEditorShell?.querySelectorAll("[data-subhex-editor-tool]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (button.disabled) return;
+        renderer.drawing.subhexEditorTool = button.dataset.subhexEditorTool || "inspect";
+        syncSubhexEditorToolbar();
+      });
+    });
+    renderer.subhexEditorStage?.addEventListener("pointermove", handleSubhexEditorPointerMove);
+    renderer.subhexEditorStage?.addEventListener("pointerleave", handleSubhexEditorPointerLeave);
+    renderer.subhexEditorStage?.addEventListener("click", handleSubhexEditorClick);
 
     renderer.root.addEventListener("wheel", handleWheel, { passive: false });
     renderer.root.addEventListener("pointerdown", handlePointerDown);
@@ -1932,6 +1973,36 @@
     updateMapEditSurface();
   }
 
+  function openMapEditMode(options = {}) {
+    if (!canCurrentUserShapeWorld()) return false;
+    const button = document.getElementById("map-draw-button");
+    const panel = document.getElementById("map-draw-panel");
+    const viewPanel = document.getElementById("map-view-panel");
+    const viewButton = document.getElementById("map-view-button");
+    const modeViewButton = document.getElementById("map-edit-view-button");
+    if (!panel) return false;
+
+    if (viewPanel) viewPanel.hidden = true;
+    viewButton?.classList.remove("active");
+    modeViewButton?.classList.remove("active");
+    panel.hidden = false;
+    button?.classList.add("active");
+    button?.classList.remove("map-tools-label-visible");
+    renderer.drawing.enabled = true;
+    updateMapChromeForEdit(true);
+    if (!renderer.drawing.preEditVisibleOverlays) {
+      enterMapEditMode();
+    }
+    if (options.mode) setMapToolsMode(options.mode);
+    else setMapToolsMode("chooser");
+    updateDrawToolButtons();
+    updateDrawRegionControls();
+    updateDrawStyleControls();
+    updateDrawHint();
+    scheduleDeferredMapModeRender();
+    return true;
+  }
+
   async function requestReturnToToolsChooser() {
     closeSubhexEditor({ skipRender: true });
     if ((renderer.drawing.toolsMode || "chooser") !== "cartographer") {
@@ -2707,6 +2778,11 @@
     renderer.drawing.exportGrid = true;
     renderer.drawing.exportNotorietyThreshold = 0;
     renderer.drawing.subhexEditorHexId = "";
+    renderer.drawing.subhexEditorReturnTarget = null;
+    renderer.drawing.subhexEditorTool = "inspect";
+    renderer.drawing.subhexEditorHoverKey = "";
+    renderer.drawing.subhexEditorSelectedKey = "";
+    renderer.subhexEditorLayout = null;
     renderer.drawing.generationSeed = "";
     renderer.drawing.generationRegionStyle = "balanced";
     renderer.drawing.generationFeatureDensity = 100;
@@ -4976,22 +5052,106 @@
     return buildVisibleSubhexGridPath(visibleHexes);
   }
 
-  function openSubhexEditor(hexId) {
+  function openSubhexEditor(hexId, options = {}) {
     if (!renderer.drawing.enabled) return false;
     const hex = hexForPathPoint(hexId);
     if (!hex) return false;
     renderer.drawing.subhexEditorHexId = hex.id;
+    renderer.drawing.subhexEditorReturnTarget = options.returnTarget || null;
+    renderer.drawing.subhexEditorHoverKey = "";
+    renderer.drawing.subhexEditorSelectedKey = "";
     closeGeneratedPopup({ preserveSelection: true });
     render();
     return true;
   }
 
+  function openSubhexEditorFromCodex(hexId) {
+    const hex = hexForPathPoint(hexId);
+    if (!hex) return false;
+    if (!openMapEditMode({ mode: "chooser" })) return false;
+    centerHexInView(hex.id, true);
+    selectGeneratedHex(hex.id, { detailsDisabled: true, subhexEditorEnabled: true });
+    return openSubhexEditor(hex.id, {
+      returnTarget: {
+        type: "hex",
+        id: hex.id
+      }
+    });
+  }
+
   function closeSubhexEditor(options = {}) {
     if (!renderer.drawing.subhexEditorHexId) return false;
+    const returnTarget = renderer.drawing.subhexEditorReturnTarget;
     renderer.drawing.subhexEditorHexId = "";
+    renderer.drawing.subhexEditorReturnTarget = null;
+    renderer.drawing.subhexEditorHoverKey = "";
+    renderer.drawing.subhexEditorSelectedKey = "";
+    renderer.subhexEditorLayout = null;
     if (renderer.subhexEditorShell) renderer.subhexEditorShell.hidden = true;
     if (!options.skipRender) render();
+    if (options.returnToCodex && returnTarget?.type && returnTarget?.id) {
+      requestAnimationFrame(() => {
+        openCodexPage?.(returnTarget.type, returnTarget.id, { push: false });
+      });
+    }
     return true;
+  }
+
+  function getSubhexEditorCellKey(subhex) {
+    return subhex ? `${subhex.q}:${subhex.r}` : "";
+  }
+
+  function getSubhexEditorCellAtPoint(worldPoint) {
+    if (!worldPoint || !renderer.subhexEditorLayout?.ownedSubhexes?.length) return null;
+    return renderer.subhexEditorLayout.ownedSubhexes.find(subhex => pointInPolygon(worldPoint, subhex.points)) || null;
+  }
+
+  function getSubhexEditorWorldPoint(event) {
+    const layout = renderer.subhexEditorLayout;
+    const stage = renderer.subhexEditorStage;
+    if (!layout?.transform || !stage) return null;
+    const rect = stage.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return null;
+    const scale = layout.transform.scale || 1;
+    return {
+      x: (event.clientX - rect.left - layout.transform.offsetX) / scale,
+      y: (event.clientY - rect.top - layout.transform.offsetY) / scale
+    };
+  }
+
+  function syncSubhexEditorToolbar() {
+    const activeTool = renderer.drawing.subhexEditorTool || "inspect";
+    renderer.subhexEditorShell?.querySelectorAll("[data-subhex-editor-tool]").forEach(button => {
+      const isActive = button.dataset.subhexEditorTool === activeTool;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+
+  function handleSubhexEditorPointerMove(event) {
+    if (!renderer.drawing.subhexEditorHexId) return;
+    const worldPoint = getSubhexEditorWorldPoint(event);
+    const hoverKey = getSubhexEditorCellKey(getSubhexEditorCellAtPoint(worldPoint));
+    if (hoverKey === renderer.drawing.subhexEditorHoverKey) return;
+    renderer.drawing.subhexEditorHoverKey = hoverKey;
+    renderSubhexEditorShell();
+  }
+
+  function handleSubhexEditorPointerLeave() {
+    if (!renderer.drawing.subhexEditorHoverKey) return;
+    renderer.drawing.subhexEditorHoverKey = "";
+    renderSubhexEditorShell();
+  }
+
+  function handleSubhexEditorClick(event) {
+    if (!renderer.drawing.subhexEditorHexId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const worldPoint = getSubhexEditorWorldPoint(event);
+    const selectedKey = getSubhexEditorCellKey(getSubhexEditorCellAtPoint(worldPoint));
+    if (renderer.drawing.subhexEditorSelectedKey === selectedKey) return;
+    renderer.drawing.subhexEditorSelectedKey = selectedKey;
+    renderSubhexEditorShell();
   }
 
   function getSubhexEditorBounds(hex, metrics) {
@@ -5200,6 +5360,7 @@
     const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
     const clipPolygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
     const routeGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const selectionGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const poiGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const gridPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
     const parentOutline = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
@@ -5214,6 +5375,23 @@
     routeGroup.setAttribute("clip-path", `url(#${clipId})`);
     appendSubhexEditorRoutePaths(routeGroup, hex);
     fragment.appendChild(routeGroup);
+
+    selectionGroup.setAttribute("clip-path", `url(#${clipId})`);
+    ownedSubhexes.forEach(subhex => {
+      const key = getSubhexEditorCellKey(subhex);
+      const isSelected = key && key === renderer.drawing.subhexEditorSelectedKey;
+      const isHovered = key && key === renderer.drawing.subhexEditorHoverKey;
+      if (!isSelected && !isHovered) return;
+      const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      polygon.setAttribute("class", [
+        "generated-map-subhex-editor-cell",
+        isSelected ? "is-selected" : "",
+        isHovered ? "is-hovered" : ""
+      ].filter(Boolean).join(" "));
+      polygon.setAttribute("points", subhex.points.map(point => `${point.x},${point.y}`).join(" "));
+      selectionGroup.appendChild(polygon);
+    });
+    fragment.appendChild(selectionGroup);
 
     gridPath.setAttribute("class", "generated-map-subhex-grid-lines");
     gridPath.setAttribute("d", buildGridPath(ownedSubhexes));
@@ -5241,10 +5419,12 @@
     if (!shell) return;
     if (!renderer.drawing.enabled || !hex?.id) {
       shell.hidden = true;
+      renderer.subhexEditorLayout = null;
       return;
     }
 
     shell.hidden = false;
+    syncSubhexEditorToolbar();
     if (renderer.subhexEditorTitle) {
       renderer.subhexEditorTitle.textContent = `Hex ${hex.label || hex.id}`;
     }
@@ -5252,6 +5432,14 @@
     const metrics = getSubhexMetrics();
     const bounds = getSubhexEditorBounds(hex, metrics);
     const ownedSubhexes = getSubhexEditorOwnedSubhexes(hex, bounds);
+    const stageRect = renderer.subhexEditorStage?.getBoundingClientRect();
+    renderer.subhexEditorLayout = {
+      hexId: hex.id,
+      bounds,
+      metrics,
+      ownedSubhexes,
+      transform: stageRect ? getSubhexEditorCanvasTransform(bounds, stageRect.width, stageRect.height) : null
+    };
     renderSubhexEditorCanvas(hex, ownedSubhexes, bounds, metrics);
     renderSubhexEditorSvg(hex, ownedSubhexes, bounds);
   }
@@ -5405,6 +5593,7 @@
       ctx.save();
       ctx.scale(scale, scale);
       drawGeneratedMapExportPoliticalRegionBorders(ctx);
+      await loadPoiIconAssets();
       await drawGeneratedMapExportPoiMarkers(ctx, exportOptions);
       ctx.restore();
       return { canvas, warnings };
@@ -5470,7 +5659,7 @@
     const markerDiameter = Math.min(62, Math.max(48, (dimensions.radius * 2) - 14));
     const markerRadius = markerDiameter / 2;
     const baseIconSize = Math.min(markerDiameter - 11, 48);
-    const badgeRadius = Math.max(9, Math.round(markerRadius * 0.32));
+    const badgeRadius = Math.max(10, Math.round(markerRadius * 0.34));
     const markerOffsetY = dimensions.hexHeight * 0.08;
     const markerEntries = [];
 
@@ -5478,7 +5667,7 @@
       const pois = getPoisForRenderedHex(hex)
         .filter(poi => threshold <= 0 || isPoiVisibleForExportThreshold(poi, threshold));
       if (!pois?.length) continue;
-      const markerPoi = getPrimaryPoiMarkerRecord(pois);
+      const markerPoi = getPrimaryExportPoiMarkerRecord(pois);
       const profile = getPoiMarkerShapeProfile(markerPoi, markerRadius, baseIconSize);
       markerEntries.push({
         hex,
@@ -5515,6 +5704,30 @@
     drawExportPoiMarkerFill(ctx, centerX, centerY, profile);
     drawExportPoiMarkerBorder(ctx, centerX, centerY, profile);
     await drawExportPoiMarkerContent(ctx, poi, centerX, centerY, profile, count, badgeRadius);
+  }
+
+  function getPrimaryExportPoiMarkerRecord(pois) {
+    return [...(pois || [])].sort((left, right) => {
+      const iconDelta = getPoiMarkerExportIconRank(left) - getPoiMarkerExportIconRank(right);
+      if (iconDelta !== 0) return iconDelta;
+      const leftNotoriety = getPoiMarkerNotorietyRank(left);
+      const rightNotoriety = getPoiMarkerNotorietyRank(right);
+      if (leftNotoriety !== rightNotoriety) return leftNotoriety - rightNotoriety;
+      const primaryDelta = getPoiMarkerPrimaryDisplayRank(left) - getPoiMarkerPrimaryDisplayRank(right);
+      if (primaryDelta !== 0) return primaryDelta;
+      return String(left?.Name || left?.POI_ID || "")
+        .localeCompare(String(right?.Name || right?.POI_ID || ""), undefined, { sensitivity: "base" });
+    })[0] || null;
+  }
+
+  function getPoiMarkerExportIconRank(poi) {
+    const rawValue = getRawPoiMarkerIconValue(poi);
+    const storedValue = window.CampaignPoiIcons?.getStoredIconValue?.(rawValue) || "";
+    const aliasValue = getLegacyPoiIconAlias(poi, rawValue);
+    const inferredValue = inferPoiMarkerIconValue(poi, rawValue);
+    const iconValue = storedValue || aliasValue || inferredValue || "";
+    if (iconValue && iconValue !== POI_ICON_FALLBACK) return 0;
+    return 1;
   }
 
   function drawExportPoiMarkerFill(ctx, centerX, centerY, profile) {
@@ -5746,14 +5959,20 @@
   }
 
   async function drawExportPoiMarkerSymbol(ctx, poi, centerX, centerY, profile, iconSize = 22) {
-    const asset = getPoiMarkerAsset(poi);
-    const icon = asset ? await getExportPoiIconImage(getPoiMarkerIconValue(poi), asset) : null;
+    const iconValue = getPoiMarkerIconValue(poi);
+    const asset = getPoiMarkerAssetByValue(iconValue);
+    const icon = asset ? await getExportPoiIconImage(iconValue, asset) : null;
     if (icon) {
       ctx.save();
       drawExportPoiMarkerShape(ctx, centerX, centerY, profile);
       ctx.clip();
       ctx.drawImage(icon, centerX - iconSize / 2, centerY - iconSize / 2, iconSize, iconSize);
       ctx.restore();
+      return;
+    }
+
+    if (isTowerPoiMarker(poi)) {
+      drawExportPoiTowerFallbackSymbol(ctx, centerX, centerY, iconSize);
       return;
     }
 
@@ -5771,15 +5990,20 @@
   }
 
   function getExportPoiIconImage(iconValue, asset) {
-    const key = String(iconValue || POI_ICON_FALLBACK);
+    const key = [
+      String(iconValue || POI_ICON_FALLBACK),
+      String(asset?.viewBox || ""),
+      stableHash(String(asset?.body || ""))
+    ].join(":");
     if (renderer.poiIconExportImages.has(key)) return renderer.poiIconExportImages.get(key);
 
     const imagePromise = new Promise(resolve => {
       const image = new Image();
+      const body = sanitizeSvgBodyForImageExport(asset.body);
       const serialized = [
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${asset.viewBox}" color="#120d09">`,
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${asset.viewBox}" color="#120d09" fill="currentColor">`,
         "<style>*{vector-effect:non-scaling-stroke}</style>",
-        asset.body,
+        body,
         "</svg>"
       ].join("");
       const blob = new Blob([serialized], { type: "image/svg+xml;charset=utf-8" });
@@ -5797,6 +6021,12 @@
 
     renderer.poiIconExportImages.set(key, imagePromise);
     return imagePromise;
+  }
+
+  function sanitizeSvgBodyForImageExport(body = "") {
+    return String(body || "")
+      .replace(/\s+[a-zA-Z_][\w.-]*:[\w.-]+=(?:"[^"]*"|'[^']*')/g, "")
+      .replace(/\s+xmlns:[a-zA-Z_][\w.-]+=(?:"[^"]*"|'[^']*')/g, "");
   }
 
   function drawGeneratedMapExportGeographicRegionLayer(ctx, options = {}) {
@@ -5919,22 +6149,109 @@
   }
 
   function drawExportPoiCountBadge(ctx, centerX, centerY, profile, count, badgeRadius) {
-    const hostRadius = profile.radius || profile.outerRadius || profile.widthRadius || profile.size / 2 || 24;
-    const badgeX = centerX + hostRadius * 0.68;
-    const badgeY = centerY - hostRadius * 0.68;
+    const hostRadius = Math.max(
+      profile.radius || 0,
+      profile.outerRadius || 0,
+      profile.widthRadius || 0,
+      profile.heightRadius || 0,
+      profile.size ? profile.size / 2 : 0,
+      24
+    );
+    const badgeX = centerX + hostRadius - badgeRadius + 1;
+    const badgeY = centerY - hostRadius + badgeRadius - 1;
     ctx.save();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
-    ctx.strokeStyle = "rgba(16, 11, 7, 0.96)";
-    ctx.lineWidth = 2;
+    ctx.globalAlpha = 1;
+    ctx.shadowColor = "rgba(255, 255, 255, 0.72)";
+    ctx.shadowBlur = 2;
+    ctx.fillStyle = "#fffdf4";
+    ctx.strokeStyle = "#100b07";
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
     ctx.arc(badgeX, badgeY, badgeRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.shadowColor = "transparent";
     ctx.fillStyle = "#120d09";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = `700 ${Math.max(10, badgeRadius + 3)}px Georgia, serif`;
+    ctx.font = `800 ${Math.max(11, badgeRadius + 4)}px Georgia, serif`;
     ctx.fillText(String(Math.min(count, 9)), badgeX, badgeY + 0.5);
+    ctx.restore();
+  }
+
+  function isTowerPoiMarker(poi) {
+    return /(^|_)(tower|watchtower|watch_tower|stone_tower|wizard_tower|mage_tower|arcane_tower)($|_)/.test(getPoiMarkerSearchToken(poi));
+  }
+
+  function getPoiMarkerSearchToken(poi) {
+    return [
+      poi?.POI_Icon,
+      poi?.poi_icon,
+      poi?.Group_Icon,
+      poi?.group_icon,
+      poi?.Icon_Name,
+      poi?.Icon,
+      poi?.icon,
+      poi?.Name,
+      poi?.POI_Name,
+      poi?.name,
+      poi?.POI_Type_Value,
+      poi?.POI_Type,
+      poi?.type
+    ].map(normalizePoiMarkerToken)
+      .filter(Boolean)
+      .join("_");
+  }
+
+  function normalizePoiMarkerToken(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\.svg$/i, "")
+      .replace(/['’]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
+  function drawExportPoiTowerFallbackSymbol(ctx, centerX, centerY, iconSize = 22) {
+    const width = iconSize * 0.54;
+    const height = iconSize * 0.82;
+    const left = centerX - width / 2;
+    const top = centerY - height / 2;
+    const crenel = width / 5;
+    ctx.save();
+    ctx.fillStyle = "#120d09";
+    ctx.strokeStyle = "#120d09";
+    ctx.lineWidth = Math.max(1.5, iconSize * 0.08);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(left, top + crenel);
+    ctx.lineTo(left, top);
+    ctx.lineTo(left + crenel, top);
+    ctx.lineTo(left + crenel, top + crenel);
+    ctx.lineTo(left + crenel * 2, top + crenel);
+    ctx.lineTo(left + crenel * 2, top);
+    ctx.lineTo(left + crenel * 3, top);
+    ctx.lineTo(left + crenel * 3, top + crenel);
+    ctx.lineTo(left + crenel * 4, top + crenel);
+    ctx.lineTo(left + crenel * 4, top);
+    ctx.lineTo(left + width, top);
+    ctx.lineTo(left + width, top + crenel);
+    ctx.lineTo(left + width * 0.88, top + height);
+    ctx.lineTo(left + width * 0.12, top + height);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#fffdf4";
+    ctx.fillRect(centerX - width * 0.22, top + height * 0.24, width * 0.16, height * 0.18);
+    ctx.fillRect(centerX + width * 0.06, top + height * 0.24, width * 0.16, height * 0.18);
+    ctx.beginPath();
+    ctx.moveTo(centerX - width * 0.16, top + height);
+    ctx.lineTo(centerX - width * 0.16, top + height * 0.68);
+    ctx.quadraticCurveTo(centerX, top + height * 0.54, centerX + width * 0.16, top + height * 0.68);
+    ctx.lineTo(centerX + width * 0.16, top + height);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 
@@ -10132,14 +10449,63 @@
   }
 
   function getPoiMarkerIconValue(poi) {
-    return window.CampaignPoiIcons?.getDisplayIconValue?.(poi?.POI_Icon || poi?.poi_icon || "") || POI_ICON_FALLBACK;
+    const rawValue = getRawPoiMarkerIconValue(poi);
+    const storedValue = window.CampaignPoiIcons?.getStoredIconValue?.(rawValue) || "";
+    return storedValue || getLegacyPoiIconAlias(poi, rawValue) || inferPoiMarkerIconValue(poi, rawValue) || POI_ICON_FALLBACK;
+  }
+
+  function getRawPoiMarkerIconValue(poi) {
+    return poi?.POI_Icon
+      || poi?.poi_icon
+      || poi?.Group_Icon
+      || poi?.group_icon
+      || poi?.Icon_Name
+      || poi?.Icon
+      || poi?.icon
+      || "";
+  }
+
+  function getLegacyPoiIconAlias(poi, rawValue = "") {
+    const hasIcon = value => Boolean(window.CampaignPoiIcons?.getStoredIconValue?.(value));
+    const rawToken = normalizePoiMarkerToken(rawValue);
+    const exactAlias = LEGACY_POI_ICON_ALIASES[rawToken] || "";
+    if (exactAlias && hasIcon(exactAlias)) return exactAlias;
+
+    const textToken = getPoiMarkerSearchToken({ ...poi, POI_Icon: rawValue });
+    if (/(^|_)ruined_tower($|_)|(^|_)tower_ruins?($|_)|(^|_)ruin_tower($|_)/.test(textToken) && hasIcon("ruins")) {
+      return "ruins";
+    }
+    return "";
+  }
+
+  function inferPoiMarkerIconValue(poi, rawValue = "") {
+    const textToken = getPoiMarkerSearchToken({ ...poi, POI_Icon: rawValue });
+    const hasIcon = value => Boolean(window.CampaignPoiIcons?.getStoredIconValue?.(value));
+
+    if (/(^|_)ruined_tower($|_)|(^|_)tower_ruins?($|_)|(^|_)ruin_tower($|_)/.test(textToken) && hasIcon("ruins")) {
+      return "ruins";
+    }
+    if (/(^|_)wizard_tower($|_)|(^|_)mage_tower($|_)|(^|_)arcane_tower($|_)/.test(textToken) && hasIcon("wizard_tower")) {
+      return "wizard_tower";
+    }
+    if (/(^|_)watch_tower($|_)|(^|_)watchtower($|_)|(^|_)lookout_tower($|_)/.test(textToken) && hasIcon("watchtower")) {
+      return "watchtower";
+    }
+    if (/(^|_)stone_tower($|_)|(^|_)tower($|_)/.test(textToken) && hasIcon("stone_tower")) {
+      return "stone_tower";
+    }
+    return "";
   }
 
   function getPoiMarkerAsset(poi) {
     const iconValue = getPoiMarkerIconValue(poi);
-    return renderer.poiIconAssets.get(iconValue)
+    return getPoiMarkerAssetByValue(iconValue)
       || renderer.poiIconAssets.get(POI_ICON_FALLBACK)
       || null;
+  }
+
+  function getPoiMarkerAssetByValue(iconValue) {
+    return renderer.poiIconAssets.get(iconValue) || null;
   }
 
   function getPoiMarkerTypeValue(poi) {
@@ -10157,7 +10523,7 @@
     if (type === "dungeon_complex") return 6;
     if (type === "dungeon") return 7;
 
-    const family = window.CampaignPoiIcons?.getIconFamily?.(poi?.POI_Icon || poi?.poi_icon || "") || "";
+    const family = window.CampaignPoiIcons?.getIconFamily?.(getRawPoiMarkerIconValue(poi)) || "";
     if (family === "settlement") return 0;
     if (family === "stronghold") return 1;
     if (family === "resource_site") return 3;
@@ -10175,7 +10541,7 @@
     if (type === "dungeon_complex") return "dungeon_complex";
     if (type === "dungeon") return "dungeon";
 
-    const family = window.CampaignPoiIcons?.getIconFamily?.(poi?.POI_Icon || poi?.poi_icon || "") || "";
+    const family = window.CampaignPoiIcons?.getIconFamily?.(getRawPoiMarkerIconValue(poi)) || "";
     if (family === "settlement") return "settlement";
     if (family === "stronghold") return "stronghold";
     if (family === "resource_site") return "resource";
@@ -23088,7 +23454,9 @@
     refreshOverlayLayerFromDatabase,
     refreshPoiLayerFromDatabase,
     refreshRegionLayerFromDatabase,
+    openMapEditMode,
     openSubhexEditor,
+    openSubhexEditorFromCodex,
     selectGeneratedHex
   };
 })();

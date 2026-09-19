@@ -148,7 +148,21 @@ function closeMobileHexPopup() {
 }
 
 function openGeneratedSubhexEditor(hexId) {
-  window.generatedMapRenderer?.openSubhexEditor?.(hexId);
+  const cleanHexId = String(hexId || "").trim();
+  if (!cleanHexId) return false;
+  window.generatedMapRenderer?.openMapEditMode?.({ mode: "chooser" });
+  return window.generatedMapRenderer?.openSubhexEditor?.(cleanHexId) || false;
+}
+
+function openSubhexEditorFromCodex(hexId) {
+  const cleanHexId = String(hexId || "").trim();
+  if (!cleanHexId) return false;
+
+  closeCodex?.({ preserveSelection: true });
+  closePanel?.({ syncHistory: false });
+  document.getElementById("codex-button")?.classList.remove("codex-label-visible");
+
+  return window.generatedMapRenderer?.openSubhexEditorFromCodex?.(cleanHexId) || false;
 }
 
 function getPopupPoiSortRank(poi) {
@@ -322,4 +336,5 @@ function getPopupTerrainName(data) {
 window.openPanelForHex = openPanelForHex;
 window.closeMobileHexPopup = closeMobileHexPopup;
 window.openGeneratedSubhexEditor = openGeneratedSubhexEditor;
+window.openSubhexEditorFromCodex = openSubhexEditorFromCodex;
 window.zoomToHexFromCodex = zoomToHexFromCodex;

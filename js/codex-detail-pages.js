@@ -514,6 +514,23 @@ function renderCodexZoomToAction(hexId) {
   `;
 }
 
+function renderCodexSubhexEditAction(hexId) {
+  const cleanHexId = String(hexId || "").trim();
+  if (!cleanHexId) return "";
+  const canEditMap = ["owner", "superuser"].includes(getActiveCampaign?.()?.currentUserRole || "");
+  if (!canEditMap) return "";
+
+  return `
+    <button
+      class="codex-detail-zoom-to-button"
+      type="button"
+      onclick="openSubhexEditorFromCodex('${escapeJsString(cleanHexId)}')"
+    >
+      Edit Sub-Hex
+    </button>
+  `;
+}
+
 function renderCodexHexPage(hexId) {
   const hex = db?.hexesById?.[hexId];
   const region = hex?.Region_ID_Ref ? db?.regionsById?.[hex.Region_ID_Ref] : null;
@@ -551,6 +568,7 @@ function renderCodexHexPage(hexId) {
       </div>
       <div class="codex-detail-overview-action-row">
         ${renderCodexZoomToAction(hexId)}
+        ${renderCodexSubhexEditAction(hexId)}
       </div>
     </section>
   `;
