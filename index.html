@@ -426,6 +426,11 @@
         <span class="map-edit-mode-label">Cartographer</span>
         <span class="map-tools-mode-tooltip" role="tooltip">Staged editing: terrain and feature painting/generation preview locally first. Use Apply Preview to save or Discard All to revert.</span>
       </button>
+      <button id="map-tools-subhex-button" type="button" class="map-edit-mode-button">
+        <span class="map-edit-mode-icon" aria-hidden="true">⬢</span>
+        <span class="map-edit-mode-label">Subhex</span>
+        <span class="map-tools-mode-tooltip" role="tooltip">Edit one parent hex at close detail scale. Click a hex to open its subhex workspace.</span>
+      </button>
       <button id="map-tools-archive-button" type="button" class="map-edit-mode-button">
         <span class="map-edit-mode-icon" aria-hidden="true">▣</span>
         <span class="map-edit-mode-label">Archive</span>
@@ -499,6 +504,11 @@
           <label><input type="checkbox" data-map-overlay-toggle="features" checked> Features</label>
           <label><input type="checkbox" data-map-overlay-toggle="pois" checked> POIs</label>
         </div>
+      </section>
+
+      <section class="map-draw-panel-section" data-map-edit-section="subhex">
+        <div class="map-draw-section-title">Subhex Detail</div>
+        <p class="map-draw-section-copy">Click a parent hex on the map to open its subhex editor.</p>
       </section>
 
       <section class="map-draw-panel-section" data-map-edit-section="terrain">
@@ -1101,7 +1111,7 @@
       </section>
     </div>
 
-    <div class="map-edit-utility-pane">
+    <div class="map-edit-utility-pane" data-map-edit-utility-pane>
       <button id="map-edit-collapse-button" class="map-edit-collapse-button" type="button" aria-expanded="true">Collapse</button>
       <div class="map-edit-history-row" aria-label="Map edit history controls">
         <button id="map-draw-no-tool" class="map-draw-no-tool" type="button">Inspect</button>
