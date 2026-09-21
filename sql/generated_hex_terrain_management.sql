@@ -1,12 +1,19 @@
 -- Generated hex terrain editing bridge.
 -- Run after hex_mapper_import_bridge.sql and generated_map_overlay_management.sql.
 
+alter table public.hexes
+add column if not exists subhex_snapshot jsonb;
+
+drop function if exists public.update_generated_hex_terrain(uuid, text, text, jsonb, integer);
+
 create or replace function public.update_generated_hex_terrain(
   target_campaign_id uuid,
   target_hex_ref text,
   target_base_terrain text,
   target_terrain_features jsonb default '[]'::jsonb,
-  target_elevation integer default null
+  target_elevation integer default null,
+  target_subhex_snapshot jsonb default null,
+  replace_subhex_snapshot boolean default false
 )
 returns public.hexes
 language plpgsql
@@ -46,6 +53,12 @@ begin
 
   if jsonb_typeof(normalized_features) <> 'array' then
     raise exception 'terrain features must be a JSON array';
+  end if;
+
+  if replace_subhex_snapshot
+     and target_subhex_snapshot is not null
+     and jsonb_typeof(target_subhex_snapshot) <> 'object' then
+    raise exception 'subhex snapshot must be a JSON object';
   end if;
 
   normalized_features := (
@@ -109,6 +122,10 @@ begin
       terrain_features = normalized_features,
       elevation = target_elevation,
       terrain = public.format_hex_mapper_terrain(normalized_base, normalized_features),
+      subhex_snapshot = case
+        when replace_subhex_snapshot then target_subhex_snapshot
+        else subhex_snapshot
+      end,
       updated_at = now()
   where campaign_id = target_campaign_id
     and ref_code = target_hex_ref
@@ -123,5 +140,5 @@ begin
 end;
 $$;
 
-grant execute on function public.update_generated_hex_terrain(uuid, text, text, jsonb, integer)
+grant execute on function public.update_generated_hex_terrain(uuid, text, text, jsonb, integer, jsonb, boolean)
 to authenticated;

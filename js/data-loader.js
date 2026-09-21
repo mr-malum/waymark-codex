@@ -88,17 +88,26 @@ async function fetchPoiRows(campaignId) {
   try {
     return await fetchAllCampaignRows(
       "pois",
-      "id, ref_code, poi_group_id, name, hex_id, poi_type, poi_icon, poi_tags, generation_source, notoriety_tier, population, lore, image_asset_id",
+      "id, ref_code, poi_group_id, name, hex_id, poi_type, poi_icon, poi_tags, generation_source, notoriety_tier, population, lore, image_asset_id, subhex_visible",
       campaignId
     );
   } catch (error) {
-    console.warn("POI icons/tags are unavailable until the latest Supabase query is run. Falling back to legacy rows.", error);
-    const legacyRows = await fetchAllCampaignRows(
-      "pois",
-      "id, ref_code, poi_group_id, name, hex_id, poi_type, notoriety_tier, population, lore, image_asset_id",
-      campaignId
-    );
-    return legacyRows.map(row => ({ ...row, poi_icon: "", poi_tags: [], generation_source: null }));
+    try {
+      const rows = await fetchAllCampaignRows(
+        "pois",
+        "id, ref_code, poi_group_id, name, hex_id, poi_type, poi_icon, poi_tags, generation_source, notoriety_tier, population, lore, image_asset_id",
+        campaignId
+      );
+      return rows.map(row => ({ ...row, subhex_visible: true }));
+    } catch (legacyError) {
+      console.warn("POI icons/tags are unavailable until the latest Supabase query is run. Falling back to legacy rows.", legacyError);
+      const legacyRows = await fetchAllCampaignRows(
+        "pois",
+        "id, ref_code, poi_group_id, name, hex_id, poi_type, notoriety_tier, population, lore, image_asset_id",
+        campaignId
+      );
+      return legacyRows.map(row => ({ ...row, poi_icon: "", poi_tags: [], generation_source: null, subhex_visible: true }));
+    }
   }
 }
 
@@ -114,7 +123,7 @@ async function fetchCampaignRows(campaignId) {
     generatedMapOverlays
   ] = await Promise.all([
     fetchAllCampaignRows("regions", "id, ref_code, name, lore, image_asset_id, region_type, border_color", campaignId),
-    fetchAllCampaignRows("hexes", "id, ref_code, terrain, map_xy, region_id, geographic_region_id, political_region_id, base_terrain, terrain_features, elevation", campaignId),
+    fetchAllCampaignRows("hexes", "id, ref_code, terrain, map_xy, region_id, geographic_region_id, political_region_id, base_terrain, terrain_features, elevation, subhex_snapshot", campaignId),
     fetchPoiGroupRows(campaignId),
     fetchPoiRows(campaignId),
     fetchAllCampaignRows("maps", "id, ref_code, name, map_type, sort_order, lore, image_asset_id, region_owner_id, poi_group_owner_id, poi_owner_id, hex_owner_id", campaignId),
@@ -527,7 +536,8 @@ function adaptCampaignRows(rows, assetsById) {
     Map_XY: hex.map_xy || "",
     Base_Terrain: hex.base_terrain || "",
     Terrain_Features: Array.isArray(hex.terrain_features) ? hex.terrain_features : [],
-    Elevation: hex.elevation == null ? "" : String(hex.elevation)
+    Elevation: hex.elevation == null ? "" : String(hex.elevation),
+    Subhex_Snapshot: hex.subhex_snapshot || null
   }));
 
   const poiGroups = rows.poiGroups.map(group => ({
@@ -554,6 +564,7 @@ function adaptCampaignRows(rows, assetsById) {
     POI_Type_Value: getLoadedPoiTypeValue(poi.poi_type),
     POI_Icon: getLoadedPoiIconValue(poi.poi_icon),
     POI_Tags: getLoadedPoiTagValues(poi.poi_tags),
+    Subhex_Visible: poi.subhex_visible !== false,
     Generation_Source: poi.generation_source || "",
     "Notoriety Tier": getLoadedPoiNotorietyLabel(poi.notoriety_tier),
     "Notoriety Tier_Value": getLoadedPoiNotorietyValue(poi.notoriety_tier),

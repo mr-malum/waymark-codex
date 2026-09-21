@@ -268,6 +268,7 @@ function setCodexDetailSection(sectionId) {
 }
 
 const codexDetailSectionStateCache = {};
+let codexHexPreviewResizeObserver = null;
 
 function getCodexDetailSectionStateKey() {
   const current = getCurrentCodexPage?.();
@@ -532,16 +533,20 @@ function renderCodexSubhexEditAction(hexId) {
 }
 
 function renderCodexHexPage(hexId) {
+  codexHexPreviewResizeObserver?.disconnect();
+  codexHexPreviewResizeObserver = null;
   const hex = db?.hexesById?.[hexId];
   const region = hex?.Region_ID_Ref ? db?.regionsById?.[hex.Region_ID_Ref] : null;
   const politicalRegion = hex?.Political_Region_ID_Ref ? db?.regionsById?.[hex.Political_Region_ID_Ref] : null;
   const pois = getPoisForHex(hexId);
   const npcs = getNpcsForHex(hexId);
   const maps = getMapsForOwner("hex", hexId);
+  const hasSubhexDetail = Boolean(isGeneratedMapCampaign?.(getActiveCampaign?.()));
 
   setCodexTitle(`Hex ${hexId}`);
 
   const railItems = [
+    ...(hasSubhexDetail ? [{ id: "codex-detail-subhex", label: "Sub-Hex", icon: getCodexIcon("hex") }] : []),
     { id: "codex-detail-journal", label: "DM Journal", icon: getCodexIcon("journal") },
     { id: "codex-detail-pois", label: "POIs", icon: getCodexIcon("poi"), count: pois.length },
     { id: "codex-detail-npcs", label: "NPCs", icon: getCodexIcon("npc"), count: npcs.length },
@@ -584,12 +589,20 @@ function renderCodexHexPage(hexId) {
   );
 
   const sections = [
-    renderCodexDetailRailSection("codex-detail-journal", "DM Journal", renderCodexJournalContent(hex), "", true, renderAddJournalAction("hex", hexId)),
+    ...(hasSubhexDetail ? [renderCodexDetailRailSection("codex-detail-subhex", "Sub-Hex", `
+      <div class="codex-hex-subhex-preview">
+        <canvas width="720" height="640" role="img" aria-label="Subhex map of hex ${escapeHtml(hexId)}"></canvas>
+        <svg aria-hidden="true"></svg>
+      </div>
+      <div class="codex-hex-subhex-scale" aria-label="Map scale: one hex equals 1 mile"><span aria-hidden="true">⬡</span> = 1 mi</div>
+    `, "", true)] : []),
+    renderCodexDetailRailSection("codex-detail-journal", "DM Journal", renderCodexJournalContent(hex), "", !hasSubhexDetail, renderAddJournalAction("hex", hexId)),
     renderCodexDetailRailSection("codex-detail-pois", "Points of Interest", renderCodexPoiLinkedList(pois, "No known points of interest in this hex.", "poi", "POI_ID", buildPoiListLabel), "", false, addPoiAction),
     renderCodexDetailRailSection("codex-detail-npcs", "NPCs", renderCodexLinkedList(npcs, "No known NPCs associated with this hex.", "npc", "NPC_ID", buildNpcListLabel), "", false, addNpcAction),
     renderCodexDetailRailSection("codex-detail-maps", "Maps", renderCodexMapsContent(maps, "No maps recorded for this hex."), "", false, renderMapSectionActions("hex", hexId, maps))
   ].join("");
 
+  if (hasSubhexDetail) cacheCodexDetailSection("codex-detail-subhex");
   setCodexContent(renderCodexDetailRailPage(overview, railItems, sections, {
     targetType: "hexes",
     targetId: hex?.__uuid || ""
@@ -599,6 +612,32 @@ function renderCodexHexPage(hexId) {
   }));
 
   document.getElementById("codex-content").classList.add("codex-detail-page", "codex-hex-detail-page");
+  if (hasSubhexDetail) {
+    const preview = document.querySelector("#codex-detail-subhex .codex-hex-subhex-preview");
+    const content = preview?.parentElement;
+    const fitPreview = () => {
+      if (!preview?.isConnected) return;
+      if (window.matchMedia("(max-width: 700px)").matches) {
+        preview.style.width = "";
+        return;
+      }
+      if (content.clientHeight < 100) return;
+      const availableHeight = content.clientHeight - 48;
+      preview.style.width = `${Math.max(100, Math.min(500, content.clientWidth, availableHeight * 9 / 8))}px`;
+    };
+    if (content) {
+      codexHexPreviewResizeObserver = new ResizeObserver(fitPreview);
+      codexHexPreviewResizeObserver.observe(content);
+    }
+    fitPreview();
+    let attempts = 0;
+    const paintPreview = () => {
+      if (!preview?.isConnected) return;
+      const ready = window.generatedMapRenderer?.renderSubhexPreview?.(hexId, preview);
+      if (ready === false && attempts++ < 20) window.setTimeout(paintPreview, 250);
+    };
+    paintPreview();
+  }
 }
 
 function renderCodexRegionTerrainRows(regionName, terrainCounts) {

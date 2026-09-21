@@ -53,6 +53,52 @@
   border-bottom: 1px solid rgba(72, 43, 18, 0.18);
 }
 
+.codex-hex-subhex-preview {
+  position: relative;
+  width: min(100%, 500px);
+  margin: 0 auto;
+  aspect-ratio: 9 / 8;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 8%, #000 92%, transparent),
+    linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent, #000 8%, #000 92%, transparent),
+    linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
+  mask-composite: intersect;
+}
+
+.codex-hex-subhex-preview canvas,
+.codex-hex-subhex-preview svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.codex-hex-subhex-preview svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.codex-hex-subhex-scale {
+  margin: 3px auto 0;
+  color: rgba(57, 35, 19, 0.84);
+  font-family: "Marcellus SC", Georgia, serif;
+  font-size: 0.9rem;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.codex-hex-subhex-scale > span {
+  display: inline-block;
+  font-size: 1.12em;
+  transform: rotate(30deg);
+  vertical-align: -0.04em;
+}
+
 #codex-content .codex-detail-overview-panel h3 {
   display: none;
 }

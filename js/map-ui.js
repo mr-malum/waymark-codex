@@ -247,7 +247,7 @@ function buildMobilePopupHtml(hexId, options = {}) {
 
   const info = [];
   const disablePoiLinks = options.detailsDisabled === true || options.disablePoiLinks === true;
-  const showSubhexEdit = options.detailsDisabled === true && options.subhexEditorEnabled === true;
+  const showDetails = options.detailsDisabled !== true || options.subhexEditorEnabled === true;
 
   if (counts.npcCount > 0) {
     info.push(`${counts.npcCount} NPC${counts.npcCount !== 1 ? "s" : ""}`);
@@ -271,27 +271,17 @@ function buildMobilePopupHtml(hexId, options = {}) {
       }
       ${renderPopupPoiList(hexId, { disablePoiLinks })}
 
-      <div class="popup-action-row${options.detailsDisabled && !showSubhexEdit ? " popup-action-row-editor-preview" : ""}">
+      <div class="popup-action-row${!showDetails ? " popup-action-row-editor-preview" : ""}">
         ${
-          options.detailsDisabled
-            ? (
-              showSubhexEdit
-                ? `<button
-                    class="popup-open-subhex"
-                    type="button"
-                    onclick="openGeneratedSubhexEditor('${escapeJsString(hexId)}')"
-                  >
-                    Edit
-                  </button>`
-                : ""
-            )
-            : `<button
+          showDetails
+            ? `<button
                 class="popup-open-details"
                 type="button"
                 onclick="openCodexPage('hex', '${escapeJsString(hexId)}')"
               >
                 Details
               </button>`
+            : ""
         }
         <button
           class="popup-add-poi"
