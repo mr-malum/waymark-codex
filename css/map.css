@@ -3363,12 +3363,13 @@ body.generated-map-subhex-editor-active .map-generation-popout {
 }
 
 .generated-map-subhex-editor-rail-main {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .generated-map-subhex-editor-terrain-options,
 .generated-map-subhex-editor-feature-options,
-.generated-map-subhex-editor-anchor-options {
+.generated-map-subhex-editor-anchor-options,
+.generated-map-subhex-editor-wall-options {
   display: none;
   align-items: center;
   gap: 6px;
@@ -3385,18 +3386,51 @@ body.generated-map-subhex-editor-active .map-generation-popout {
     0 10px 18px rgba(0, 0, 0, 0.14);
 }
 
-.generated-map-subhex-editor-shell.is-subhex-terrain-tool .generated-map-subhex-editor-terrain-options {
+.generated-map-subhex-editor-shell.is-subhex-terrain-tool .generated-map-subhex-editor-terrain-options,
+.generated-map-subhex-editor-shell.is-subhex-terrain-tool .generated-map-subhex-editor-feature-options,
+.generated-map-subhex-editor-shell.is-subhex-feature-tool .generated-map-subhex-editor-terrain-options,
+.generated-map-subhex-editor-shell.is-subhex-feature-tool .generated-map-subhex-editor-feature-options {
   display: flex;
 }
 
-.generated-map-subhex-editor-shell.is-subhex-feature-tool .generated-map-subhex-editor-feature-options,
-.generated-map-subhex-editor-shell.is-subhex-anchor-tool .generated-map-subhex-editor-anchor-options {
+.generated-map-subhex-editor-shell.is-subhex-anchor-tool .generated-map-subhex-editor-anchor-options,
+.generated-map-subhex-editor-shell.is-subhex-anchor-tool .generated-map-subhex-editor-wall-options {
   display: flex;
 }
 
 .generated-map-subhex-editor-anchor-options {
   align-items: stretch;
   flex-direction: column;
+}
+
+.generated-map-subhex-editor-wall-options {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid rgba(214, 168, 94, 0.20);
+  border-radius: 6px;
+  background: rgba(18, 12, 8, 0.24);
+}
+
+.generated-map-subhex-editor-wall-type-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.generated-map-subhex-editor-wall-subheading {
+  color: rgba(244, 223, 175, 0.72);
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.generated-map-subhex-editor-wall-stamps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .generated-map-subhex-editor-anchor-section {
@@ -3680,7 +3714,7 @@ body.generated-map-subhex-editor-active .map-generation-popout {
   cursor: grab;
   fill: rgba(255, 238, 174, 0.78);
   stroke: rgba(55, 31, 12, 0.94);
-  stroke-width: 1.3;
+  stroke-width: 1.25;
   vector-effect: non-scaling-stroke;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.44));
   touch-action: none;
@@ -3691,10 +3725,302 @@ body.generated-map-subhex-editor-active .map-generation-popout {
   stroke-width: 1.8;
 }
 
+.generated-map-subhex-editor-wall-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.generated-map-subhex-editor-route-anchor.is-river {
+  fill: rgba(184, 229, 241, 0.82);
+  stroke: rgba(22, 71, 88, 0.96);
+}
+
+.generated-map-subhex-editor-route-anchor {
+  stroke-width: 0.9;
+}
+
+.generated-map-subhex-editor-junction-anchor.is-river {
+  fill: #a9dce9;
+  stroke: rgba(22, 71, 88, 0.96);
+}
+
+.generated-map-subhex-editor-anchor-plus {
+  pointer-events: none;
+  fill: rgba(48, 31, 17, 0.96);
+  font-family: Arial, sans-serif;
+  font-size: 2.6px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.generated-map-subhex-editor-anchor-plus.is-wall {
+  fill: #343735;
+  font-size: 2.6px;
+}
+
 .generated-map-subhex-editor-poi-anchor {
   fill: rgba(255, 238, 174, 0.22);
   stroke: rgba(255, 238, 174, 0.95);
   stroke-dasharray: 2 2;
+}
+
+.generated-map-subhex-editor-wall-anchor {
+  pointer-events: auto;
+  cursor: grab;
+  fill: rgba(226, 228, 225, 0.92);
+  stroke: rgba(55, 58, 55, 0.96);
+  stroke-width: 0.9;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.48));
+  touch-action: none;
+}
+
+.generated-map-subhex-editor-wall-anchor.is-fixture.is-gate {
+  fill: rgba(138, 85, 45, 0.58);
+  stroke: rgba(65, 35, 16, 0.96);
+}
+
+.generated-map-subhex-editor-wall-anchor.is-fixture.is-sluice {
+  fill: rgba(142, 215, 232, 0.58);
+  stroke: rgba(35, 93, 107, 0.96);
+}
+
+.generated-map-subhex-editor-wall-shared-glyph {
+  pointer-events: none;
+  fill: #343735;
+  font-family: Arial, sans-serif;
+  font-size: 2.4px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.generated-map-subhex-editor-wall-hit {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.generated-map-subhex-editor-wall-group.is-add-hovered .generated-map-subhex-wall {
+  filter: drop-shadow(0 0 2px rgba(255, 237, 167, 0.98));
+}
+
+.generated-map-subhex-editor-wall-group.is-delete-hovered .generated-map-subhex-wall {
+  filter: drop-shadow(0 0 2px rgba(255, 92, 73, 0.98));
+}
+
+.generated-map-subhex-editor-shell[data-subhex-wall-action="remove"] .generated-map-subhex-editor-wall-anchor:hover {
+  fill: rgba(255, 130, 112, 0.96);
+  stroke: rgba(106, 16, 10, 0.98);
+}
+
+.generated-map-subhex-editor-shell[data-subhex-wall-action="remove"] .generated-map-subhex-wall-tower[data-subhex-wall-junction-key]:hover {
+  fill: rgba(255, 130, 112, 0.96);
+  stroke: rgba(106, 16, 10, 0.98);
+}
+
+.generated-map-subhex-editor-shell[data-subhex-wall-action="tower"] .generated-map-subhex-editor-wall-anchor:hover,
+.generated-map-subhex-editor-shell[data-subhex-wall-action="gate"] .generated-map-subhex-editor-wall-anchor:hover,
+.generated-map-subhex-editor-shell[data-subhex-wall-action="sluice"] .generated-map-subhex-editor-wall-anchor:hover {
+  fill: rgba(255, 239, 179, 0.98);
+  stroke: rgba(93, 57, 18, 0.98);
+}
+
+.generated-map-subhex-editor-shell[data-subhex-wall-action="tower"] .generated-map-subhex-wall-tower[data-subhex-wall-junction-key]:hover,
+.generated-map-subhex-editor-shell[data-subhex-wall-action="gate"] .generated-map-subhex-wall-tower[data-subhex-wall-junction-key]:hover,
+.generated-map-subhex-editor-shell[data-subhex-wall-action="sluice"] .generated-map-subhex-wall-tower[data-subhex-wall-junction-key]:hover {
+  fill: rgba(255, 239, 179, 0.98);
+  stroke: rgba(93, 57, 18, 0.98);
+}
+
+.generated-map-subhex-wall {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.generated-map-subhex-wall-base {
+  stroke: #252522;
+  stroke-width: 5.5;
+}
+
+.generated-map-subhex-wall-body {
+  stroke: #56534b;
+  stroke-width: 3.4;
+}
+
+.generated-map-subhex-wall-crenellations {
+  stroke: #aaa494;
+  stroke-width: 1.25;
+  stroke-dasharray: 1.3 4.6;
+  stroke-linecap: butt;
+}
+
+.generated-map-subhex-wall-palisade-shadow {
+  stroke: #1d120b;
+  stroke-width: 5.2;
+}
+
+.generated-map-subhex-wall-palisade-rail {
+  stroke: #8a4f27;
+  stroke-width: 2.5;
+}
+
+.generated-map-subhex-wall-palisade-stakes {
+  stroke: #d29a57;
+  stroke-width: 1.2;
+  stroke-linecap: square;
+}
+
+.generated-map-subhex-wall-base.is-compact {
+  stroke-width: 1.2;
+}
+
+.generated-map-subhex-wall-body.is-compact {
+  stroke-width: 0.72;
+}
+
+.generated-map-subhex-wall-crenellations.is-compact {
+  stroke-width: 0.3;
+  stroke-dasharray: 0.38 1.08;
+}
+
+.generated-map-subhex-wall-palisade-shadow.is-compact {
+  stroke-width: 1.15;
+}
+
+.generated-map-subhex-wall-palisade-rail.is-compact {
+  stroke-width: 0.58;
+}
+
+.generated-map-subhex-wall-palisade-stakes.is-compact {
+  stroke-width: 0.3;
+}
+
+.generated-map-subhex-wall-tower {
+  fill: #69665e;
+  stroke: #252522;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.generated-map-subhex-wall-tower-crenellations {
+  fill: none;
+  stroke: #d0cab9;
+  stroke-width: 0.75;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.generated-map-subhex-wall-fixture {
+  stroke: #2d1b0e;
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.generated-map-subhex-wall-fixture.is-gate {
+  fill: #8a552d;
+}
+
+.generated-map-subhex-wall-fixture.is-sluice {
+  fill: #8ed7e8;
+  stroke: #235d6b;
+}
+
+.generated-map-subhex-wall-fixture-bars {
+  fill: none;
+  stroke: #e6f7fa;
+  stroke-width: 0.65;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.generated-map-subhex-wall-tower.is-compact,
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-tower,
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-tower {
+  stroke-width: 0.6;
+}
+
+.generated-map-subhex-wall-tower-crenellations.is-compact,
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-tower-crenellations,
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-tower-crenellations {
+  stroke-width: 0.35;
+}
+
+.generated-map-subhex-wall-fixture.is-compact,
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-fixture,
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-fixture {
+  stroke-width: 0.4;
+}
+
+.generated-map-subhex-wall-fixture-bars.is-compact,
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-fixture-bars,
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-fixture-bars {
+  stroke-width: 0.33;
+}
+
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-base {
+  stroke-width: 1.2;
+}
+
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-body {
+  stroke-width: 0.72;
+}
+
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-crenellations {
+  stroke-width: 0.3;
+  stroke-dasharray: 0.38 1.08;
+}
+
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-palisade-shadow {
+  stroke-width: 1.15;
+}
+
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-palisade-rail {
+  stroke-width: 0.58;
+}
+
+.generated-map-subhex-editor-shell .generated-map-subhex-wall-palisade-stakes {
+  stroke-width: 0.3;
+}
+
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-base {
+  stroke-width: 1.2;
+}
+
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-body {
+  stroke-width: 0.72;
+}
+
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-crenellations {
+  stroke-width: 0.3;
+  stroke-dasharray: 0.38 1.08;
+}
+
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-palisade-shadow {
+  stroke-width: 1.15;
+}
+
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-palisade-rail {
+  stroke-width: 0.58;
+}
+
+.generated-map-subhex-detail-walls .generated-map-subhex-wall-palisade-stakes {
+  stroke-width: 0.3;
+}
+
+.generated-map-subhex-editor-shell.is-subhex-anchor-tool .generated-map-subhex-wall-tower[data-subhex-wall-junction-key] {
+  fill: rgba(226, 228, 225, 0.96);
+  cursor: grab;
+  pointer-events: auto;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.48));
+  touch-action: none;
 }
 
 .generated-map-subhex-editor-cell {

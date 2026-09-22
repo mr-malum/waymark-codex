@@ -120,7 +120,8 @@ async function fetchCampaignRows(campaignId) {
     maps,
     npcs,
     dmJournal,
-    generatedMapOverlays
+    generatedMapOverlays,
+    generatedSubhexWalls
   ] = await Promise.all([
     fetchAllCampaignRows("regions", "id, ref_code, name, lore, image_asset_id, region_type, border_color", campaignId),
     fetchAllCampaignRows("hexes", "id, ref_code, terrain, map_xy, region_id, geographic_region_id, political_region_id, base_terrain, terrain_features, elevation, subhex_snapshot", campaignId),
@@ -129,7 +130,8 @@ async function fetchCampaignRows(campaignId) {
     fetchAllCampaignRows("maps", "id, ref_code, name, map_type, sort_order, lore, image_asset_id, region_owner_id, poi_group_owner_id, poi_owner_id, hex_owner_id", campaignId),
     fetchAllCampaignRows("npcs", "id, ref_code, home_poi_id, title, name, organization, race, occupation, lore, image_asset_id", campaignId),
     fetchAllCampaignRows("dm_journal", "id, ref_code, entry_title, entry_body, entry_type, source_type, source_id, occurred_at, created_by_user_id, session_id, visibility", campaignId),
-    fetchOptionalCampaignRows("generated_map_overlays", "id, overlay_type, from_hex_id, to_hex_id, hex_id, edge, style, is_major_route, route_name", campaignId)
+    fetchOptionalCampaignRows("generated_map_overlays", "id, overlay_type, from_hex_id, to_hex_id, hex_id, edge, style, is_major_route, route_name", campaignId),
+    fetchOptionalCampaignRows("generated_subhex_walls", "id, style, points", campaignId)
   ]);
 
   const journalAuthorIds = [...new Set(
@@ -158,6 +160,7 @@ async function fetchCampaignRows(campaignId) {
     npcs,
     dmJournal,
     generatedMapOverlays,
+    generatedSubhexWalls,
     journalProfiles
   };
 }
@@ -631,6 +634,12 @@ function adaptCampaignRows(rows, assetsById) {
     Route_Name: overlay.route_name || ""
   }));
 
+  const generatedSubhexWalls = (rows.generatedSubhexWalls || []).map(wall => ({
+    __uuid: wall.id,
+    Style: wall.style || "wall",
+    Points: Array.isArray(wall.points) ? wall.points : []
+  }));
+
   const sourceMaps = {
     region: recordMaps.regionsByUuid,
     hex: recordMaps.hexesByUuid,
@@ -669,7 +678,8 @@ function adaptCampaignRows(rows, assetsById) {
     poiGroups,
     maps,
     dmJournal,
-    generatedMapOverlays
+    generatedMapOverlays,
+    generatedSubhexWalls
   };
 }
 
@@ -890,6 +900,7 @@ async function loadDatabase() {
     mapsById: indexById(appData.maps, "Map_ID"),
     dmJournalById: indexById(appData.dmJournal, "Entry_ID"),
     generatedMapOverlaysById: indexById(appData.generatedMapOverlays, "__uuid"),
+    generatedSubhexWallsById: indexById(appData.generatedSubhexWalls, "__uuid"),
     auditLog: appData.auditLog,
     auditSettings: appData.auditSettings,
 

@@ -550,6 +550,7 @@
     poisByHexId: new Map(),
     poiRenderHexes: [],
     mapOverlays: [],
+    subhexWalls: [],
     routeLabelCache: { key: "", labels: [] },
     gridSvg: null,
     gridLayerKey: "",
@@ -586,7 +587,9 @@
     subhexEditorTerrainOptions: null,
     subhexEditorFeatureOptions: null,
     subhexEditorAnchorOptions: null,
+    subhexEditorWallOptions: null,
     subhexEditorAnchorDrafts: new Map(),
+    subhexEditorWallDrafts: new Map(),
     subhexEditorPoiVisibilityDrafts: new Map(),
     subhexEditorUndoStack: [],
     subhexEditorRedoStack: [],
@@ -670,6 +673,9 @@
       subhexEditorTerrainBase: "plains",
       subhexEditorFeatureBrush: "woods",
       subhexEditorAnchorAction: "",
+      subhexEditorWallAction: "",
+      subhexEditorWallStyle: "wall",
+      subhexEditorSelectedWallId: "",
       subhexEditorHoveredRouteKey: "",
       subhexEditorTerrainDraft: new Map(),
       subhexEditorDragActive: false,
@@ -853,6 +859,28 @@
                 <div class="generated-map-subhex-editor-poi-visibility-list" data-subhex-editor-poi-visibility-list></div>
               </div>
             </div>
+            <div class="generated-map-subhex-editor-wall-options" role="group" aria-label="Sub-hex wall tools">
+              <div class="generated-map-subhex-editor-anchor-heading">Walls</div>
+              <div class="generated-map-subhex-editor-wall-subheading">Wall Type</div>
+              <div class="generated-map-subhex-editor-wall-type-row">
+                <button class="generated-map-subhex-editor-anchor-option is-active" type="button" data-subhex-editor-wall-style="wall">Stone</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-wall-style="palisade">Palisade</button>
+              </div>
+              <div class="generated-map-subhex-editor-wall-subheading">Wall Tools</div>
+              <div class="generated-map-subhex-editor-wall-actions">
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-wall-action="new">New Wall</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-wall-action="finish">Finish</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-wall-action="add">Add Anchor</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-wall-action="remove">Remove Anchor</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-wall-action="remove-wall">Remove Wall</button>
+              </div>
+              <div class="generated-map-subhex-editor-wall-subheading">Anchor Stamps</div>
+              <div class="generated-map-subhex-editor-wall-stamps">
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-wall-action="tower">Tower</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-wall-action="gate">Gate</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-wall-action="sluice">Sluice Gate</button>
+              </div>
+            </div>
             <div class="generated-map-subhex-editor-inspector" aria-live="polite">Select a subhex.</div>
             <div class="map-edit-utility-pane generated-map-subhex-editor-actions">
               <div class="map-edit-history-row generated-map-subhex-editor-history-row" aria-label="Subhex edit history controls">
@@ -884,8 +912,7 @@
               <button type="button" class="generated-map-subhex-editor-tool map-edit-mode-button" disabled><span class="map-edit-mode-icon" aria-hidden="true">◌</span><span class="map-edit-mode-label">View</span></button>
             </div>
             <div class="map-edit-rail-main generated-map-subhex-editor-rail-main">
-              <button type="button" class="generated-map-subhex-editor-tool map-edit-mode-button is-active" data-subhex-editor-tool="terrain"><span class="map-edit-mode-icon" aria-hidden="true">⬢</span><span class="map-edit-mode-label">Terrain</span></button>
-              <button type="button" class="generated-map-subhex-editor-tool map-edit-mode-button" data-subhex-editor-tool="feature"><span class="map-edit-mode-icon" aria-hidden="true">✦</span><span class="map-edit-mode-label">Features</span></button>
+              <button type="button" class="generated-map-subhex-editor-tool map-edit-mode-button is-active" data-subhex-editor-tool="terrain"><span class="map-edit-mode-icon" aria-hidden="true">⬢</span><span class="map-edit-mode-label">Terrain &amp; Features</span></button>
               <button type="button" class="generated-map-subhex-editor-tool map-edit-mode-button" data-subhex-editor-tool="anchor"><span class="map-edit-mode-icon" aria-hidden="true">⌖</span><span class="map-edit-mode-label">Anchors</span></button>
             </div>
           </div>
@@ -923,6 +950,7 @@
     renderer.subhexEditorTerrainOptions = renderer.root.querySelector(".generated-map-subhex-editor-terrain-options");
     renderer.subhexEditorFeatureOptions = renderer.root.querySelector(".generated-map-subhex-editor-feature-options");
     renderer.subhexEditorAnchorOptions = renderer.root.querySelector(".generated-map-subhex-editor-anchor-options");
+    renderer.subhexEditorWallOptions = renderer.root.querySelector(".generated-map-subhex-editor-wall-options");
     renderer.loadingVeil = renderer.root.querySelector(".generated-map-loading-veil");
     ensureRendererPerfApi();
     if (renderer.loadingVeil) {
@@ -977,6 +1005,7 @@
         }
         renderer.drawing.subhexEditorInspectMode = false;
         renderer.drawing.subhexEditorAnchorAction = "";
+        renderer.drawing.subhexEditorWallAction = "";
         renderer.drawing.subhexEditorHoveredRouteKey = "";
         syncSubhexEditorToolbar();
         renderSubhexEditorShell();
@@ -1008,6 +1037,25 @@
       recordSubhexEditorDraftChange(before);
       renderSubhexEditorShell();
     });
+    renderer.subhexEditorWallOptions?.addEventListener("click", event => {
+      const styleButton = event.target.closest?.("[data-subhex-editor-wall-style]");
+      const actionButton = event.target.closest?.("[data-subhex-editor-wall-action]");
+      if ((!styleButton && !actionButton) || renderer.drawing.saving) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (styleButton) {
+        renderer.drawing.subhexEditorWallStyle = styleButton.dataset.subhexEditorWallStyle || "wall";
+        const selected = getEffectiveSubhexWall(renderer.drawing.subhexEditorSelectedWallId);
+        if (selected) {
+          const before = captureSubhexEditorDraft();
+          setSubhexWallDraft({ ...selected, Style: renderer.drawing.subhexEditorWallStyle });
+          recordSubhexEditorDraftChange(before);
+        }
+      } else {
+        handleSubhexEditorWallAction(actionButton.dataset.subhexEditorWallAction || "");
+      }
+      renderSubhexEditorShell();
+    });
     renderer.subhexEditorShell?.querySelector("[data-subhex-editor-inspect-toggle]")?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -1025,6 +1073,7 @@
     renderer.subhexEditorSvg?.addEventListener("pointerdown", handleSubhexEditorAnchorPointerDown);
     renderer.subhexEditorSvg?.addEventListener("pointermove", handleSubhexEditorAnchorPointerMove);
     renderer.subhexEditorSvg?.addEventListener("pointermove", handleSubhexEditorRouteHover);
+    renderer.subhexEditorSvg?.addEventListener("pointermove", handleSubhexEditorWallHover);
     renderer.subhexEditorSvg?.addEventListener("pointerleave", () => setSubhexEditorHoveredRoute(""));
     renderer.subhexEditorSvg?.addEventListener("pointerup", handleSubhexEditorAnchorPointerUp);
     renderer.subhexEditorSvg?.addEventListener("pointercancel", handleSubhexEditorAnchorPointerCancel);
@@ -1200,6 +1249,7 @@
     renderer.poiHexIds = new Set(renderer.poisByHexId.keys());
     rebuildPoiRenderHexes();
     renderer.mapOverlays = db?.raw?.generatedMapOverlays || [];
+    renderer.subhexWalls = db?.raw?.generatedSubhexWalls || [];
     bumpOverlayRevision();
     markAllMapCachesDirty();
     updateDrawClearButton();
@@ -1289,6 +1339,7 @@
   function refreshOverlayLayerFromDatabase() {
     if (!isActive()) return;
     renderer.mapOverlays = db?.raw?.generatedMapOverlays || [];
+    renderer.subhexWalls = db?.raw?.generatedSubhexWalls || [];
     bumpOverlayRevision();
     markRouteCacheDirty();
     markOverlayCacheDirty();
@@ -2974,6 +3025,8 @@
     renderer.drawing.subhexEditorSelectedKey = "";
     renderer.drawing.subhexEditorTerrainBase = "plains";
     renderer.drawing.subhexEditorFeatureBrush = "woods";
+    renderer.drawing.subhexEditorWallStyle = "wall";
+    renderer.drawing.subhexEditorSelectedWallId = "";
     renderer.drawing.subhexEditorTerrainDraft = new Map();
     renderer.subhexEditorUndoStack = [];
     renderer.subhexEditorRedoStack = [];
@@ -2982,6 +3035,8 @@
     renderer.drawing.subhexEditorDragPaintedKeys = new Set();
     renderer.drawing.subhexEditorSuppressClickUntil = 0;
     renderer.subhexEditorAnchorDrafts = new Map();
+    renderer.subhexEditorWallDrafts = new Map();
+    renderer.drawing.subhexEditorWallAction = "";
     renderer.subhexEditorPoiVisibilityDrafts = new Map();
     renderer.subhexEditorActiveAnchorDrag = null;
     renderer.subhexEditorLayout = null;
@@ -5279,6 +5334,7 @@
     const previousTools = options.preserveTools ? {
       terrainBase: renderer.drawing.subhexEditorTerrainBase,
       featureBrush: renderer.drawing.subhexEditorFeatureBrush,
+      wallStyle: renderer.drawing.subhexEditorWallStyle,
       tool: renderer.drawing.subhexEditorTool,
       inspectMode: renderer.drawing.subhexEditorInspectMode
     } : null;
@@ -5289,9 +5345,12 @@
     renderer.drawing.subhexEditorTerrainBase = previousTools?.terrainBase
       || (hex.baseTerrain && TERRAIN_COLORS[hex.baseTerrain] ? hex.baseTerrain : "plains");
     renderer.drawing.subhexEditorFeatureBrush = previousTools?.featureBrush || "woods";
+    renderer.drawing.subhexEditorWallStyle = previousTools?.wallStyle || "wall";
     renderer.drawing.subhexEditorTool = previousTools?.tool || "terrain";
     renderer.drawing.subhexEditorInspectMode = previousTools?.inspectMode || false;
     renderer.drawing.subhexEditorAnchorAction = "";
+    renderer.drawing.subhexEditorWallAction = "";
+    renderer.drawing.subhexEditorSelectedWallId = "";
     renderer.drawing.subhexEditorHoveredRouteKey = "";
     renderer.drawing.subhexEditorTerrainDraft = new Map();
     renderer.subhexEditorUndoStack = [];
@@ -5301,6 +5360,8 @@
     renderer.drawing.subhexEditorDragPaintedKeys = new Set();
     renderer.drawing.subhexEditorSuppressClickUntil = 0;
     renderer.subhexEditorAnchorDrafts = new Map();
+    renderer.subhexEditorWallDrafts = new Map();
+    reconcileSubhexWallJunctions();
     renderer.subhexEditorPoiVisibilityDrafts = new Map();
     renderer.subhexEditorActiveAnchorDrag = null;
     renderer.subhexEditorStage?.classList.remove("is-over-neighbor");
@@ -5344,6 +5405,7 @@
     if (!neighbor || neighbor.id === renderer.drawing.subhexEditorHexId) return false;
     const hasDrafts = renderer.drawing.subhexEditorTerrainDraft?.size
       || renderer.subhexEditorAnchorDrafts?.size
+      || renderer.subhexEditorWallDrafts?.size
       || renderer.subhexEditorPoiVisibilityDrafts?.size;
     if (hasDrafts && !window.confirm(`Discard unapplied detail edits and open Hex ${neighbor.label || neighbor.id}?`)) return true;
     return openSubhexEditor(neighbor.id, {
@@ -5378,6 +5440,8 @@
     renderer.drawing.subhexEditorTool = "terrain";
     renderer.drawing.subhexEditorInspectMode = false;
     renderer.drawing.subhexEditorAnchorAction = "";
+    renderer.drawing.subhexEditorWallAction = "";
+    renderer.drawing.subhexEditorSelectedWallId = "";
     renderer.drawing.subhexEditorHoveredRouteKey = "";
     renderer.drawing.subhexEditorTerrainDraft = new Map();
     renderer.subhexEditorUndoStack = [];
@@ -5387,6 +5451,7 @@
     renderer.drawing.subhexEditorDragPaintedKeys = new Set();
     renderer.drawing.subhexEditorSuppressClickUntil = 0;
     renderer.subhexEditorAnchorDrafts = new Map();
+    renderer.subhexEditorWallDrafts = new Map();
     renderer.subhexEditorPoiVisibilityDrafts = new Map();
     renderer.subhexEditorActiveAnchorDrag = null;
     renderer.subhexEditorLayout = null;
@@ -5442,6 +5507,7 @@
     return JSON.stringify({
       terrain: [...renderer.drawing.subhexEditorTerrainDraft],
       anchors: [...renderer.subhexEditorAnchorDrafts],
+      walls: [...renderer.subhexEditorWallDrafts],
       poiVisibility: [...renderer.subhexEditorPoiVisibilityDrafts]
     });
   }
@@ -5463,6 +5529,7 @@
     const state = JSON.parse(snapshot);
     renderer.drawing.subhexEditorTerrainDraft = new Map(state.terrain || []);
     renderer.subhexEditorAnchorDrafts = new Map(state.anchors || []);
+    renderer.subhexEditorWallDrafts = new Map(state.walls || []);
     renderer.subhexEditorPoiVisibilityDrafts = new Map(state.poiVisibility || []);
     renderSubhexEditorShell();
   }
@@ -5857,6 +5924,431 @@
     return { x: a.x + rx * t, y: a.y + ry * t };
   }
 
+  function cloneSubhexWall(wall) {
+    return wall ? {
+      ...wall,
+      Points: (wall.Points || []).map(point => ({ ...point }))
+    } : null;
+  }
+
+  function getEffectiveSubhexWalls() {
+    const walls = new Map((renderer.subhexWalls || []).map(wall => [wall.__uuid, cloneSubhexWall(wall)]));
+    renderer.subhexEditorWallDrafts?.forEach((draft, id) => {
+      if (draft?.Deleted) walls.delete(id);
+      else walls.set(id, cloneSubhexWall(draft));
+    });
+    return [...walls.values()];
+  }
+
+  function getEffectiveSubhexWall(id) {
+    return id ? getEffectiveSubhexWalls().find(wall => wall.__uuid === id) || null : null;
+  }
+
+  function setSubhexWallDraft(wall) {
+    if (!wall?.__uuid) return;
+    renderer.subhexEditorWallDrafts.set(wall.__uuid, cloneSubhexWall(wall));
+  }
+
+  function toggleSubhexWallAnchorStamp(refs, stamp) {
+    const validRefs = (refs || []).filter(ref => Number.isInteger(ref.index));
+    if (!validRefs.length) return false;
+    const currentPoints = validRefs.map(ref => getEffectiveSubhexWall(ref.wallId)?.Points?.[ref.index]).filter(Boolean);
+    if (!currentPoints.length) return false;
+    const enabled = stamp === "tower"
+      ? !currentPoints.every(point => point.tower)
+      : !currentPoints.every(point => point.fixture === stamp);
+    const refsByWall = new Map();
+    validRefs.forEach(ref => {
+      if (!refsByWall.has(ref.wallId)) refsByWall.set(ref.wallId, []);
+      refsByWall.get(ref.wallId).push(ref.index);
+    });
+    refsByWall.forEach((indexes, wallId) => {
+      const next = cloneSubhexWall(getEffectiveSubhexWall(wallId));
+      if (!next) return;
+      indexes.forEach(index => {
+        const point = next.Points[index];
+        if (!point) return;
+        if (stamp === "tower") {
+          point.tower = enabled;
+          if (enabled) delete point.fixture;
+        } else if (enabled) {
+          point.fixture = stamp;
+          point.tower = false;
+        } else {
+          delete point.fixture;
+        }
+      });
+      setSubhexWallDraft(next);
+    });
+    return true;
+  }
+
+  function getSubhexWallPath(wall) {
+    const points = wall?.Points || [];
+    if (points.length < 2) return "";
+    return points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
+  }
+
+  function getSubhexWallBoundaryPoint(point, hex = getSubhexEditorActiveParentHex(), forceShared = false) {
+    if (!point || !hex?.points?.length) return point;
+    let nearest = null;
+    hex.points.forEach((a, edgeIndex) => {
+      const b = hex.points[(edgeIndex + 1) % hex.points.length];
+      const candidate = getNearestPointOnSegment(point, a, b);
+      const distance = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+      if (!nearest || distance < nearest.distance) nearest = { point: candidate, edgeIndex, distance };
+    });
+    const threshold = Math.max(2.4, getSubhexMetrics().radius * 0.34);
+    const outside = !pointInPolygon(point, hex.points);
+    if (!nearest || (!forceShared && !outside && nearest.distance > threshold)) return clampSubhexEditorPointToParent(point, hex);
+    const edgeName = EDGE_NAMES[nearest.edgeIndex];
+    const neighbor = getNeighborHex(hex, edgeName);
+    return {
+      x: nearest.point.x,
+      y: nearest.point.y,
+      shared: Boolean(neighbor),
+      borderHexIds: neighbor ? [hex.id, neighbor.id].sort() : [hex.id],
+      edgeName
+    };
+  }
+
+  function constrainSubhexWallPoint(point, existingPoint, hex = getSubhexEditorActiveParentHex()) {
+    if (!existingPoint?.shared || existingPoint.borderHexIds?.length !== 2) {
+      return getSubhexWallBoundaryPoint(point, hex);
+    }
+    const nearestActiveBorder = getNearestPointOnPolygon(point, hex?.points || []);
+    const releaseDistance = Math.max(3.8, getSubhexMetrics().radius * 0.62);
+    if (nearestActiveBorder && pointInPolygon(point, hex.points)
+      && Math.hypot(point.x - nearestActiveBorder.x, point.y - nearestActiveBorder.y) > releaseDistance) {
+      return clampSubhexEditorPointToParent(point, hex);
+    }
+    return getSubhexWallBoundaryPoint(point, hex, true);
+  }
+
+  function makeSubhexWallId() {
+    return window.crypto?.randomUUID?.() || `wall-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  function handleSubhexEditorWallAction(action) {
+    const selectedId = renderer.drawing.subhexEditorSelectedWallId;
+    const selected = getEffectiveSubhexWall(selectedId);
+    if (action === "new") {
+      const before = captureSubhexEditorDraft();
+      if (selected?.Is_New && (selected.Points?.length || 0) < 2) {
+        renderer.subhexEditorWallDrafts.delete(selected.__uuid);
+        reconcileSubhexWallJunctions();
+      }
+      const wall = { __uuid: makeSubhexWallId(), Style: renderer.drawing.subhexEditorWallStyle || "wall", Points: [], Is_New: true };
+      setSubhexWallDraft(wall);
+      renderer.drawing.subhexEditorSelectedWallId = wall.__uuid;
+      renderer.drawing.subhexEditorWallAction = "draw";
+      recordSubhexEditorDraftChange(before);
+      return;
+    }
+    if (action === "finish") {
+      if (selected?.Points?.length >= 2) {
+        renderer.drawing.subhexEditorWallAction = "";
+        renderer.drawing.subhexEditorSelectedWallId = "";
+      }
+      return;
+    }
+    renderer.drawing.subhexEditorWallAction = renderer.drawing.subhexEditorWallAction === action ? "" : action;
+  }
+
+  function addSubhexWallPoint(wall, point, insertIndex = null) {
+    if (!wall || !point) return false;
+    const next = cloneSubhexWall(wall);
+    const snapped = getSubhexWallBoundaryPoint(point);
+    let addedIndex = null;
+    if (Number.isInteger(insertIndex)) {
+      next.Points.splice(insertIndex, 0, snapped);
+      addedIndex = insertIndex;
+    } else if (!next.Points.length) {
+      next.Points.push(snapped);
+      addedIndex = 0;
+    } else {
+      const firstDistance = Math.hypot(snapped.x - next.Points[0].x, snapped.y - next.Points[0].y);
+      const last = next.Points[next.Points.length - 1];
+      const lastDistance = Math.hypot(snapped.x - last.x, snapped.y - last.y);
+      if (renderer.drawing.subhexEditorWallAction === "add" && firstDistance < lastDistance) {
+        next.Points.unshift(snapped);
+        addedIndex = 0;
+      } else {
+        next.Points.push(snapped);
+        addedIndex = next.Points.length - 1;
+      }
+    }
+    setSubhexWallDraft(next);
+    if (!Number.isInteger(insertIndex) && next.Points.length >= 2) {
+      connectSubhexWallEndpoint({ key: next.__uuid, index: addedIndex });
+    }
+    materializeSubhexWallCrossings();
+    reconcileSubhexWallJunctions();
+    return true;
+  }
+
+  function getSubhexWallEndpointCandidates(excludedWallId, excludedIndex) {
+    return getEffectiveSubhexWalls().flatMap(wall => {
+      if (!wall.Points?.length) return [];
+      return [0, wall.Points.length - 1]
+        .filter((index, position, indexes) => indexes.indexOf(index) === position)
+        .filter(index => wall.__uuid !== excludedWallId || index !== excludedIndex)
+        .map(index => ({ wall, index, point: wall.Points[index] }));
+    });
+  }
+
+  function getSubhexWallEndpointSnap(point, excludedWallId, excludedIndex) {
+    const threshold = Math.max(4.8, getSubhexMetrics().radius * 0.85);
+    return getSubhexWallEndpointCandidates(excludedWallId, excludedIndex)
+      .map(candidate => ({
+        ...candidate,
+        distance: Math.hypot(point.x - candidate.point.x, point.y - candidate.point.y)
+      }))
+      .filter(candidate => candidate.distance <= threshold)
+      .sort((left, right) => left.distance - right.distance)[0] || null;
+  }
+
+  function getSubhexWallPointKey(point) {
+    return `${Math.round(Number(point?.x) * 10)}:${Math.round(Number(point?.y) * 10)}`;
+  }
+
+  function reconcileSubhexWallJunctions() {
+    const walls = getEffectiveSubhexWalls();
+    const refsByKey = new Map();
+    walls.forEach(wall => wall.Points.forEach((point, index) => {
+      const key = getSubhexWallPointKey(point);
+      if (!refsByKey.has(key)) refsByKey.set(key, []);
+      refsByKey.get(key).push({ wall, index });
+    }));
+    const validKeys = new Set([...refsByKey.entries()]
+      .filter(([, refs]) => new Set(refs.map(ref => ref.wall.__uuid)).size >= 2)
+      .map(([key]) => key));
+    walls.forEach(wall => {
+      const next = cloneSubhexWall(wall);
+      let changed = false;
+      next.Points.forEach(point => {
+        const shouldBeJunction = validKeys.has(getSubhexWallPointKey(point));
+        if (Boolean(point.junction) === shouldBeJunction) return;
+        changed = true;
+        if (shouldBeJunction) point.junction = true;
+        else delete point.junction;
+      });
+      if (changed) setSubhexWallDraft(next);
+    });
+  }
+
+  function removeSubhexWall(wall) {
+    if (!wall) return;
+    setSubhexWallDraft({ ...wall, Deleted: true });
+    reconcileSubhexWallJunctions();
+    if (renderer.drawing.subhexEditorSelectedWallId === wall.__uuid) {
+      renderer.drawing.subhexEditorSelectedWallId = "";
+    }
+  }
+
+  function finishDrawingSubhexWallAtAnchor(targetWallId, targetIndex) {
+    const activeId = renderer.drawing.subhexEditorSelectedWallId;
+    const active = getEffectiveSubhexWall(activeId);
+    const target = getEffectiveSubhexWall(targetWallId);
+    const targetPoint = target?.Points?.[targetIndex];
+    if (renderer.drawing.subhexEditorWallAction !== "draw" || !active?.Points?.length || !targetPoint) return false;
+    if (activeId === targetWallId && (targetIndex === active.Points.length - 1 || active.Points.length < 2)) return false;
+
+    if (activeId === targetWallId) {
+      const next = cloneSubhexWall(active);
+      next.Points[targetIndex] = { ...next.Points[targetIndex], junction: true };
+      next.Points.push({ ...next.Points[targetIndex] });
+      setSubhexWallDraft(next);
+    } else {
+      const nextActive = cloneSubhexWall(active);
+      const joint = { ...targetPoint, junction: true };
+      nextActive.Points.push(joint);
+      setSubhexWallDraft(nextActive);
+      const nextTarget = cloneSubhexWall(target);
+      nextTarget.Points[targetIndex] = { ...nextTarget.Points[targetIndex], junction: true };
+      setSubhexWallDraft(nextTarget);
+    }
+    materializeSubhexWallCrossings();
+    reconcileSubhexWallJunctions();
+    renderer.drawing.subhexEditorWallAction = "";
+    renderer.drawing.subhexEditorSelectedWallId = "";
+    return true;
+  }
+
+  function connectSubhexWallEndpoint(drag) {
+    const wall = getEffectiveSubhexWall(drag?.key);
+    if (!wall?.Points?.length || ![0, wall.Points.length - 1].includes(drag.index)) return false;
+    const point = wall.Points[drag.index];
+    const target = getSubhexWallEndpointSnap(point, wall.__uuid, drag.index);
+    if (!target) return false;
+    const joint = { ...target.point, x: target.point.x, y: target.point.y };
+    const stampedPoint = [point, target.point].find(candidate => candidate?.fixture || candidate?.tower);
+    if (stampedPoint?.fixture) {
+      joint.fixture = stampedPoint.fixture;
+      joint.tower = false;
+    } else if (stampedPoint?.tower) {
+      joint.tower = true;
+      delete joint.fixture;
+    }
+    if (target.wall.__uuid === wall.__uuid) {
+      const next = cloneSubhexWall(wall);
+      next.Points[drag.index] = joint;
+      next.Points[target.index] = { ...joint };
+      setSubhexWallDraft(next);
+      reconcileSubhexWallJunctions();
+      return true;
+    }
+    const nextWall = cloneSubhexWall(wall);
+    const nextTarget = cloneSubhexWall(target.wall);
+    nextWall.Points[drag.index] = joint;
+    nextTarget.Points[target.index] = { ...joint };
+    setSubhexWallDraft(nextWall);
+    setSubhexWallDraft(nextTarget);
+    reconcileSubhexWallJunctions();
+    renderer.drawing.subhexEditorSelectedWallId = wall.__uuid;
+    return true;
+  }
+
+  function getSubhexWallJunctions(walls = getEffectiveSubhexWalls()) {
+    const junctions = new Map();
+    const add = (point, members) => {
+      const key = `${Math.round(point.x * 10)}:${Math.round(point.y * 10)}`;
+      let junction = junctions.get(key);
+      if (!junction) {
+        junction = { key, point: { ...point }, members: [] };
+        junctions.set(key, junction);
+      } else if (point.shared && !junction.point.shared) {
+        junction.point = { ...junction.point, ...point };
+      } else if (point.tower && !junction.point.tower) {
+        junction.point = { ...junction.point, tower: true };
+      } else if (point.fixture && !junction.point.fixture) {
+        junction.point = { ...junction.point, fixture: point.fixture };
+      }
+      members.forEach(member => {
+        if (!junction.members.some(candidate => candidate.wallId === member.wallId
+          && candidate.segmentIndex === member.segmentIndex && candidate.pointIndex === member.pointIndex)) {
+          junction.members.push(member);
+        }
+      });
+    };
+    walls.forEach(wall => {
+      wall.Points.forEach((point, pointIndex) => {
+        if (!point.junction && !point.tower) return;
+        add(point, [{ wallId: wall.__uuid, segmentIndex: Math.max(0, pointIndex - 1), pointIndex }]);
+      });
+    });
+    return [...junctions.values()];
+  }
+
+  function getSubhexWallLoopClosures(walls = getEffectiveSubhexWalls()) {
+    return walls.map(wall => {
+      if ((wall.Points?.length || 0) < 3) return null;
+      const lastIndex = wall.Points.length - 1;
+      const first = wall.Points[0];
+      const last = wall.Points[lastIndex];
+      if (Math.hypot(first.x - last.x, first.y - last.y) > 0.05) return null;
+      return {
+        key: `loop:${wall.__uuid}`,
+        wallId: wall.__uuid,
+        point: first,
+        refs: [{ wallId: wall.__uuid, index: 0 }, { wallId: wall.__uuid, index: lastIndex }]
+      };
+    }).filter(Boolean);
+  }
+
+  function findSubhexWallGeometricCrossings(walls = getEffectiveSubhexWalls()) {
+    const crossings = [];
+    walls.forEach((left, leftWallIndex) => {
+      left.Points.slice(1).forEach((leftEnd, leftSegmentIndex) => {
+        walls.slice(leftWallIndex).forEach((right, relativeRightIndex) => {
+          const rightWallIndex = leftWallIndex + relativeRightIndex;
+          right.Points.slice(1).forEach((rightEnd, rightSegmentIndex) => {
+            if (leftWallIndex === rightWallIndex && Math.abs(leftSegmentIndex - rightSegmentIndex) <= 1) return;
+            const point = getSubhexEditorSegmentCrossing(
+              left.Points[leftSegmentIndex], leftEnd,
+              right.Points[rightSegmentIndex], rightEnd
+            );
+            if (!point) return;
+            crossings.push({
+              point,
+              members: [
+                { wallId: left.__uuid, segmentIndex: leftSegmentIndex, pointIndex: null },
+                { wallId: right.__uuid, segmentIndex: rightSegmentIndex, pointIndex: null }
+              ]
+            });
+          });
+        });
+      });
+    });
+    return crossings;
+  }
+
+  function materializeSubhexWallCrossings() {
+    let crossings = findSubhexWallGeometricCrossings();
+    let guard = 0;
+    while (crossings.length && guard < 100) {
+      materializeSubhexWallJunction(crossings[0]);
+      crossings = findSubhexWallGeometricCrossings();
+      guard += 1;
+    }
+  }
+
+  function materializeSubhexWallJunction(junction) {
+    const refs = [];
+    const junctionPoint = { ...getSubhexWallBoundaryPoint(junction.point), junction: true };
+    const membersByWall = new Map();
+    junction.members.forEach(member => {
+      if (!membersByWall.has(member.wallId)) membersByWall.set(member.wallId, []);
+      membersByWall.get(member.wallId).push(member);
+    });
+    membersByWall.forEach((members, wallId) => {
+      const wall = getEffectiveSubhexWall(wallId);
+      if (!wall) return;
+      const next = cloneSubhexWall(wall);
+      members.sort((left, right) => right.segmentIndex - left.segmentIndex).forEach(member => {
+        let pointIndex = member.pointIndex;
+        if (!Number.isInteger(pointIndex)) {
+          pointIndex = member.segmentIndex + 1;
+          next.Points.splice(pointIndex, 0, { ...junctionPoint });
+        } else {
+          next.Points[pointIndex] = { ...next.Points[pointIndex], ...junctionPoint };
+        }
+      });
+      setSubhexWallDraft(next);
+      next.Points.forEach((point, index) => {
+        if (Math.hypot(point.x - junctionPoint.x, point.y - junctionPoint.y) < 0.05) {
+          refs.push({ wallId, index });
+        }
+      });
+    });
+    return refs;
+  }
+
+  function getSubhexEditorSegmentNearCrossing(a, b, c, d, threshold) {
+    const firstVector = normalizeVector(b.x - a.x, b.y - a.y);
+    const secondVector = normalizeVector(d.x - c.x, d.y - c.y);
+    const crossingAngle = Math.acos(Math.min(1, Math.abs(
+      firstVector.x * secondVector.x + firstVector.y * secondVector.y
+    )));
+    if (crossingAngle < Math.PI / 9) return null;
+
+    const candidates = [
+      { first: a, second: getNearestPointOnSegment(a, c, d) },
+      { first: b, second: getNearestPointOnSegment(b, c, d) },
+      { first: getNearestPointOnSegment(c, a, b), second: c },
+      { first: getNearestPointOnSegment(d, a, b), second: d }
+    ].map(candidate => ({
+      ...candidate,
+      distance: Math.hypot(candidate.first.x - candidate.second.x, candidate.first.y - candidate.second.y)
+    })).sort((left, right) => left.distance - right.distance);
+    const nearest = candidates[0];
+    if (!nearest || nearest.distance > threshold) return null;
+    return {
+      x: (nearest.first.x + nearest.second.x) / 2,
+      y: (nearest.first.y + nearest.second.y) / 2
+    };
+  }
+
   function getSubhexEditorJunctions(hex, routes) {
     const junctionRoutes = routes.filter(route => ["road", "path", "river"].includes(route.entry.type));
     const threshold = Math.max(1.2, getSubhexMetrics().radius * 0.55);
@@ -5903,7 +6395,10 @@
           for (let j = 1; j < right.span.points.length; j += 1) {
             const crossing = getSubhexEditorSegmentCrossing(
               left.span.points[i - 1], left.span.points[i], right.span.points[j - 1], right.span.points[j]
-            );
+            ) || (left.entry.type !== "river" ? getSubhexEditorSegmentNearCrossing(
+              left.span.points[i - 1], left.span.points[i], right.span.points[j - 1], right.span.points[j],
+              Math.max(0.8, getSubhexMetrics().radius * 0.22)
+            ) : null);
             if (crossing) addJunction(crossing, [left, right]);
           }
         }
@@ -6130,20 +6625,27 @@
       )?.length)
       .filter(Number.isFinite);
     const stops = [0, ...occupied, span.length].sort((left, right) => left - right);
-    const widestGap = stops.slice(1).reduce((best, stop, index) => (
-      stop - stops[index] > best.width ? { start: stops[index], width: stop - stops[index] } : best
-    ), { start: 0, width: 0 });
-    const point = getSubhexEditorPointAtLength(span.points, widestGap.start + widestGap.width / 2);
-    return point ? [{
-      ...clampSubhexEditorPointToParent(point, hex),
-      position: getSubhexEditorNearestRoutePoint(point, route.span.points)?.length ?? route.span.length / 2
-    }] : [];
+    const gaps = stops.slice(1).map((stop, index) => ({
+      start: stops[index],
+      width: stop - stops[index]
+    }));
+    const minimumGap = Math.max(0.6, getSubhexMetrics().radius * 0.35);
+    const usableGaps = gaps.filter(gap => gap.width >= minimumGap);
+    const fallbackGap = gaps.reduce((best, gap) => gap.width > best.width ? gap : best, { start: 0, width: 0 });
+    return (usableGaps.length ? usableGaps : [fallbackGap]).map(gap => {
+      const point = getSubhexEditorPointAtLength(span.points, gap.start + gap.width / 2);
+      return point ? {
+        ...clampSubhexEditorPointToParent(point, hex),
+        position: getSubhexEditorNearestRoutePoint(point, route.span.points)?.length ?? route.span.length / 2
+      } : null;
+    }).filter(Boolean);
   }
 
   function syncSubhexEditorToolbar() {
     const activeTool = renderer.drawing.subhexEditorTool || "terrain";
     renderer.subhexEditorShell?.querySelectorAll("[data-subhex-editor-tool]").forEach(button => {
-      const isActive = button.dataset.subhexEditorTool === activeTool;
+      const isActive = button.dataset.subhexEditorTool === activeTool
+        || (button.dataset.subhexEditorTool === "terrain" && activeTool === "feature");
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
@@ -6155,11 +6657,27 @@
     renderer.subhexEditorShell?.classList.toggle("is-subhex-terrain-tool", activeTool === "terrain");
     renderer.subhexEditorShell?.classList.toggle("is-subhex-feature-tool", activeTool === "feature");
     renderer.subhexEditorShell?.classList.toggle("is-subhex-anchor-tool", activeTool === "anchor");
+    if (renderer.subhexEditorShell) {
+      renderer.subhexEditorShell.dataset.subhexWallAction = renderer.drawing.subhexEditorWallAction || "";
+    }
     const anchorAction = renderer.drawing.subhexEditorAnchorAction;
     renderer.subhexEditorAnchorOptions?.querySelectorAll("[data-subhex-editor-anchor-action]").forEach(button => {
       const active = activeTool === "anchor" && button.dataset.subhexEditorAnchorAction === anchorAction;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
+    });
+    renderer.subhexEditorWallOptions?.querySelectorAll("[data-subhex-editor-wall-style]").forEach(button => {
+      const active = button.dataset.subhexEditorWallStyle === renderer.drawing.subhexEditorWallStyle;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    renderer.subhexEditorWallOptions?.querySelectorAll("[data-subhex-editor-wall-action]").forEach(button => {
+      const action = button.dataset.subhexEditorWallAction;
+      const wall = getEffectiveSubhexWall(renderer.drawing.subhexEditorSelectedWallId);
+      button.classList.toggle("is-active", action === renderer.drawing.subhexEditorWallAction);
+      button.disabled = renderer.drawing.saving
+        || (action === "finish" && !wall)
+        || (action === "finish" && (wall?.Points?.length || 0) < 2);
     });
     syncSubhexEditorTerrainControls();
     syncSubhexEditorFeatureControls();
@@ -6271,6 +6789,23 @@
   function syncSubhexEditorInspector(hex, subhexes = []) {
     const inspector = renderer.subhexEditorInspector;
     if (!inspector) return;
+    if ((renderer.drawing.subhexEditorTool || "terrain") === "anchor"
+      && (renderer.drawing.subhexEditorSelectedWallId || renderer.drawing.subhexEditorWallAction)) {
+      const wall = getEffectiveSubhexWall(renderer.drawing.subhexEditorSelectedWallId);
+      const action = renderer.drawing.subhexEditorWallAction;
+      inspector.textContent = !wall
+        ? "Create a wall or select an existing wall."
+        : action === "draw" || action === "add"
+          ? "Click to place a straight wall anchor. Border anchors are shared with the adjacent hex."
+          : action === "remove"
+            ? "Select a wall anchor to remove it."
+            : action === "tower"
+              ? "Select a wall anchor to toggle its tower."
+              : action === "remove-wall"
+                ? "Select a wall segment to remove the complete wall."
+            : "Drag anchors to adjust the wall. Shared anchors stay on their parent border.";
+      return;
+    }
     if ((renderer.drawing.subhexEditorTool || "terrain") === "anchor") {
       const action = renderer.drawing.subhexEditorAnchorAction;
       inspector.textContent = action
@@ -6312,7 +6847,7 @@
     const cell = getSubhexEditorCellAtPoint(worldPoint);
     const neighbor = !cell && worldPoint ? getParentHexForSubhexPoint(worldPoint, renderer.hexes) : null;
     renderer.subhexEditorStage?.classList.toggle("is-over-neighbor", Boolean(neighbor && neighbor.id !== renderer.drawing.subhexEditorHexId));
-    if ((renderer.drawing.subhexEditorTool || "terrain") === "anchor") return;
+    if (["anchor", "wall"].includes(renderer.drawing.subhexEditorTool || "terrain")) return;
     const hoverKey = getSubhexEditorCellKey(cell);
     if (renderer.drawing.subhexEditorDragActive) {
       event.preventDefault();
@@ -6373,6 +6908,226 @@
 
   function handleSubhexEditorAnchorPointerDown(event) {
     if (renderer.drawing.subhexEditorInspectMode) return;
+    if ((renderer.drawing.subhexEditorTool || "terrain") === "anchor"
+      && event.target?.closest?.("[data-subhex-wall-id], [data-subhex-wall-anchor-index], [data-subhex-wall-junction-key], [data-subhex-wall-loop-id]")) {
+      const loopTarget = event.target?.closest?.("[data-subhex-wall-loop-id]");
+      if (loopTarget) {
+        const closure = getSubhexWallLoopClosures()
+          .find(candidate => candidate.key === loopTarget.dataset.subhexWallLoopId);
+        if (!closure) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const finishBefore = captureSubhexEditorDraft();
+        if (finishDrawingSubhexWallAtAnchor(closure.wallId, 0)) {
+          recordSubhexEditorDraftChange(finishBefore);
+          renderSubhexEditorShell();
+          return;
+        }
+        const action = renderer.drawing.subhexEditorWallAction;
+        if (["tower", "gate", "sluice"].includes(action)) {
+          const before = captureSubhexEditorDraft();
+          toggleSubhexWallAnchorStamp(closure.refs, action);
+          recordSubhexEditorDraftChange(before);
+          renderSubhexEditorShell();
+          return;
+        }
+        if (action === "remove") {
+          const before = captureSubhexEditorDraft();
+          const wall = getEffectiveSubhexWall(closure.wallId);
+          const next = cloneSubhexWall(wall);
+          next.Points.pop();
+          setSubhexWallDraft(next);
+          reconcileSubhexWallJunctions();
+          recordSubhexEditorDraftChange(before);
+          renderSubhexEditorShell();
+          return;
+        }
+        if (action === "remove-wall") {
+          const wall = getEffectiveSubhexWall(closure.wallId);
+          if (wall && window.confirm("Remove this entire wall, including its sections in neighboring hexes?")) {
+            const before = captureSubhexEditorDraft();
+            removeSubhexWall(wall);
+            recordSubhexEditorDraftChange(before);
+            renderSubhexEditorShell();
+          }
+          return;
+        }
+        renderer.subhexEditorActiveAnchorDrag = {
+          key: closure.wallId,
+          type: "wall-loop",
+          refs: closure.refs,
+          pointerId: event.pointerId,
+          before: captureSubhexEditorDraft()
+        };
+        renderer.subhexEditorSvg?.setPointerCapture?.(event.pointerId);
+        return;
+      }
+      const junctionTarget = event.target?.closest?.("[data-subhex-wall-junction-key]");
+      if (junctionTarget) {
+        const junction = getSubhexWallJunctions()
+          .find(candidate => candidate.key === junctionTarget.dataset.subhexWallJunctionKey);
+        if (!junction) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const drawingMember = junction.members[0];
+        const activeWall = getEffectiveSubhexWall(renderer.drawing.subhexEditorSelectedWallId);
+        if (renderer.drawing.subhexEditorWallAction === "draw" && activeWall && !activeWall.Points.length) {
+          const before = captureSubhexEditorDraft();
+          addSubhexWallPoint(activeWall, junction.point);
+          recordSubhexEditorDraftChange(before);
+          renderSubhexEditorShell();
+          return;
+        }
+        const finishBefore = captureSubhexEditorDraft();
+        if (drawingMember && finishDrawingSubhexWallAtAnchor(drawingMember.wallId, drawingMember.pointIndex)) {
+          recordSubhexEditorDraftChange(finishBefore);
+          renderSubhexEditorShell();
+          return;
+        }
+        if (["tower", "gate", "sluice"].includes(renderer.drawing.subhexEditorWallAction)) {
+          const before = captureSubhexEditorDraft();
+          toggleSubhexWallAnchorStamp(
+            junction.members.map(member => ({ wallId: member.wallId, index: member.pointIndex })),
+            renderer.drawing.subhexEditorWallAction
+          );
+          recordSubhexEditorDraftChange(before);
+          renderSubhexEditorShell();
+          return;
+        }
+        if (renderer.drawing.subhexEditorWallAction === "remove") {
+          const refsByWall = new Map();
+          junction.members.forEach(member => {
+            if (!Number.isInteger(member.pointIndex)) return;
+            if (!refsByWall.has(member.wallId)) refsByWall.set(member.wallId, []);
+            refsByWall.get(member.wallId).push(member.pointIndex);
+          });
+          const walls = [...refsByWall.keys()].map(getEffectiveSubhexWall).filter(Boolean);
+          const deletesWall = walls.some(wall => wall.Points.length <= 2);
+          if (deletesWall && !window.confirm("Removing this junction will delete a wall with only two anchors. Continue?")) return;
+          const before = captureSubhexEditorDraft();
+          walls.forEach(wall => {
+            if (wall.Points.length <= 2) {
+              removeSubhexWall(wall);
+              return;
+            }
+            const next = cloneSubhexWall(wall);
+            [...new Set(refsByWall.get(wall.__uuid))]
+              .sort((left, right) => right - left)
+              .forEach(index => next.Points.splice(index, 1));
+            setSubhexWallDraft(next);
+          });
+          reconcileSubhexWallJunctions();
+          recordSubhexEditorDraftChange(before);
+          renderSubhexEditorShell();
+          return;
+        }
+        if (renderer.drawing.subhexEditorWallAction === "remove-wall" && drawingMember) {
+          if (renderer.subhexEditorInspector) {
+            renderer.subhexEditorInspector.textContent = "Select a wall segment away from a junction to remove that wall.";
+          }
+          return;
+        }
+        const before = captureSubhexEditorDraft();
+        const refs = materializeSubhexWallJunction(junction);
+        if (!refs.length) return;
+        renderer.subhexEditorActiveAnchorDrag = {
+          key: refs[0].wallId,
+          type: "wall-junction",
+          refs,
+          pointerId: event.pointerId,
+          before
+        };
+        renderer.subhexEditorSvg?.setPointerCapture?.(event.pointerId);
+        return;
+      }
+      const handle = event.target?.closest?.("[data-subhex-wall-anchor-index]");
+      const path = event.target?.closest?.(".generated-map-subhex-editor-wall-hit[data-subhex-wall-id]");
+      const wallId = handle?.dataset.subhexWallId || path?.dataset.subhexWallId || "";
+      const wall = getEffectiveSubhexWall(wallId);
+      if (!wall) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const activeBeforeSelection = renderer.drawing.subhexEditorSelectedWallId;
+      const activeWall = getEffectiveSubhexWall(activeBeforeSelection);
+      if (handle && renderer.drawing.subhexEditorWallAction === "draw"
+        && activeWall && !activeWall.Points.length) {
+        const before = captureSubhexEditorDraft();
+        addSubhexWallPoint(activeWall, wall.Points[Number(handle.dataset.subhexWallAnchorIndex)]);
+        recordSubhexEditorDraftChange(before);
+        renderSubhexEditorShell();
+        return;
+      }
+      const finishBefore = captureSubhexEditorDraft();
+      if (handle && activeBeforeSelection
+        && finishDrawingSubhexWallAtAnchor(wallId, Number(handle.dataset.subhexWallAnchorIndex))) {
+        recordSubhexEditorDraftChange(finishBefore);
+        renderSubhexEditorShell();
+        return;
+      }
+      renderer.drawing.subhexEditorSelectedWallId = wallId;
+      renderer.drawing.subhexEditorWallStyle = wall.Style || "wall";
+      const action = renderer.drawing.subhexEditorWallAction;
+      if (handle && ["tower", "gate", "sluice"].includes(action)) {
+        const before = captureSubhexEditorDraft();
+        const index = Number(handle.dataset.subhexWallAnchorIndex);
+        toggleSubhexWallAnchorStamp([{ wallId, index }], action);
+        recordSubhexEditorDraftChange(before);
+        renderSubhexEditorShell();
+        return;
+      }
+      if (handle && action === "remove") {
+        const before = captureSubhexEditorDraft();
+        const removedPoint = wall.Points[Number(handle.dataset.subhexWallAnchorIndex)];
+        if (wall.Points.length <= 2) {
+          if (!window.confirm("This is one of the wall's final two anchors. Delete the wall?")) return;
+          removeSubhexWall(wall);
+        } else {
+          const next = cloneSubhexWall(wall);
+          next.Points.splice(Number(handle.dataset.subhexWallAnchorIndex), 1);
+          setSubhexWallDraft(next);
+          if (removedPoint?.junction) reconcileSubhexWallJunctions();
+        }
+        recordSubhexEditorDraftChange(before);
+        renderSubhexEditorShell();
+        return;
+      }
+      if (action === "remove-wall") {
+        if (window.confirm("Remove this entire wall, including its sections in neighboring hexes?")) {
+          const before = captureSubhexEditorDraft();
+          removeSubhexWall(wall);
+          recordSubhexEditorDraftChange(before);
+          renderSubhexEditorShell();
+        }
+        return;
+      }
+      if (path && action === "add") {
+        const point = getSubhexEditorWorldPoint(event);
+        let nearest = null;
+        wall.Points.slice(1).forEach((end, index) => {
+          const candidate = getNearestPointOnSegment(point, wall.Points[index], end);
+          const distance = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+          if (!nearest || distance < nearest.distance) nearest = { point: candidate, index: index + 1, distance };
+        });
+        const before = captureSubhexEditorDraft();
+        addSubhexWallPoint(wall, nearest?.point || point, nearest?.index);
+        recordSubhexEditorDraftChange(before);
+        renderSubhexEditorShell();
+        return;
+      }
+      if (!handle) {
+        renderSubhexEditorShell();
+        return;
+      }
+      renderer.subhexEditorActiveAnchorDrag = {
+        key: wallId,
+        type: "wall",
+        index: Number(handle.dataset.subhexWallAnchorIndex),
+        pointerId: event.pointerId,
+        before: captureSubhexEditorDraft()
+      };
+      renderer.subhexEditorSvg?.setPointerCapture?.(event.pointerId);
+      return;
+    }
     if ((renderer.drawing.subhexEditorTool || "terrain") !== "anchor") return;
     const action = renderer.drawing.subhexEditorAnchorAction;
     if (action) {
@@ -6394,7 +7149,6 @@
       }
       if (changed) {
         recordSubhexEditorDraftChange(before);
-        renderer.drawing.subhexEditorAnchorAction = "";
         renderer.drawing.subhexEditorHoveredRouteKey = "";
         renderSubhexEditorShell();
       }
@@ -6434,7 +7188,38 @@
     const point = getSubhexEditorWorldPoint(event);
     if (!point) return;
     const clampedPoint = clampSubhexEditorPointToParent(point);
-    if (drag.type === "route") {
+    if (["wall-junction", "wall-loop"].includes(drag.type)) {
+      const nextPoint = getSubhexWallBoundaryPoint(point);
+      drag.refs.forEach(ref => {
+        const wall = getEffectiveSubhexWall(ref.wallId);
+        if (!wall?.Points?.[ref.index]) return;
+        const next = cloneSubhexWall(wall);
+        next.Points[ref.index] = {
+          ...nextPoint,
+          junction: Boolean(next.Points[ref.index].junction),
+          tower: Boolean(next.Points[ref.index].tower),
+          fixture: next.Points[ref.index].fixture
+        };
+        setSubhexWallDraft(next);
+      });
+    } else if (drag.type === "wall") {
+      const wall = getEffectiveSubhexWall(drag.key);
+      if (!wall) return;
+      const next = cloneSubhexWall(wall);
+      const currentPoint = next.Points[drag.index];
+      let nextPoint = constrainSubhexWallPoint(point, currentPoint);
+      if ([0, next.Points.length - 1].includes(drag.index)) {
+        const snap = getSubhexWallEndpointSnap(nextPoint, wall.__uuid, drag.index);
+        if (snap) nextPoint = { ...snap.point };
+      }
+      next.Points[drag.index] = {
+        ...nextPoint,
+        junction: Boolean(currentPoint.junction),
+        tower: Boolean(currentPoint.tower),
+        fixture: currentPoint.fixture
+      };
+      setSubhexWallDraft(next);
+    } else if (drag.type === "route") {
       const points = drag.points || getSubhexEditorRouteDraftPoints(drag.key);
       const nextPoints = points.length ? points.slice() : [clampedPoint];
       nextPoints[drag.index] = { ...clampedPoint, position: points[drag.index]?.position };
@@ -6453,6 +7238,11 @@
     event.stopPropagation();
     renderer.subhexEditorSvg?.releasePointerCapture?.(event.pointerId);
     renderer.drawing.subhexEditorSuppressClickUntil = performance.now() + 900;
+    if (drag.type === "wall") {
+      connectSubhexWallEndpoint(drag);
+      materializeSubhexWallCrossings();
+    }
+    if (["wall", "wall-junction", "wall-loop"].includes(drag.type)) reconcileSubhexWallJunctions();
     recordSubhexEditorDraftChange(drag.before);
     renderer.subhexEditorActiveAnchorDrag = null;
   }
@@ -6488,6 +7278,20 @@
     setSubhexEditorHoveredRoute(key);
   }
 
+  function handleSubhexEditorWallHover(event) {
+    const action = renderer.drawing.subhexEditorWallAction;
+    const groups = renderer.subhexEditorSvg?.querySelectorAll("[data-subhex-wall-visual-id]") || [];
+    const target = ["add", "remove-wall"].includes(action)
+      ? event.target?.closest?.("[data-subhex-wall-id]")
+      : null;
+    const wallId = target?.dataset.subhexWallId || "";
+    groups.forEach(group => {
+      const active = group.dataset.subhexWallVisualId === wallId;
+      group.classList.toggle("is-add-hovered", active && action === "add");
+      group.classList.toggle("is-delete-hovered", active && action === "remove-wall");
+    });
+  }
+
   function handleSubhexEditorClick(event) {
     if (!renderer.drawing.subhexEditorHexId) return;
     event.preventDefault();
@@ -6495,6 +7299,23 @@
     if (performance.now() < (renderer.drawing.subhexEditorSuppressClickUntil || 0)) return;
     const worldPoint = getSubhexEditorWorldPoint(event);
     const cell = getSubhexEditorCellAtPoint(worldPoint);
+    if ((renderer.drawing.subhexEditorTool || "terrain") === "anchor"
+      && renderer.drawing.subhexEditorWallAction) {
+      const action = renderer.drawing.subhexEditorWallAction;
+      const wall = getEffectiveSubhexWall(renderer.drawing.subhexEditorSelectedWallId);
+      if (!pointInPolygon(worldPoint, getSubhexEditorActiveParentHex()?.points || [])) {
+        openNeighborSubhexEditor(worldPoint);
+        return;
+      }
+      if (wall && worldPoint && ["draw", "add"].includes(action)) {
+        const before = captureSubhexEditorDraft();
+        if (addSubhexWallPoint(wall, worldPoint)) {
+          recordSubhexEditorDraftChange(before);
+          renderSubhexEditorShell();
+        }
+      }
+      return;
+    }
     if (openNeighborSubhexEditor(worldPoint)) return;
     if ((renderer.drawing.subhexEditorTool || "terrain") === "anchor") return;
     const selectedKey = getSubhexEditorCellKey(cell);
@@ -6567,13 +7388,16 @@
   function syncSubhexEditorActionControls(hex = null) {
     const hasDrafts = (renderer.drawing.subhexEditorTerrainDraft?.size || 0) > 0;
     const hasAnchorDrafts = (renderer.subhexEditorAnchorDrafts?.size || 0) > 0;
+    const hasWallDrafts = (renderer.subhexEditorWallDrafts?.size || 0) > 0;
+    const hasSavableWallDrafts = [...(renderer.subhexEditorWallDrafts?.values() || [])]
+      .some(draft => draft?.Deleted || (draft?.Points?.length || 0) >= 2);
     const hasPoiVisibilityDrafts = (renderer.subhexEditorPoiVisibilityDrafts?.size || 0) > 0;
     const hasSharedCellsToMigrate = hasSubhexEditorSharedCellsToMigrate(hex);
     const applyButton = renderer.subhexEditorShell?.querySelector('[data-subhex-editor-action="apply"]');
     const resetButton = renderer.subhexEditorShell?.querySelector('[data-subhex-editor-action="reset"]');
     const rebuildButton = renderer.subhexEditorShell?.querySelector('[data-subhex-editor-action="rebuild"]');
-    if (applyButton) applyButton.disabled = renderer.drawing.saving || (!hasDrafts && !hasAnchorDrafts && !hasPoiVisibilityDrafts && !hasSharedCellsToMigrate);
-    if (resetButton) resetButton.disabled = renderer.drawing.saving || (!hasDrafts && !hasAnchorDrafts && !hasPoiVisibilityDrafts);
+    if (applyButton) applyButton.disabled = renderer.drawing.saving || (!hasDrafts && !hasAnchorDrafts && !hasSavableWallDrafts && !hasPoiVisibilityDrafts && !hasSharedCellsToMigrate);
+    if (resetButton) resetButton.disabled = renderer.drawing.saving || (!hasDrafts && !hasAnchorDrafts && !hasWallDrafts && !hasPoiVisibilityDrafts);
     if (rebuildButton) rebuildButton.disabled = renderer.drawing.saving || !hex?.id;
     renderer.subhexEditorShell?.querySelectorAll("[data-subhex-editor-history]").forEach(button => {
       const stack = button.dataset.subhexEditorHistory === "undo"
@@ -6624,6 +7448,47 @@
     }
   }
 
+  async function persistSubhexEditorWallDrafts(campaignId) {
+    for (const [draftId, draft] of [...renderer.subhexEditorWallDrafts]) {
+      const savedWall = (renderer.subhexWalls || []).find(wall => wall.__uuid === draftId);
+      if (draft.Deleted) {
+        if (savedWall) {
+          const { error } = await campaignSupabase.rpc("delete_generated_subhex_wall", {
+            target_campaign_id: campaignId,
+            target_wall_id: draftId
+          });
+          if (error) throw error;
+          renderer.subhexWalls = renderer.subhexWalls.filter(wall => wall.__uuid !== draftId);
+        }
+        renderer.subhexEditorWallDrafts.delete(draftId);
+        continue;
+      }
+      if ((draft.Points || []).length < 2) continue;
+      const { data, error } = await campaignSupabase.rpc("save_generated_subhex_wall", {
+        target_campaign_id: campaignId,
+        target_wall_id: savedWall ? draftId : null,
+        target_style: getWallBaseStyle(draft.Style),
+        target_points: draft.Points
+      });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      const saved = {
+        __uuid: row.id,
+        Style: row.style || "wall",
+        Points: Array.isArray(row.points) ? row.points : draft.Points
+      };
+      renderer.subhexWalls = renderer.subhexWalls.filter(wall => wall.__uuid !== draftId && wall.__uuid !== saved.__uuid);
+      renderer.subhexWalls.push(saved);
+      renderer.subhexEditorWallDrafts.delete(draftId);
+      renderer.subhexEditorWallDrafts.set(saved.__uuid, saved);
+      if (renderer.drawing.subhexEditorSelectedWallId === draftId) renderer.drawing.subhexEditorSelectedWallId = saved.__uuid;
+    }
+    renderer.subhexEditorWallDrafts = new Map();
+    renderer.drawing.subhexEditorWallAction = "";
+    if (db?.raw) db.raw.generatedSubhexWalls = renderer.subhexWalls;
+    bumpOverlayRevision();
+  }
+
   async function applySubhexEditorDetail() {
     const campaign = getActiveCampaign?.();
     const hex = hexForPathPoint(renderer.drawing.subhexEditorHexId);
@@ -6631,16 +7496,20 @@
     if (!campaign?.id || !hex?.id || !layout?.ownedSubhexes?.length || renderer.drawing.saving) return false;
     const hasTerrainDrafts = renderer.drawing.subhexEditorTerrainDraft?.size > 0;
     const hasAnchorDrafts = renderer.subhexEditorAnchorDrafts?.size > 0;
+    const hasWallDrafts = [...(renderer.subhexEditorWallDrafts?.values() || [])]
+      .some(draft => draft?.Deleted || (draft?.Points?.length || 0) >= 2);
     const hasPoiVisibilityDrafts = renderer.subhexEditorPoiVisibilityDrafts?.size > 0;
     const hasSharedCellsToMigrate = hasSubhexEditorSharedCellsToMigrate(hex, layout);
     const hasMapDrafts = hasTerrainDrafts || hasAnchorDrafts || hasSharedCellsToMigrate;
-    if (!hasMapDrafts && !hasPoiVisibilityDrafts) return false;
+    if (!hasMapDrafts && !hasPoiVisibilityDrafts && !hasWallDrafts) return false;
 
     if (!hasMapDrafts) {
       renderer.drawing.saving = true;
       syncSubhexEditorActionControls(hex);
       try {
-        await persistSubhexEditorPoiVisibilityDrafts(campaign.id, hex);
+        if (hasWallDrafts) await persistSubhexEditorWallDrafts(campaign.id);
+        if (hasPoiVisibilityDrafts) await persistSubhexEditorPoiVisibilityDrafts(campaign.id, hex);
+        clearSubhexEditorHistory();
         render();
         return true;
       } catch (error) {
@@ -6737,6 +7606,7 @@
       clearSubhexEditorHistory();
       renderer.drawing.subhexEditorTerrainDraft = new Map();
       renderer.subhexEditorAnchorDrafts = new Map();
+      if (hasWallDrafts) await persistSubhexEditorWallDrafts(campaign.id);
       affectedTileHexIds.forEach(invalidateSubhexDetailForHex);
       if (hasPoiVisibilityDrafts) await persistSubhexEditorPoiVisibilityDrafts(campaign.id, hex);
       render();
@@ -6756,11 +7626,14 @@
   async function resetSubhexEditorDetail() {
     const hasTerrainDrafts = renderer.drawing.subhexEditorTerrainDraft?.size > 0;
     const hasAnchorDrafts = renderer.subhexEditorAnchorDrafts?.size > 0;
+    const hasWallDrafts = renderer.subhexEditorWallDrafts?.size > 0;
     const hasPoiVisibilityDrafts = renderer.subhexEditorPoiVisibilityDrafts?.size > 0;
-    if (!hasTerrainDrafts && !hasAnchorDrafts && !hasPoiVisibilityDrafts) return false;
+    if (!hasTerrainDrafts && !hasAnchorDrafts && !hasWallDrafts && !hasPoiVisibilityDrafts) return false;
     const before = captureSubhexEditorDraft();
     renderer.drawing.subhexEditorTerrainDraft = new Map();
     renderer.subhexEditorAnchorDrafts = new Map();
+    renderer.subhexEditorWallDrafts = new Map();
+    renderer.drawing.subhexEditorWallAction = "";
     renderer.subhexEditorPoiVisibilityDrafts = new Map();
     recordSubhexEditorDraftChange(before);
     renderSubhexEditorShell();
@@ -7231,9 +8104,17 @@
     svg.setAttribute("viewBox", `${left} ${top} ${viewWidth} ${viewHeight}`);
     const namespace = "http://www.w3.org/2000/svg";
     const svgFragment = document.createDocumentFragment();
+    const wallGroup = document.createElementNS(namespace, "g");
+    wallGroup.setAttribute("class", "generated-map-subhex-detail-walls");
     const poiGroup = document.createElementNS(namespace, "g");
     const pois = getPoisForRenderedHex(hex);
     const assignments = getPoiSubhexAnchorAssignmentsForCandidates(hex, pois, ownedCells);
+    const previewWalls = renderer.subhexWalls || [];
+    previewWalls.forEach(wall => appendStraightSubhexWall(wallGroup, wall, { detail: true }));
+    getSubhexWallJunctions(previewWalls)
+      .filter(junction => junction.point.tower)
+      .forEach(junction => appendSubhexWallTower(wallGroup, junction, { detail: true }));
+    svgFragment.appendChild(wallGroup);
     appendSubhexIdLabels(svgFragment, contextCells, {
       primaryKeys: new Set(ownedCells.map(getSubhexEditorCellKey))
     });
@@ -7331,10 +8212,10 @@
         anchors.forEach((anchor, anchorIndex) => {
           if (!anchor) return;
           const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-          handle.setAttribute("class", "generated-map-subhex-editor-route-anchor");
+          handle.setAttribute("class", `generated-map-subhex-editor-route-anchor${entry.type === "river" ? " is-river" : ""}`);
           handle.setAttribute("cx", String(anchor.x));
           handle.setAttribute("cy", String(anchor.y));
-          handle.setAttribute("r", "4.2");
+          handle.setAttribute("r", "2");
           handle.dataset.subhexAnchorType = "route";
           handle.dataset.subhexAnchorKey = anchorKey;
           handle.dataset.subhexRouteKey = anchorKey;
@@ -7347,17 +8228,256 @@
     if (anchorMode) {
       junctions.forEach(junction => {
         const point = getSubhexEditorAnchorDraft(junction.key) || junction.origin;
+        const isRiverJunction = [...junction.members.keys()].some(routeKey => (
+          routes.find(route => route.key === routeKey)?.entry.type === "river"
+        ));
         const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        handle.setAttribute("class", "generated-map-subhex-editor-junction-anchor");
+        handle.setAttribute("class", `generated-map-subhex-editor-route-anchor is-junction${isRiverJunction ? " is-river" : ""}`);
         handle.setAttribute("cx", String(point.x));
         handle.setAttribute("cy", String(point.y));
-        handle.setAttribute("r", "4.8");
+        handle.setAttribute("r", "2");
         handle.dataset.subhexAnchorType = "junction";
         handle.dataset.subhexAnchorKey = junction.key;
         handleGroup.appendChild(handle);
+        const glyph = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        glyph.setAttribute("class", "generated-map-subhex-editor-anchor-plus");
+        glyph.setAttribute("x", String(point.x));
+        glyph.setAttribute("y", String(point.y));
+        glyph.textContent = "+";
+        handleGroup.appendChild(glyph);
       });
       fragment.appendChild(handleGroup);
     }
+  }
+
+  function appendStraightSubhexWall(fragment, wall, options = {}) {
+    const points = wall?.Points || [];
+    if (points.length < 2) return;
+    const group = options.editor ? document.createElementNS("http://www.w3.org/2000/svg", "g") : null;
+    const target = group || fragment;
+    if (group) {
+      group.setAttribute("class", "generated-map-subhex-editor-wall-group");
+      group.dataset.subhexWallVisualId = wall.__uuid;
+    }
+    points.slice(1).forEach((point, index) => {
+      const edge = { a: points[index], b: point };
+      const style = getWallBaseStyle(wall.Style);
+      const layers = style === "palisade" ? ["palisade-shadow", "palisade-rail"] : ["base", "body", "crenellations"];
+      layers.forEach(layer => {
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("class", `generated-map-subhex-wall generated-map-subhex-wall-${layer}${options.compact ? " is-compact" : ""}`);
+        path.setAttribute("d", pathCommand(edge.a, edge.b));
+        target.appendChild(path);
+      });
+      if (style === "palisade") {
+        const dx = edge.b.x - edge.a.x;
+        const dy = edge.b.y - edge.a.y;
+        const length = Math.hypot(dx, dy) || 1;
+        const normal = { x: -dy / length, y: dx / length };
+        const commands = [];
+        const stakeCount = Math.max(1, Math.floor(length / 7));
+        for (let stake = 1; stake <= stakeCount; stake += 1) {
+          const t = stake / (stakeCount + 1);
+          const center = { x: edge.a.x + dx * t, y: edge.a.y + dy * t };
+          const stakeHalf = options.editor || options.detail || options.compact ? 1 : 2;
+          commands.push(pathCommand(
+            { x: center.x - normal.x * stakeHalf, y: center.y - normal.y * stakeHalf },
+            { x: center.x + normal.x * stakeHalf, y: center.y + normal.y * stakeHalf }
+          ));
+        }
+        const stakes = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        stakes.setAttribute("class", `generated-map-subhex-wall generated-map-subhex-wall-palisade-stakes${options.compact ? " is-compact" : ""}`);
+        stakes.setAttribute("d", commands.join(" "));
+        target.appendChild(stakes);
+      }
+    });
+    const renderedFixtures = new Set();
+    points.forEach((point, index) => {
+      if (!point.fixture) return;
+      const key = `${getSubhexWallPointKey(point)}:${point.fixture}`;
+      if (renderedFixtures.has(key)) return;
+      renderedFixtures.add(key);
+      appendSubhexWallAnchorFixture(target, wall, index, point.fixture, options);
+    });
+    if (!options.editor) return;
+    const hit = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    hit.setAttribute("class", "generated-map-subhex-editor-wall-hit");
+    hit.setAttribute("d", getSubhexWallPath(wall));
+    hit.setAttribute("fill", "none");
+    hit.setAttribute("stroke", "transparent");
+    hit.setAttribute("stroke-width", "8");
+    hit.dataset.subhexWallId = wall.__uuid;
+    target.appendChild(hit);
+    fragment.appendChild(group);
+  }
+
+  function getSubhexWallAnchorFixtureGeometry(wall, pointIndex, size) {
+    const points = wall?.Points || [];
+    const center = points[pointIndex];
+    if (!center) return null;
+    const before = points[Math.max(0, pointIndex - 1)];
+    const after = points[Math.min(points.length - 1, pointIndex + 1)];
+    const dx = Number(after?.x) - Number(before?.x);
+    const dy = Number(after?.y) - Number(before?.y);
+    const length = Math.hypot(dx, dy) || 1;
+    const along = { x: dx / length, y: dy / length };
+    const normal = { x: -along.y, y: along.x };
+    const alongHalf = size * 0.72;
+    const normalHalf = size * 0.42;
+    const corners = [
+      { x: center.x - along.x * alongHalf - normal.x * normalHalf, y: center.y - along.y * alongHalf - normal.y * normalHalf },
+      { x: center.x + along.x * alongHalf - normal.x * normalHalf, y: center.y + along.y * alongHalf - normal.y * normalHalf },
+      { x: center.x + along.x * alongHalf + normal.x * normalHalf, y: center.y + along.y * alongHalf + normal.y * normalHalf },
+      { x: center.x - along.x * alongHalf + normal.x * normalHalf, y: center.y - along.y * alongHalf + normal.y * normalHalf }
+    ];
+    return { center, along, normal, alongHalf, normalHalf, corners };
+  }
+
+  function appendSubhexWallAnchorFixture(fragment, wall, pointIndex, fixture, options = {}) {
+    if (!["gate", "sluice"].includes(fixture)) return;
+    const size = options.editor || options.detail || options.compact ? 1.5 : 4.2;
+    const geometry = getSubhexWallAnchorFixtureGeometry(wall, pointIndex, size);
+    if (!geometry) return;
+    const { center, along, normal, alongHalf, normalHalf, corners } = geometry;
+    const plate = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    plate.setAttribute("class", `generated-map-subhex-wall-fixture is-${fixture}${options.compact ? " is-compact" : ""}`);
+    plate.setAttribute("points", corners.map(point => `${point.x},${point.y}`).join(" "));
+    fragment.appendChild(plate);
+    if (fixture !== "sluice") return;
+    const bars = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const commands = [-0.36, 0, 0.36].map(offset => {
+      const rib = { x: center.x + along.x * alongHalf * offset, y: center.y + along.y * alongHalf * offset };
+      return pathCommand(
+        { x: rib.x - normal.x * normalHalf, y: rib.y - normal.y * normalHalf },
+        { x: rib.x + normal.x * normalHalf, y: rib.y + normal.y * normalHalf }
+      );
+    });
+    bars.setAttribute("class", `generated-map-subhex-wall-fixture-bars${options.compact ? " is-compact" : ""}`);
+    bars.setAttribute("d", commands.join(" "));
+    fragment.appendChild(bars);
+  }
+
+  function appendSubhexWallAnchorHandle(fragment, wall, pointIndex, options = {}) {
+    const point = wall?.Points?.[pointIndex];
+    if (!point) return null;
+    let handle;
+    if (["gate", "sluice"].includes(point.fixture)) {
+      const geometry = getSubhexWallAnchorFixtureGeometry(wall, pointIndex, 2);
+      if (!geometry) return null;
+      handle = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      handle.setAttribute("points", geometry.corners.map(corner => `${corner.x},${corner.y}`).join(" "));
+      handle.setAttribute("class", `generated-map-subhex-editor-wall-anchor is-fixture is-${point.fixture}${options.className ? ` ${options.className}` : ""}`);
+    } else {
+      handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      handle.setAttribute("class", `generated-map-subhex-editor-wall-anchor${options.className ? ` ${options.className}` : ""}`);
+      handle.setAttribute("cx", String(point.x));
+      handle.setAttribute("cy", String(point.y));
+      handle.setAttribute("r", "2");
+    }
+    handle.dataset.subhexWallId = wall.__uuid;
+    handle.dataset.subhexWallAnchorIndex = String(pointIndex);
+    if (options.junctionKey) handle.dataset.subhexWallJunctionKey = options.junctionKey;
+    if (options.loopId) handle.dataset.subhexWallLoopId = options.loopId;
+    fragment.appendChild(handle);
+    return handle;
+  }
+
+  function appendSubhexWallTower(fragment, junction, options = {}) {
+    const radius = options.editor ? 2 : options.detail || options.compact ? 1.5 : 4.2;
+    const points = Array.from({ length: 8 }, (_, index) => {
+      const angle = Math.PI / 8 + index * Math.PI / 4;
+      return `${junction.point.x + Math.cos(angle) * radius},${junction.point.y + Math.sin(angle) * radius}`;
+    }).join(" ");
+    const tower = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    tower.setAttribute("class", `generated-map-subhex-wall-tower${options.compact ? " is-compact" : ""}`);
+    tower.setAttribute("points", points);
+    if (options.editor) {
+      tower.dataset.subhexWallJunctionKey = junction.key;
+      tower.dataset.subhexWallId = junction.members[0]?.wallId || "";
+    }
+    fragment.appendChild(tower);
+    const crenellations = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const commands = Array.from({ length: 4 }, (_, index) => {
+      const angle = index * Math.PI / 2;
+      const tangent = { x: -Math.sin(angle), y: Math.cos(angle) };
+      const center = {
+        x: junction.point.x + Math.cos(angle) * radius * 0.72,
+        y: junction.point.y + Math.sin(angle) * radius * 0.72
+      };
+      return pathCommand(
+        { x: center.x - tangent.x * radius * 0.18, y: center.y - tangent.y * radius * 0.18 },
+        { x: center.x + tangent.x * radius * 0.18, y: center.y + tangent.y * radius * 0.18 }
+      );
+    });
+    crenellations.setAttribute("class", `generated-map-subhex-wall-tower-crenellations${options.compact ? " is-compact" : ""}`);
+    crenellations.setAttribute("d", commands.join(" "));
+    fragment.appendChild(crenellations);
+  }
+
+  function appendSubhexWallJunctionHandle(fragment, junction) {
+    const member = junction.members[0];
+    const wall = member && getEffectiveSubhexWall(member.wallId);
+    if (!wall) return;
+    appendSubhexWallAnchorHandle(fragment, wall, member.pointIndex, {
+      className: "is-junction",
+      junctionKey: junction.key
+    });
+    const glyph = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    glyph.setAttribute("class", "generated-map-subhex-editor-anchor-plus is-wall");
+    glyph.setAttribute("x", String(junction.point.x));
+    glyph.setAttribute("y", String(junction.point.y));
+    glyph.textContent = junction.point.shared ? "±" : "+";
+    fragment.appendChild(glyph);
+  }
+
+  function appendSubhexEditorWalls(fragment, hex) {
+    const walls = getEffectiveSubhexWalls();
+    const junctions = getSubhexWallJunctions(walls);
+    const loopClosures = getSubhexWallLoopClosures(walls);
+    const anchorMode = (renderer.drawing.subhexEditorTool || "terrain") === "anchor";
+    walls.forEach(wall => appendStraightSubhexWall(fragment, wall, { editor: true }));
+    junctions.forEach(junction => {
+      if (junction.point.tower) appendSubhexWallTower(fragment, junction, { editor: true });
+      else if (anchorMode) appendSubhexWallJunctionHandle(fragment, junction);
+      if (anchorMode && junction.point.tower
+        && junction.point.shared && junction.point.borderHexIds?.includes(hex.id)) {
+        const glyph = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        glyph.setAttribute("class", "generated-map-subhex-editor-wall-shared-glyph");
+        glyph.setAttribute("x", String(junction.point.x));
+        glyph.setAttribute("y", String(junction.point.y + 3.4));
+        glyph.textContent = "=";
+        fragment.appendChild(glyph);
+      }
+    });
+    if (!anchorMode) return;
+    const junctionKeys = new Set(junctions.map(junction => `${Math.round(junction.point.x * 10)}:${Math.round(junction.point.y * 10)}`));
+    const loopRefKeys = new Set();
+    loopClosures.forEach(closure => {
+      if (junctionKeys.has(getSubhexWallPointKey(closure.point))) return;
+      closure.refs.forEach(ref => loopRefKeys.add(`${ref.wallId}:${ref.index}`));
+      const wall = getEffectiveSubhexWall(closure.wallId);
+      if (wall) appendSubhexWallAnchorHandle(fragment, wall, 0, {
+        className: "is-loop",
+        loopId: closure.key
+      });
+    });
+    walls.forEach(wall => wall.Points.forEach((point, index) => {
+      const borderPoint = getNearestPointOnPolygon(point, hex.points);
+      const touchesHex = pointInPolygon(point, hex.points)
+        || (borderPoint && Math.hypot(point.x - borderPoint.x, point.y - borderPoint.y) < 0.25);
+      if (!touchesHex) return;
+      if (junctionKeys.has(`${Math.round(point.x * 10)}:${Math.round(point.y * 10)}`)) return;
+      if (loopRefKeys.has(`${wall.__uuid}:${index}`)) return;
+      appendSubhexWallAnchorHandle(fragment, wall, index);
+      if (point.shared && point.borderHexIds?.includes(hex.id)) {
+        const glyph = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        glyph.setAttribute("class", "generated-map-subhex-editor-wall-shared-glyph");
+        glyph.setAttribute("x", String(point.x));
+        glyph.setAttribute("y", String(point.y));
+        glyph.textContent = "=";
+        fragment.appendChild(glyph);
+      }
+    }));
   }
 
   function appendSubhexEditorPoiMarkers(fragment, hex, metrics) {
@@ -7458,6 +8578,7 @@
     const contextRoutes = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const contextPois = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const routeGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const wallGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const selectionGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const poiGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const gridPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -7503,8 +8624,11 @@
     appendSubhexEditorRoutePaths(routeGroup, hex);
     fragment.appendChild(routeGroup);
 
+    appendSubhexEditorWalls(wallGroup, hex);
+    fragment.appendChild(wallGroup);
+
     selectionGroup.setAttribute("clip-path", `url(#${clipId})`);
-    if ((renderer.drawing.subhexEditorTool || "terrain") !== "anchor") ownedSubhexes.forEach(subhex => {
+    if (isSubhexEditorPaintTool()) ownedSubhexes.forEach(subhex => {
       const key = getSubhexEditorCellKey(subhex);
       const isSelected = key && key === renderer.drawing.subhexEditorSelectedKey;
       const isHovered = key && key === renderer.drawing.subhexEditorHoverKey;
@@ -10064,11 +11188,11 @@
       return {
         type: routeType,
         stroke: "#28bced",
-        width: group.isMajor ? 3.2 : 2.4,
+        width: group.isMajor ? 1.6 : 1.2,
         dash: [],
         alpha: 0.86,
         innerStroke: group.isMajor ? "rgba(218, 247, 255, 0.72)" : "",
-        innerWidth: 1.2,
+        innerWidth: 0.6,
         innerAlpha: 0.72
       };
     }
@@ -10085,19 +11209,19 @@
       return {
         type: routeType,
         stroke: ROAD_STYLE_COLORS[getOverlayBaseStyle(group.style)] || ROAD_STYLE_COLORS.dark_brown,
-        width: 1.3,
-        dash: [3.5, 2.8],
+        width: 0.65,
+        dash: [1.75, 1.4],
         alpha: 0.76
       };
     }
     return {
       type: routeType,
       stroke: ROAD_STYLE_COLORS[getOverlayBaseStyle(group.style)] || ROAD_STYLE_COLORS.dark_brown,
-      width: group.isMajor ? 2.7 : 2,
+      width: group.isMajor ? 1.35 : 1,
       dash: [],
       alpha: 0.88,
       innerStroke: group.isMajor ? "rgba(245, 205, 118, 0.62)" : "",
-      innerWidth: 0.9,
+      innerWidth: 0.45,
       innerAlpha: 0.62
     };
   }
@@ -12021,28 +13145,14 @@
   }
 
   function renderDrawableOverlays(fragment, visibleHexes) {
-    const visibleIds = new Set(visibleHexes.map(hex => hex.id));
-    const wallDecorations = document.createDocumentFragment();
-    const wallsBySegment = new Map();
-
-    getOverlaysByType().wall.filter(overlay => renderer.drawing.visibleOverlays.wall && visibleIds.has(overlay.Hex_ID_Ref)).forEach(overlay => {
-      const hex = hexForPathPoint(overlay.Hex_ID_Ref);
-      if (!hex) return;
-
-      const edgeIndex = EDGE_NAMES.indexOf(overlay.Edge);
-      if (edgeIndex < 0) return;
-
-      const edge = { a: hex.points[edgeIndex], b: hex.points[(edgeIndex + 1) % hex.points.length] };
-      const segmentKey = edgeKey(edge.a, edge.b);
-      const existing = wallsBySegment.get(segmentKey);
-      if (!existing || shouldPreferWallRenderOverlay(overlay, existing.overlay)) {
-        wallsBySegment.set(segmentKey, { overlay, edge });
-      }
-    });
-    wallsBySegment.forEach(({ overlay, edge }) => {
-      renderWallOverlay(fragment, wallDecorations, overlay, edge);
-    });
-    fragment.appendChild(wallDecorations);
+    if (renderer.drawing.visibleOverlays.wall) {
+      const walls = renderer.subhexWalls || [];
+      const compact = isSubhexLayerActive();
+      walls.forEach(wall => appendStraightSubhexWall(fragment, wall, { compact }));
+      getSubhexWallJunctions(walls)
+        .filter(junction => junction.point.tower)
+        .forEach(junction => appendSubhexWallTower(fragment, junction, { compact }));
+    }
   }
 
   function shouldPreferWallRenderOverlay(nextOverlay, currentOverlay) {
@@ -15057,8 +16167,15 @@
     return (renderer.mapOverlays || []).filter(overlay => (
       overlay.From_Hex_ID_Ref === hexId ||
       overlay.To_Hex_ID_Ref === hexId ||
-      overlay.Hex_ID_Ref === hexId
+      overlay.Hex_ID_Ref === hexId ||
+      wallOverlayTouchesHex(overlay, hexId)
     ));
+  }
+
+  function wallOverlayTouchesHex(overlay, hexId) {
+    if (overlay?.Overlay_Type !== "wall" || !overlay.Hex_ID_Ref || !overlay.Edge || !hexId) return false;
+    const owner = renderer.hexesById.get(overlay.Hex_ID_Ref);
+    return getNeighborHex(owner, overlay.Edge)?.id === hexId;
   }
 
   function getMistBrushHexIds(centerHex, tool = "mist") {
@@ -23261,9 +24378,14 @@
     renderer.drawing.saving = true;
     refreshEditorActionControls();
     try {
-      const previous = findExistingWallOverlay(hexId, edge);
+      const requestedRef = { hexId, edge };
+      const segmentKey = getWallSegmentKey(requestedRef) || `${hexId}:${edge}`;
+      const previous = findExistingWallOverlayBySegmentKey(segmentKey);
       if (previous && previous.Style === style) return;
-      const overlay = await savePathOverlaySegment(campaign.id, "wall", hexId, null, style, edge, {});
+      const targetRef = previous
+        ? { hexId: previous.Hex_ID_Ref, edge: previous.Edge }
+        : getCanonicalWallEdgeRef(requestedRef);
+      const overlay = await savePathOverlaySegment(campaign.id, "wall", targetRef.hexId, null, style, targetRef.edge, {});
       upsertLocalOverlay(overlay);
       pushOverlayUndoAction(previous ? [overlay, { ...cloneOverlayRecord(previous), __undoDeleted: true }] : [overlay]);
       renderSvgOnly();
@@ -23304,7 +24426,9 @@
         const previous = findExistingWallOverlayBySegmentKey(key);
         if (previous && previous.Style === style) continue;
         if (previous) previousByKey.set(key, cloneOverlayRecord(previous));
-        refsToSave.push(edgeRef);
+        refsToSave.push(previous
+          ? { hexId: previous.Hex_ID_Ref, edge: previous.Edge }
+          : getCanonicalWallEdgeRef(edgeRef));
       }
       const overlays = (await Promise.all(refsToSave.map(edgeRef => (
         savePathOverlaySegment(campaign.id, "wall", edgeRef.hexId, null, style, edgeRef.edge, {})
@@ -23348,6 +24472,20 @@
       overlay.Overlay_Type === "wall" &&
       (getWallSegmentKey({ hexId: overlay.Hex_ID_Ref, edge: overlay.Edge }) || `${overlay.Hex_ID_Ref}:${overlay.Edge}`) === key
     )) || null;
+  }
+
+  function getCanonicalWallEdgeRef(edgeRef) {
+    if (!edgeRef?.hexId || !edgeRef.edge) return edgeRef;
+    const hex = renderer.hexesById.get(edgeRef.hexId);
+    const neighbor = getNeighborHex(hex, edgeRef.edge);
+    if (!hex || !neighbor || String(hex.id).localeCompare(String(neighbor.id)) <= 0) return edgeRef;
+    const edgeIndex = EDGE_NAMES.indexOf(edgeRef.edge);
+    if (edgeIndex < 0) return edgeRef;
+    return {
+      ...edgeRef,
+      hexId: neighbor.id,
+      edge: EDGE_NAMES[(edgeIndex + 3) % EDGE_NAMES.length]
+    };
   }
 
   async function persistMistOverlay(hexId) {
@@ -23500,11 +24638,7 @@
   async function eraseOverlaysAtHex(hexId) {
     const campaign = getActiveCampaign?.();
     if (!campaign) return;
-    const removed = renderer.mapOverlays.filter(overlay => (
-      overlay.From_Hex_ID_Ref === hexId ||
-      overlay.To_Hex_ID_Ref === hexId ||
-      overlay.Hex_ID_Ref === hexId
-    ));
+    const removed = getOverlaysAtHex(hexId);
     if (!removed.length) return;
     const temporaryIds = new Set(removed.filter(overlay => isTemporaryOverlayId(overlay.__uuid)).map(overlay => overlay.__uuid));
     if (temporaryIds.size) {

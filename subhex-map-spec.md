@@ -441,6 +441,8 @@ After v1 terrain/features are stable, the next likely additions are:
 - A settlement brush should paint a stable, generated town footprint at subhex scale; it is illustrative rather than literal one-mile building placement.
 - Generate clusters of building marks and internal lanes with minimal manual work. Roads and paths entering the footprint should connect naturally to the generated lanes.
 - Keep existing roads and rivers visible and keep buildings off their corridors. Preserve the established road-over-river draw order; painting or erasing a settlement must not change route records.
+- The overhead town paintbrush replaces the normal feature layer in painted subhexes rather than stacking town art with trees, shrubs, or other ordinary feature art.
+- Represent ponds, narrow streams, and other bodies of water too small or irregular to justify a full one-mile water subhex as ordinary feature SVGs. Make these features available only in the subhex editor, not the parent-map editor, and allow them to coexist with trees, shrubs, or other features in the same subhex.
 - Town appearance should remain stable after saving and support later expansion or erasure.
 
 ### Shared Wall Anchors
