@@ -580,6 +580,8 @@
     subhexEditorShell: null,
     subhexEditorCanvas: null,
     subhexEditorCtx: null,
+    subhexEditorVisualRevision: 0,
+    subhexEditorCanvasCache: null,
     subhexEditorSvg: null,
     subhexEditorStage: null,
     subhexEditorTitle: null,
@@ -672,6 +674,15 @@
       subhexEditorSelectedKey: "",
       subhexEditorTerrainBase: "plains",
       subhexEditorFeatureBrush: "woods",
+      subhexEditorSettlementAction: "",
+      subhexEditorSettlementStyle: "village",
+      subhexEditorSettlementDensity: 55,
+      subhexEditorSettlementDensityJitter: 35,
+      subhexEditorSettlementRoadDensity: 45,
+      subhexEditorSettlementRoadStructure: 65,
+      subhexEditorSettlementPointer: null,
+      subhexEditorSettlementPoints: [],
+      subhexEditorSelectedSettlementId: "",
       subhexEditorAnchorAction: "",
       subhexEditorWallAction: "",
       subhexEditorWallStyle: "wall",
@@ -847,6 +858,38 @@
             </div>
             <div class="generated-map-subhex-editor-terrain-options" role="group" aria-label="Sub-hex terrain brush"></div>
             <div class="generated-map-subhex-editor-feature-options" role="group" aria-label="Sub-hex feature brush"></div>
+            <div class="generated-map-subhex-editor-settlement-options" role="group" aria-label="Settlement boundaries">
+              <div class="generated-map-subhex-editor-anchor-heading">Settlement Boundary</div>
+              <div class="generated-map-subhex-editor-settlement-actions">
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-settlement-action="new">New Boundary</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-settlement-action="add">Add Anchor</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-settlement-action="remove">Remove Anchor</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-settlement-action="reroll">Reroll</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-settlement-action="delete">Delete</button>
+              </div>
+              <div class="generated-map-subhex-editor-wall-subheading">Character</div>
+              <div class="generated-map-subhex-editor-settlement-styles">
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-settlement-style="rural">Rural</button>
+                <button class="generated-map-subhex-editor-anchor-option is-active" type="button" data-subhex-editor-settlement-style="village">Village</button>
+                <button class="generated-map-subhex-editor-anchor-option" type="button" data-subhex-editor-settlement-style="city">City</button>
+              </div>
+              <label class="generated-map-subhex-editor-settlement-range">
+                <span>Building Density <strong data-subhex-editor-settlement-density-value>55%</strong></span>
+                <input type="range" min="20" max="100" step="5" value="55" data-subhex-editor-settlement-density>
+              </label>
+              <label class="generated-map-subhex-editor-settlement-range">
+                <span>Density Jitter <strong data-subhex-editor-settlement-density-jitter-value>35%</strong></span>
+                <input type="range" min="0" max="100" step="5" value="35" data-subhex-editor-settlement-density-jitter>
+              </label>
+              <label class="generated-map-subhex-editor-settlement-range">
+                <span>Road Density <strong data-subhex-editor-settlement-road-density-value>45%</strong></span>
+                <input type="range" min="0" max="100" step="5" value="45" data-subhex-editor-settlement-road-density>
+              </label>
+              <label class="generated-map-subhex-editor-settlement-range">
+                <span>Road Structure <strong data-subhex-editor-settlement-road-structure-value>65%</strong></span>
+                <input type="range" min="0" max="100" step="5" value="65" data-subhex-editor-settlement-road-structure>
+              </label>
+            </div>
             <div class="generated-map-subhex-editor-anchor-options" role="group" aria-label="Sub-hex anchor tools">
               <div class="generated-map-subhex-editor-anchor-section">
                 <div class="generated-map-subhex-editor-anchor-heading">Routes</div>
@@ -913,6 +956,7 @@
             </div>
             <div class="map-edit-rail-main generated-map-subhex-editor-rail-main">
               <button type="button" class="generated-map-subhex-editor-tool map-edit-mode-button is-active" data-subhex-editor-tool="terrain"><span class="map-edit-mode-icon" aria-hidden="true">⬢</span><span class="map-edit-mode-label">Terrain &amp; Features</span></button>
+              <button type="button" class="generated-map-subhex-editor-tool map-edit-mode-button" data-subhex-editor-tool="settlement"><span class="map-edit-mode-icon" aria-hidden="true">▦</span><span class="map-edit-mode-label">Settlements</span></button>
               <button type="button" class="generated-map-subhex-editor-tool map-edit-mode-button" data-subhex-editor-tool="anchor"><span class="map-edit-mode-icon" aria-hidden="true">⌖</span><span class="map-edit-mode-label">Anchors</span></button>
             </div>
           </div>
@@ -949,6 +993,7 @@
     renderer.subhexEditorInspector = renderer.root.querySelector(".generated-map-subhex-editor-inspector");
     renderer.subhexEditorTerrainOptions = renderer.root.querySelector(".generated-map-subhex-editor-terrain-options");
     renderer.subhexEditorFeatureOptions = renderer.root.querySelector(".generated-map-subhex-editor-feature-options");
+    renderer.subhexEditorSettlementOptions = renderer.root.querySelector(".generated-map-subhex-editor-settlement-options");
     renderer.subhexEditorAnchorOptions = renderer.root.querySelector(".generated-map-subhex-editor-anchor-options");
     renderer.subhexEditorWallOptions = renderer.root.querySelector(".generated-map-subhex-editor-wall-options");
     renderer.loadingVeil = renderer.root.querySelector(".generated-map-loading-veil");
@@ -1054,6 +1099,66 @@
       } else {
         handleSubhexEditorWallAction(actionButton.dataset.subhexEditorWallAction || "");
       }
+      renderSubhexEditorShell();
+    });
+    renderer.subhexEditorSettlementOptions?.addEventListener("click", event => {
+      const actionButton = event.target.closest?.("[data-subhex-editor-settlement-action]");
+      const styleButton = event.target.closest?.("[data-subhex-editor-settlement-style]");
+      if (!actionButton && !styleButton) return;
+      event.preventDefault();
+      event.stopPropagation();
+      renderer.drawing.subhexEditorTool = "settlement";
+      renderer.drawing.subhexEditorInspectMode = false;
+      if (actionButton) handleSubhexEditorSettlementAction(actionButton.dataset.subhexEditorSettlementAction || "");
+      if (styleButton) {
+        renderer.drawing.subhexEditorSettlementStyle = styleButton.dataset.subhexEditorSettlementStyle || "village";
+        updateSelectedSubhexSettlement({ style: renderer.drawing.subhexEditorSettlementStyle });
+      }
+      syncSubhexEditorToolbar();
+      renderSubhexEditorShell();
+    });
+    const densityInput = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-density]");
+    densityInput?.addEventListener("input", event => {
+      renderer.drawing.subhexEditorSettlementDensity = Number(event.target.value) || 55;
+      syncSubhexEditorSettlementControls();
+    });
+    densityInput?.addEventListener("change", event => {
+      renderer.drawing.subhexEditorSettlementDensity = Number(event.target.value) || 55;
+      updateSelectedSubhexSettlement({ density: renderer.drawing.subhexEditorSettlementDensity });
+      renderSubhexEditorShell();
+    });
+    const densityJitterInput = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-density-jitter]");
+    densityJitterInput?.addEventListener("input", event => {
+      renderer.drawing.subhexEditorSettlementDensityJitter = Number(event.target.value);
+      syncSubhexEditorSettlementControls();
+    });
+    densityJitterInput?.addEventListener("change", event => {
+      renderer.drawing.subhexEditorSettlementDensityJitter = Number(event.target.value);
+      updateSelectedSubhexSettlement({ densityJitter: renderer.drawing.subhexEditorSettlementDensityJitter });
+      renderSubhexEditorShell();
+    });
+    const roadDensityInput = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-road-density]");
+    roadDensityInput?.addEventListener("input", event => {
+      renderer.drawing.subhexEditorSettlementRoadDensity = Number(event.target.value);
+      syncSubhexEditorSettlementControls();
+    });
+    roadDensityInput?.addEventListener("change", event => {
+      renderer.drawing.subhexEditorSettlementRoadDensity = Number(event.target.value);
+      updateSelectedSubhexSettlement({ roadDensity: renderer.drawing.subhexEditorSettlementRoadDensity });
+      renderSubhexEditorShell();
+    });
+    const roadStructureInput = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-road-structure]");
+    roadStructureInput?.addEventListener("input", event => {
+      renderer.drawing.subhexEditorSettlementRoadStructure = Number(event.target.value);
+      syncSubhexEditorSettlementControls();
+    });
+    roadStructureInput?.addEventListener("change", event => {
+      renderer.drawing.subhexEditorSettlementRoadStructure = Number(event.target.value);
+      updateSelectedSubhexSettlement({ roadStructure: renderer.drawing.subhexEditorSettlementRoadStructure });
       renderSubhexEditorShell();
     });
     renderer.subhexEditorShell?.querySelector("[data-subhex-editor-inspect-toggle]")?.addEventListener("click", event => {
@@ -5334,6 +5439,12 @@
     const previousTools = options.preserveTools ? {
       terrainBase: renderer.drawing.subhexEditorTerrainBase,
       featureBrush: renderer.drawing.subhexEditorFeatureBrush,
+      settlementAction: renderer.drawing.subhexEditorSettlementAction,
+      settlementStyle: renderer.drawing.subhexEditorSettlementStyle,
+      settlementDensity: renderer.drawing.subhexEditorSettlementDensity,
+      settlementDensityJitter: renderer.drawing.subhexEditorSettlementDensityJitter,
+      settlementRoadDensity: renderer.drawing.subhexEditorSettlementRoadDensity,
+      settlementRoadStructure: renderer.drawing.subhexEditorSettlementRoadStructure,
       wallStyle: renderer.drawing.subhexEditorWallStyle,
       tool: renderer.drawing.subhexEditorTool,
       inspectMode: renderer.drawing.subhexEditorInspectMode
@@ -5345,6 +5456,15 @@
     renderer.drawing.subhexEditorTerrainBase = previousTools?.terrainBase
       || (hex.baseTerrain && TERRAIN_COLORS[hex.baseTerrain] ? hex.baseTerrain : "plains");
     renderer.drawing.subhexEditorFeatureBrush = previousTools?.featureBrush || "woods";
+    renderer.drawing.subhexEditorSettlementAction = previousTools?.settlementAction || "";
+    renderer.drawing.subhexEditorSettlementStyle = previousTools?.settlementStyle || "village";
+    renderer.drawing.subhexEditorSettlementDensity = previousTools?.settlementDensity || 55;
+    renderer.drawing.subhexEditorSettlementDensityJitter = previousTools?.settlementDensityJitter ?? 35;
+    renderer.drawing.subhexEditorSettlementRoadDensity = previousTools?.settlementRoadDensity ?? 45;
+    renderer.drawing.subhexEditorSettlementRoadStructure = previousTools?.settlementRoadStructure ?? 65;
+    renderer.drawing.subhexEditorSettlementPointer = null;
+    renderer.drawing.subhexEditorSettlementPoints = [];
+    renderer.drawing.subhexEditorSelectedSettlementId = "";
     renderer.drawing.subhexEditorWallStyle = previousTools?.wallStyle || "wall";
     renderer.drawing.subhexEditorTool = previousTools?.tool || "terrain";
     renderer.drawing.subhexEditorInspectMode = previousTools?.inspectMode || false;
@@ -5437,6 +5557,10 @@
     renderer.drawing.subhexEditorSelectedKey = "";
     renderer.drawing.subhexEditorTerrainBase = "plains";
     renderer.drawing.subhexEditorFeatureBrush = "woods";
+    renderer.drawing.subhexEditorSettlementPointer = null;
+    renderer.drawing.subhexEditorSettlementAction = "";
+    renderer.drawing.subhexEditorSettlementPoints = [];
+    renderer.drawing.subhexEditorSelectedSettlementId = "";
     renderer.drawing.subhexEditorTool = "terrain";
     renderer.drawing.subhexEditorInspectMode = false;
     renderer.drawing.subhexEditorAnchorAction = "";
@@ -5514,6 +5638,7 @@
 
   function recordSubhexEditorDraftChange(before) {
     if (!before || before === captureSubhexEditorDraft()) return;
+    renderer.subhexEditorVisualRevision += 1;
     renderer.subhexEditorUndoStack.push(before);
     if (renderer.subhexEditorUndoStack.length > 80) renderer.subhexEditorUndoStack.shift();
     renderer.subhexEditorRedoStack = [];
@@ -5523,6 +5648,8 @@
   function clearSubhexEditorHistory() {
     renderer.subhexEditorUndoStack = [];
     renderer.subhexEditorRedoStack = [];
+    renderer.subhexEditorVisualRevision += 1;
+    renderer.subhexEditorCanvasCache = null;
   }
 
   function restoreSubhexEditorDraft(snapshot) {
@@ -5531,6 +5658,7 @@
     renderer.subhexEditorAnchorDrafts = new Map(state.anchors || []);
     renderer.subhexEditorWallDrafts = new Map(state.walls || []);
     renderer.subhexEditorPoiVisibilityDrafts = new Map(state.poiVisibility || []);
+    renderer.subhexEditorVisualRevision += 1;
     renderSubhexEditorShell();
   }
 
@@ -5606,7 +5734,7 @@
     return getSubhexEditorCellAtPoint(getSubhexEditorWorldPoint(event));
   }
 
-  function paintSubhexEditorCellForTool(subhex, tool = renderer.drawing.subhexEditorTool || "terrain") {
+  function paintSubhexEditorCellForTool(subhex, tool = renderer.drawing.subhexEditorTool || "terrain", worldPoint = null) {
     if (tool === "terrain") return paintSubhexEditorTerrainCell(subhex);
     if (tool === "feature") return paintSubhexEditorFeatureCell(subhex);
     return false;
@@ -5619,14 +5747,14 @@
     renderer.drawing.subhexEditorDragPaintedKeys = new Set();
   }
 
-  function paintSubhexEditorDragCell(subhex) {
+  function paintSubhexEditorDragCell(subhex, worldPoint = null) {
     const tool = renderer.drawing.subhexEditorDragTool || renderer.drawing.subhexEditorTool || "terrain";
     const key = getSubhexEditorCellKey(subhex);
     if (!key) return false;
     const shouldPreventRepeatToggle = tool === "feature" && renderer.drawing.subhexEditorFeatureBrush !== "__erase";
     if (shouldPreventRepeatToggle && renderer.drawing.subhexEditorDragPaintedKeys?.has(key)) return false;
     if (shouldPreventRepeatToggle) renderer.drawing.subhexEditorDragPaintedKeys?.add(key);
-    return paintSubhexEditorCellForTool(subhex, tool);
+    return paintSubhexEditorCellForTool(subhex, tool, worldPoint);
   }
 
   function getSubhexEditorAnchorDraft(key, hex = getSubhexEditorActiveParentHex(), savedOnly = false) {
@@ -5705,7 +5833,8 @@
       points: points.map(point => ({
         x: Number(point.x) || 0,
         y: Number(point.y) || 0,
-        ...(Number.isFinite(point.position) ? { position: point.position } : {})
+        ...(Number.isFinite(point.position) ? { position: point.position } : {}),
+        ...(["start", "end"].includes(point.routeEndpoint) ? { routeEndpoint: point.routeEndpoint } : {})
       }))
     });
   }
@@ -6100,6 +6229,7 @@
   function getSubhexWallEndpointSnap(point, excludedWallId, excludedIndex) {
     const threshold = Math.max(4.8, getSubhexMetrics().radius * 0.85);
     return getSubhexWallEndpointCandidates(excludedWallId, excludedIndex)
+      .filter(candidate => !(point?.tower && candidate.point?.tower))
       .map(candidate => ({
         ...candidate,
         distance: Math.hypot(point.x - candidate.point.x, point.y - candidate.point.y)
@@ -6493,12 +6623,19 @@
     const junctionTolerance = Math.max(1.2, radius * 0.55);
     const startJunction = connected.find(junction => Math.hypot(junction.origin.x - span.start.x, junction.origin.y - span.start.y) < junctionTolerance);
     const endJunction = connected.find(junction => Math.hypot(junction.origin.x - span.end.x, junction.origin.y - span.end.y) < junctionTolerance);
-    const start = startJunction ? getSubhexEditorAnchorDraft(startJunction.key, hex, savedOnly) || startJunction.origin : span.start;
-    const end = endJunction ? getSubhexEditorAnchorDraft(endJunction.key, hex, savedOnly) || endJunction.origin : span.end;
+    const draftPoints = getSubhexEditorRouteDraftPoints(key, hex, savedOnly);
+    const startEndpoint = draftPoints.find(point => point.routeEndpoint === "start");
+    const endEndpoint = draftPoints.find(point => point.routeEndpoint === "end");
+    const start = startJunction
+      ? getSubhexEditorAnchorDraft(startJunction.key, hex, savedOnly) || startJunction.origin
+      : startEndpoint || span.start;
+    const end = endJunction
+      ? getSubhexEditorAnchorDraft(endJunction.key, hex, savedOnly) || endJunction.origin
+      : endEndpoint || span.end;
     const routeNodes = [
       { point: start, length: 0, kind: "endpoint" },
       ...(startLocked ? [{ point: startLock, length: lockDistance, kind: "lock" }] : []),
-      ...getSubhexEditorRouteDraftPoints(key, hex, savedOnly).map(point => ({
+      ...draftPoints.filter(point => !point.routeEndpoint).map(point => ({
         point: clampSubhexEditorPointToParent(point, hex),
         length: Math.max(startLocked ? lockDistance + 0.01 : 0.01, Math.min(
           endLocked ? span.length - lockDistance - 0.01 : span.length - 0.01,
@@ -6604,9 +6741,37 @@
     return true;
   }
 
+  function getSubhexEditorRouteTerminalHandles(route, junctions = []) {
+    const hex = getSubhexEditorActiveParentHex();
+    if (!hex?.points || !route?.span || !route?.entry?.path) return [];
+    const endpoints = getSubhexEditorPathEndpoints(route.entry.path);
+    if (!endpoints) return [];
+    const radius = getSubhexMetrics().radius;
+    const matchDistance = Math.max(0.8, radius * 0.18);
+    const borderDistance = Math.max(0.6, radius * 0.12);
+    return [
+      { point: endpoints.start, spanPoint: route.span.start, routeEndpoint: "start", position: 0 },
+      { point: endpoints.end, spanPoint: route.span.end, routeEndpoint: "end", position: route.span.length }
+    ].filter(candidate => {
+      if (!pointInPolygon(candidate.point, hex.points)) return false;
+      if (Math.hypot(candidate.point.x - candidate.spanPoint.x, candidate.point.y - candidate.spanPoint.y) > matchDistance) return false;
+      const border = getNearestPointOnPolygon(candidate.point, hex.points);
+      if (border && Math.hypot(candidate.point.x - border.x, candidate.point.y - border.y) < borderDistance) return false;
+      return !junctions.some(junction => junction.members.has(route.key)
+        && Math.hypot(junction.origin.x - candidate.point.x, junction.origin.y - candidate.point.y) < matchDistance * 2);
+    }).map(candidate => ({
+      ...candidate.point,
+      position: candidate.position,
+      routeEndpoint: candidate.routeEndpoint
+    }));
+  }
+
   function getSubhexEditorRouteHandlePoints(route, junctions = []) {
     const points = getSubhexEditorRouteDraftPoints(route.key);
-    if (points.length) return points.map(point => ({
+    const terminalHandles = getSubhexEditorRouteTerminalHandles(route, junctions);
+    if (points.length) return [...points, ...terminalHandles.filter(endpoint => (
+      !points.some(point => point.routeEndpoint === endpoint.routeEndpoint)
+    ))].map(point => ({
       ...point,
       position: Number.isFinite(point.position)
         ? point.position
@@ -6632,13 +6797,16 @@
     const minimumGap = Math.max(0.6, getSubhexMetrics().radius * 0.35);
     const usableGaps = gaps.filter(gap => gap.width >= minimumGap);
     const fallbackGap = gaps.reduce((best, gap) => gap.width > best.width ? gap : best, { start: 0, width: 0 });
-    return (usableGaps.length ? usableGaps : [fallbackGap]).map(gap => {
+    const defaultHandles = (usableGaps.length ? usableGaps : [fallbackGap]).map(gap => {
       const point = getSubhexEditorPointAtLength(span.points, gap.start + gap.width / 2);
       return point ? {
         ...clampSubhexEditorPointToParent(point, hex),
         position: getSubhexEditorNearestRoutePoint(point, route.span.points)?.length ?? route.span.length / 2
       } : null;
     }).filter(Boolean);
+    return [...terminalHandles, ...defaultHandles].filter((point, index, all) => (
+      all.findIndex(candidate => Math.hypot(candidate.x - point.x, candidate.y - point.y) < 0.1) === index
+    )).sort((left, right) => left.position - right.position);
   }
 
   function syncSubhexEditorToolbar() {
@@ -6656,6 +6824,7 @@
     });
     renderer.subhexEditorShell?.classList.toggle("is-subhex-terrain-tool", activeTool === "terrain");
     renderer.subhexEditorShell?.classList.toggle("is-subhex-feature-tool", activeTool === "feature");
+    renderer.subhexEditorShell?.classList.toggle("is-subhex-settlement-tool", activeTool === "settlement");
     renderer.subhexEditorShell?.classList.toggle("is-subhex-anchor-tool", activeTool === "anchor");
     if (renderer.subhexEditorShell) {
       renderer.subhexEditorShell.dataset.subhexWallAction = renderer.drawing.subhexEditorWallAction || "";
@@ -6681,6 +6850,53 @@
     });
     syncSubhexEditorTerrainControls();
     syncSubhexEditorFeatureControls();
+    syncSubhexEditorSettlementControls();
+  }
+
+  function syncSubhexEditorSettlementControls() {
+    const action = renderer.drawing.subhexEditorSettlementAction || "";
+    const style = renderer.drawing.subhexEditorSettlementStyle || "village";
+    const selectedId = renderer.drawing.subhexEditorSelectedSettlementId;
+    const selected = Boolean(selectedId && getSubhexEditorSettlements().has(selectedId));
+    if (selectedId && !selected) renderer.drawing.subhexEditorSelectedSettlementId = "";
+    renderer.subhexEditorSettlementOptions?.querySelectorAll("[data-subhex-editor-settlement-action]").forEach(button => {
+      const buttonAction = button.dataset.subhexEditorSettlementAction || "";
+      const active = buttonAction === action;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+      button.disabled = renderer.drawing.saving || (["add", "remove", "reroll", "delete"].includes(buttonAction) && !selected);
+    });
+    renderer.subhexEditorSettlementOptions?.querySelectorAll("[data-subhex-editor-settlement-style]").forEach(button => {
+      const active = button.dataset.subhexEditorSettlementStyle === style;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const density = renderer.subhexEditorSettlementOptions?.querySelector("[data-subhex-editor-settlement-density]");
+    const densityValue = renderer.subhexEditorSettlementOptions?.querySelector("[data-subhex-editor-settlement-density-value]");
+    if (density) density.value = String(renderer.drawing.subhexEditorSettlementDensity || 55);
+    if (density) density.disabled = Boolean(renderer.drawing.saving);
+    if (densityValue) densityValue.textContent = `${renderer.drawing.subhexEditorSettlementDensity || 55}%`;
+    const densityJitter = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-density-jitter]");
+    const densityJitterValue = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-density-jitter-value]");
+    if (densityJitter) densityJitter.value = String(renderer.drawing.subhexEditorSettlementDensityJitter ?? 35);
+    if (densityJitter) densityJitter.disabled = Boolean(renderer.drawing.saving);
+    if (densityJitterValue) densityJitterValue.textContent = `${renderer.drawing.subhexEditorSettlementDensityJitter ?? 35}%`;
+    const roadDensity = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-road-density]");
+    const roadDensityValue = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-road-density-value]");
+    if (roadDensity) roadDensity.value = String(renderer.drawing.subhexEditorSettlementRoadDensity ?? 45);
+    if (roadDensity) roadDensity.disabled = Boolean(renderer.drawing.saving);
+    if (roadDensityValue) roadDensityValue.textContent = `${renderer.drawing.subhexEditorSettlementRoadDensity ?? 45}%`;
+    const roadStructure = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-road-structure]");
+    const roadStructureValue = renderer.subhexEditorSettlementOptions
+      ?.querySelector("[data-subhex-editor-settlement-road-structure-value]");
+    if (roadStructure) roadStructure.value = String(renderer.drawing.subhexEditorSettlementRoadStructure ?? 65);
+    if (roadStructure) roadStructure.disabled = Boolean(renderer.drawing.saving);
+    if (roadStructureValue) roadStructureValue.textContent = `${renderer.drawing.subhexEditorSettlementRoadStructure ?? 65}%`;
   }
 
   function populateSubhexEditorTerrainControls() {
@@ -6813,6 +7029,19 @@
         : "Drag route, junction, or POI handles to adjust their position.";
       return;
     }
+    if ((renderer.drawing.subhexEditorTool || "terrain") === "settlement") {
+      const action = renderer.drawing.subhexEditorSettlementAction;
+      inspector.textContent = renderer.drawing.subhexEditorSettlementAction === "new"
+        ? "Place at least three triangular anchors, then click the first anchor to close the settlement boundary."
+        : action === "add"
+          ? "Click a settlement boundary segment to add another triangular anchor."
+          : action === "remove"
+            ? "Click a triangular anchor to remove it. Settlement boundaries must keep at least three anchors."
+        : renderer.drawing.subhexEditorSelectedSettlementId
+          ? "Drag triangular boundary anchors to reshape the settlement. Anchors snap to nearby walls but remain separate."
+          : "Create a settlement boundary or select an existing settlement.";
+      return;
+    }
     const selectedKey = renderer.drawing.subhexEditorSelectedKey;
     const hoverKey = renderer.drawing.subhexEditorHoverKey;
     const selected = subhexes.find(subhex => getSubhexEditorCellKey(subhex) === selectedKey) || null;
@@ -6844,16 +7073,19 @@
   function handleSubhexEditorPointerMove(event) {
     if (!renderer.drawing.subhexEditorHexId) return;
     const worldPoint = getSubhexEditorWorldPoint(event);
+    renderer.drawing.subhexEditorSettlementPointer = worldPoint;
     const cell = getSubhexEditorCellAtPoint(worldPoint);
     const neighbor = !cell && worldPoint ? getParentHexForSubhexPoint(worldPoint, renderer.hexes) : null;
     renderer.subhexEditorStage?.classList.toggle("is-over-neighbor", Boolean(neighbor && neighbor.id !== renderer.drawing.subhexEditorHexId));
-    if (["anchor", "wall"].includes(renderer.drawing.subhexEditorTool || "terrain")) return;
+    if (["anchor", "wall", "settlement"].includes(renderer.drawing.subhexEditorTool || "terrain")) {
+      return;
+    }
     const hoverKey = getSubhexEditorCellKey(cell);
     if (renderer.drawing.subhexEditorDragActive) {
       event.preventDefault();
       event.stopPropagation();
       renderer.drawing.subhexEditorHoverKey = hoverKey;
-      paintSubhexEditorDragCell(cell);
+      paintSubhexEditorDragCell(cell, worldPoint);
       return;
     }
     if (hoverKey === renderer.drawing.subhexEditorHoverKey) return;
@@ -6863,6 +7095,7 @@
 
   function handleSubhexEditorPointerLeave() {
     renderer.subhexEditorStage?.classList.remove("is-over-neighbor");
+    renderer.drawing.subhexEditorSettlementPointer = null;
     if (renderer.drawing.subhexEditorDragActive) return;
     if (!renderer.drawing.subhexEditorHoverKey) return;
     renderer.drawing.subhexEditorHoverKey = "";
@@ -6872,6 +7105,7 @@
   function handleSubhexEditorPointerDown(event) {
     if (!renderer.drawing.subhexEditorHexId || event.button !== 0) return;
     const tool = renderer.drawing.subhexEditorTool || "terrain";
+    if (tool === "settlement") return;
     if (!isSubhexEditorPaintTool(tool)) return;
     const cell = getSubhexEditorCellFromEvent(event);
     if (!cell) return;
@@ -6884,7 +7118,8 @@
     renderer.drawing.subhexEditorSuppressClickUntil = performance.now() + 450;
     renderer.subhexEditorStage?.setPointerCapture?.(event.pointerId);
     renderer.drawing.subhexEditorHoverKey = getSubhexEditorCellKey(cell);
-    paintSubhexEditorDragCell(cell);
+    renderer.drawing.subhexEditorSettlementPointer = getSubhexEditorWorldPoint(event);
+    paintSubhexEditorDragCell(cell, renderer.drawing.subhexEditorSettlementPointer);
   }
 
   function handleSubhexEditorPointerUp(event) {
@@ -6908,6 +7143,69 @@
 
   function handleSubhexEditorAnchorPointerDown(event) {
     if (renderer.drawing.subhexEditorInspectMode) return;
+    if ((renderer.drawing.subhexEditorTool || "terrain") === "settlement") {
+      const handle = event.target?.closest?.("[data-subhex-settlement-anchor-index]");
+      const boundary = event.target?.closest?.("[data-subhex-settlement-id]");
+      const id = handle?.dataset.subhexSettlementId || boundary?.dataset.subhexSettlementId || "";
+      if (!id) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const settlement = getSubhexEditorSettlements().get(id);
+      if (!settlement) return;
+      renderer.drawing.subhexEditorSelectedSettlementId = id;
+      renderer.drawing.subhexEditorSettlementStyle = settlement.style;
+      renderer.drawing.subhexEditorSettlementDensity = settlement.density;
+      renderer.drawing.subhexEditorSettlementDensityJitter = settlement.densityJitter;
+      renderer.drawing.subhexEditorSettlementRoadDensity = settlement.roadDensity;
+      renderer.drawing.subhexEditorSettlementRoadStructure = settlement.roadStructure;
+      const action = renderer.drawing.subhexEditorSettlementAction;
+      if (handle && action === "remove") {
+        if (settlement.points.length <= 3) {
+          if (renderer.subhexEditorInspector) renderer.subhexEditorInspector.textContent = "A settlement boundary must keep at least three anchors.";
+          return;
+        }
+        const before = captureSubhexEditorDraft();
+        const nextPoints = settlement.points.filter((_, index) => index !== Number(handle.dataset.subhexSettlementAnchorIndex));
+        updateSelectedSubhexSettlement({ points: nextPoints }, { before, record: false });
+        recordSubhexEditorDraftChange(before);
+        renderSubhexEditorShell();
+        return;
+      }
+      if (!handle && boundary && action === "add") {
+        const point = getSubhexEditorWorldPoint(event);
+        let nearest = null;
+        settlement.points.forEach((start, index) => {
+          const end = settlement.points[(index + 1) % settlement.points.length];
+          const candidate = getNearestPointOnSegment(point, start, end);
+          const distance = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+          if (!nearest || distance < nearest.distance) nearest = { point: candidate, index: index + 1, distance };
+        });
+        if (nearest) {
+          const before = captureSubhexEditorDraft();
+          const nextPoints = settlement.points.map(candidate => ({ ...candidate }));
+          nextPoints.splice(nearest.index, 0, getSubhexSettlementBoundaryPoint(nearest.point, { settlementId: id }));
+          updateSelectedSubhexSettlement({ points: nextPoints }, { before, record: false });
+          recordSubhexEditorDraftChange(before);
+          renderSubhexEditorShell();
+        }
+        return;
+      }
+      if (action === "remove") return;
+      if (handle) {
+        renderer.subhexEditorActiveAnchorDrag = {
+          key: id,
+          type: "settlement",
+          index: Number(handle.dataset.subhexSettlementAnchorIndex),
+          points: settlement.points.map(point => ({ ...point })),
+          pointerId: event.pointerId,
+          before: captureSubhexEditorDraft()
+        };
+        renderer.subhexEditorSvg?.setPointerCapture?.(event.pointerId);
+      } else {
+        renderSubhexEditorShell();
+      }
+      return;
+    }
     if ((renderer.drawing.subhexEditorTool || "terrain") === "anchor"
       && event.target?.closest?.("[data-subhex-wall-id], [data-subhex-wall-anchor-index], [data-subhex-wall-junction-key], [data-subhex-wall-loop-id]")) {
       const loopTarget = event.target?.closest?.("[data-subhex-wall-loop-id]");
@@ -7188,7 +7486,14 @@
     const point = getSubhexEditorWorldPoint(event);
     if (!point) return;
     const clampedPoint = clampSubhexEditorPointToParent(point);
-    if (["wall-junction", "wall-loop"].includes(drag.type)) {
+    if (drag.type === "settlement") {
+      const nextPoints = drag.points.map(candidate => ({ ...candidate }));
+      nextPoints[drag.index] = getSubhexSettlementBoundaryPoint(point, {
+        settlementId: drag.key,
+        anchorIndex: drag.index
+      });
+      drag.points = nextPoints;
+    } else if (["wall-junction", "wall-loop"].includes(drag.type)) {
       const nextPoint = getSubhexWallBoundaryPoint(point);
       drag.refs.forEach(ref => {
         const wall = getEffectiveSubhexWall(ref.wallId);
@@ -7222,7 +7527,11 @@
     } else if (drag.type === "route") {
       const points = drag.points || getSubhexEditorRouteDraftPoints(drag.key);
       const nextPoints = points.length ? points.slice() : [clampedPoint];
-      nextPoints[drag.index] = { ...clampedPoint, position: points[drag.index]?.position };
+      nextPoints[drag.index] = {
+        ...(points[drag.index] || {}),
+        ...clampedPoint,
+        position: points[drag.index]?.position
+      };
       drag.points = nextPoints;
       setSubhexEditorRouteDraftPoints(drag.key, nextPoints);
     } else {
@@ -7238,6 +7547,9 @@
     event.stopPropagation();
     renderer.subhexEditorSvg?.releasePointerCapture?.(event.pointerId);
     renderer.drawing.subhexEditorSuppressClickUntil = performance.now() + 900;
+    if (drag.type === "settlement") {
+      updateSelectedSubhexSettlement({ points: drag.points }, { before: drag.before, record: false });
+    }
     if (drag.type === "wall") {
       connectSubhexWallEndpoint(drag);
       materializeSubhexWallCrossings();
@@ -7245,6 +7557,7 @@
     if (["wall", "wall-junction", "wall-loop"].includes(drag.type)) reconcileSubhexWallJunctions();
     recordSubhexEditorDraftChange(drag.before);
     renderer.subhexEditorActiveAnchorDrag = null;
+    renderSubhexEditorShell();
   }
 
   function handleSubhexEditorAnchorPointerCancel(event) {
@@ -7256,6 +7569,7 @@
     recordSubhexEditorDraftChange(drag.before);
     renderer.drawing.subhexEditorSuppressClickUntil = performance.now() + 900;
     renderer.subhexEditorActiveAnchorDrag = null;
+    renderSubhexEditorShell();
   }
 
   function setSubhexEditorHoveredRoute(key) {
@@ -7299,6 +7613,10 @@
     if (performance.now() < (renderer.drawing.subhexEditorSuppressClickUntil || 0)) return;
     const worldPoint = getSubhexEditorWorldPoint(event);
     const cell = getSubhexEditorCellAtPoint(worldPoint);
+    if ((renderer.drawing.subhexEditorTool || "terrain") === "settlement") {
+      handleSubhexEditorSettlementClick(worldPoint);
+      return;
+    }
     if ((renderer.drawing.subhexEditorTool || "terrain") === "anchor"
       && renderer.drawing.subhexEditorWallAction) {
       const action = renderer.drawing.subhexEditorWallAction;
@@ -7322,7 +7640,7 @@
     const tool = renderer.drawing.subhexEditorTool || "terrain";
     if (isSubhexEditorPaintTool(tool)) {
       const before = captureSubhexEditorDraft();
-      if (paintSubhexEditorCellForTool(cell, tool)) {
+      if (paintSubhexEditorCellForTool(cell, tool, worldPoint)) {
         recordSubhexEditorDraftChange(before);
         return;
       }
@@ -7343,7 +7661,8 @@
     renderer.drawing.subhexEditorTerrainDraft.set(key, {
       baseTerrain,
       features: [],
-      elevation: getAutoTerrainElevation(baseTerrain, [])
+      elevation: getAutoTerrainElevation(baseTerrain, []),
+      settlement: getSubhexEditorCellSnapshot(subhex).settlement || null
     });
     renderer.drawing.subhexEditorSelectedKey = key;
     renderSubhexEditorShell();
@@ -7378,11 +7697,222 @@
     renderer.drawing.subhexEditorTerrainDraft.set(key, {
       baseTerrain,
       features,
-      elevation: getAutoTerrainElevation(baseTerrain, features)
+      elevation: getAutoTerrainElevation(baseTerrain, features),
+      settlement: cell.settlement || null
     });
     renderer.drawing.subhexEditorSelectedKey = key;
     renderSubhexEditorShell();
     return true;
+  }
+
+  function normalizeSubhexSettlement(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const points = (Array.isArray(value.points) ? value.points : []).map(point => ({
+      x: Number(point?.x),
+      y: Number(point?.y)
+    })).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+    if (points.length >= 3) {
+      return {
+        version: 2,
+        id: String(value.id || `settlement-${stableHash(JSON.stringify(points))}`),
+        style: value.style === "town" ? "city" : (["rural", "village", "city"].includes(value.style) ? value.style : "village"),
+        density: Math.max(20, Math.min(100, Number(value.density) || 55)),
+        densityJitter: Math.max(0, Math.min(100, Number.isFinite(Number(value.densityJitter))
+          ? Number(value.densityJitter) : 35)),
+        roadDensity: Math.max(0, Math.min(100, Number.isFinite(Number(value.roadDensity))
+          ? Number(value.roadDensity) : 45)),
+        roadStructure: Math.max(0, Math.min(100, Number.isFinite(Number(value.roadStructure))
+          ? Number(value.roadStructure) : 65)),
+        seed: String(value.seed || "settlement"),
+        points
+      };
+    }
+    const dabs = (Array.isArray(value.dabs) ? value.dabs : []).map(dab => ({
+      x: Number(dab?.x),
+      y: Number(dab?.y),
+      r: Number(dab?.r),
+      paint: dab?.paint !== false
+    })).filter(dab => Number.isFinite(dab.x) && Number.isFinite(dab.y)
+      && Number.isFinite(dab.r) && dab.r > 0);
+    if (!dabs.length) return null;
+    return {
+      version: 1,
+      style: value.style === "town" ? "city" : (["rural", "village", "city"].includes(value.style) ? value.style : "village"),
+      density: Math.max(20, Math.min(100, Number(value.density) || 55)),
+      densityJitter: Math.max(0, Math.min(100, Number.isFinite(Number(value.densityJitter))
+        ? Number(value.densityJitter) : 35)),
+      roadDensity: Math.max(0, Math.min(100, Number.isFinite(Number(value.roadDensity))
+        ? Number(value.roadDensity) : 45)),
+      roadStructure: Math.max(0, Math.min(100, Number.isFinite(Number(value.roadStructure))
+        ? Number(value.roadStructure) : 65)),
+      seed: String(value.seed || "settlement"),
+      dabs
+    };
+  }
+
+  function getSubhexEditorSettlementCells() {
+    return renderer.subhexEditorLayout?.contextSubhexes
+      || renderer.subhexEditorLayout?.ownedSubhexes
+      || [];
+  }
+
+  function getSubhexEditorSettlements() {
+    const settlements = new Map();
+    getSubhexEditorSettlementCells().forEach(subhex => {
+      const settlement = normalizeSubhexSettlement(getSubhexEditorCellSnapshot(subhex).settlement);
+      if (settlement?.version === 2 && !settlements.has(settlement.id)) settlements.set(settlement.id, settlement);
+    });
+    return settlements;
+  }
+
+  function doPolygonsIntersect(left = [], right = []) {
+    if (left.length < 3 || right.length < 3) return false;
+    if (left.some(point => pointInPolygon(point, right)) || right.some(point => pointInPolygon(point, left))) return true;
+    return left.some((start, index) => {
+      const end = left[(index + 1) % left.length];
+      return right.some((otherStart, otherIndex) => Boolean(getSubhexEditorSegmentCrossing(
+        start, end, otherStart, right[(otherIndex + 1) % right.length]
+      )));
+    });
+  }
+
+  function getSubhexSettlementBoundaryPoint(point, options = {}) {
+    if (!point) return point;
+    const threshold = Math.max(0.8, getSubhexMetrics().radius * 0.18);
+    let nearest = null;
+    getSubhexEditorSettlements().forEach(settlement => {
+      if (settlement.id === options.settlementId) return;
+      settlement.points.forEach(anchor => {
+        const distance = Math.hypot(point.x - anchor.x, point.y - anchor.y);
+        if (distance <= threshold && (!nearest || distance < nearest.distance)) nearest = { point: anchor, distance };
+      });
+    });
+    getEffectiveSubhexWalls().forEach(wall => {
+      (wall.Points || []).forEach(anchor => {
+        const distance = Math.hypot(point.x - anchor.x, point.y - anchor.y);
+        if (distance <= threshold && (!nearest || distance < nearest.distance)) nearest = { point: anchor, distance };
+      });
+      (wall.Points || []).slice(1).forEach((end, index) => {
+        const candidate = getNearestPointOnSegment(point, wall.Points[index], end);
+        const distance = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+        if (distance <= threshold && (!nearest || distance < nearest.distance)) nearest = { point: candidate, distance };
+      });
+    });
+    return nearest ? { x: nearest.point.x, y: nearest.point.y } : { x: point.x, y: point.y };
+  }
+
+  function setSubhexSettlementOnCells(settlement) {
+    if (!settlement?.id || settlement.points?.length < 3) return false;
+    const cells = getSubhexEditorSettlementCells();
+    let changed = false;
+    cells.forEach(subhex => {
+      const key = getSubhexEditorCellKey(subhex);
+      if (!key) return;
+      const cell = getSubhexEditorCellSnapshot(subhex);
+      const existing = normalizeSubhexSettlement(cell.settlement);
+      const intersects = doPolygonsIntersect(settlement.points, subhex.points);
+      if (!intersects && existing?.id !== settlement.id) return;
+      renderer.drawing.subhexEditorTerrainDraft.set(key, {
+        baseTerrain: cell.baseTerrain || subhex.owner?.baseTerrain || "plains",
+        features: intersects ? [] : (cell.features || []),
+        elevation: Number.isFinite(Number(cell.elevation))
+          ? Number(cell.elevation)
+          : getAutoTerrainElevation(cell.baseTerrain, cell.features || []),
+        settlement: intersects ? settlement : null
+      });
+      changed = true;
+    });
+    renderer.subhexSettlementBuildingCache?.clear?.();
+    renderer.subhexSettlementPlanCache?.clear?.();
+    return changed;
+  }
+
+  function updateSelectedSubhexSettlement(changes = {}, options = {}) {
+    const id = renderer.drawing.subhexEditorSelectedSettlementId;
+    const settlement = id ? getSubhexEditorSettlements().get(id) : null;
+    if (!settlement) return false;
+    const before = options.before || captureSubhexEditorDraft();
+    const next = { ...settlement, ...changes };
+    if (Array.isArray(changes.points)) next.points = changes.points.map(point => ({ ...point }));
+    const changed = setSubhexSettlementOnCells(next);
+    if (changed && options.record !== false) recordSubhexEditorDraftChange(before);
+    return changed;
+  }
+
+  function handleSubhexEditorSettlementAction(action) {
+    if (action === "new") {
+      renderer.drawing.subhexEditorSettlementAction = renderer.drawing.subhexEditorSettlementAction === "new" ? "" : "new";
+      renderer.drawing.subhexEditorSettlementPoints = [];
+      renderer.drawing.subhexEditorSelectedSettlementId = "";
+      return;
+    }
+    if (!renderer.drawing.subhexEditorSelectedSettlementId) return;
+    if (["add", "remove"].includes(action)) {
+      renderer.drawing.subhexEditorSettlementAction = renderer.drawing.subhexEditorSettlementAction === action ? "" : action;
+      return;
+    }
+    if (action === "reroll") {
+      updateSelectedSubhexSettlement({ seed: `settlement-${Date.now().toString(36)}` });
+      return;
+    }
+    if (action === "delete" && window.confirm("Delete this settlement boundary? Cleared feature art will remain cleared.")) {
+      const before = captureSubhexEditorDraft();
+      const id = renderer.drawing.subhexEditorSelectedSettlementId;
+      getSubhexEditorSettlementCells().forEach(subhex => {
+        const cell = getSubhexEditorCellSnapshot(subhex);
+        if (normalizeSubhexSettlement(cell.settlement)?.id !== id) return;
+        renderer.drawing.subhexEditorTerrainDraft.set(getSubhexEditorCellKey(subhex), { ...cell, settlement: null });
+      });
+      renderer.drawing.subhexEditorSelectedSettlementId = "";
+      renderer.subhexSettlementBuildingCache?.clear?.();
+      renderer.subhexSettlementPlanCache?.clear?.();
+      recordSubhexEditorDraftChange(before);
+    }
+  }
+
+  function handleSubhexEditorSettlementClick(worldPoint) {
+    if (!worldPoint) return false;
+    if (renderer.drawing.subhexEditorSettlementAction === "new") {
+      const points = renderer.drawing.subhexEditorSettlementPoints || [];
+      const closeDistance = getSubhexMetrics().radius * 0.3;
+      if (points.length >= 3 && Math.hypot(worldPoint.x - points[0].x, worldPoint.y - points[0].y) <= closeDistance) {
+        const before = captureSubhexEditorDraft();
+        const settlement = {
+          version: 2,
+          id: `settlement-${Date.now().toString(36)}-${stableHash(points.map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join("|"))}`,
+          style: renderer.drawing.subhexEditorSettlementStyle || "village",
+          density: renderer.drawing.subhexEditorSettlementDensity || 55,
+          densityJitter: renderer.drawing.subhexEditorSettlementDensityJitter ?? 35,
+          roadDensity: renderer.drawing.subhexEditorSettlementRoadDensity ?? 45,
+          roadStructure: renderer.drawing.subhexEditorSettlementRoadStructure ?? 65,
+          seed: `settlement-${Date.now().toString(36)}`,
+          points: points.map(point => ({ ...point }))
+        };
+        if (setSubhexSettlementOnCells(settlement)) {
+          renderer.drawing.subhexEditorSelectedSettlementId = settlement.id;
+          renderer.drawing.subhexEditorSettlementAction = "";
+          renderer.drawing.subhexEditorSettlementPoints = [];
+          recordSubhexEditorDraftChange(before);
+          renderSubhexEditorShell();
+          return true;
+        }
+      }
+      renderer.drawing.subhexEditorSettlementPoints = [...points, getSubhexSettlementBoundaryPoint(worldPoint)];
+      renderSubhexEditorShell();
+      return true;
+    }
+    const selected = [...getSubhexEditorSettlements().values()].reverse()
+      .find(settlement => pointInPolygon(worldPoint, settlement.points));
+    renderer.drawing.subhexEditorSelectedSettlementId = selected?.id || "";
+    if (selected) {
+      renderer.drawing.subhexEditorSettlementStyle = selected.style;
+      renderer.drawing.subhexEditorSettlementDensity = selected.density;
+      renderer.drawing.subhexEditorSettlementDensityJitter = selected.densityJitter;
+      renderer.drawing.subhexEditorSettlementRoadDensity = selected.roadDensity;
+      renderer.drawing.subhexEditorSettlementRoadStructure = selected.roadStructure;
+    }
+    renderSubhexEditorShell();
+    return Boolean(selected);
   }
 
   function syncSubhexEditorActionControls(hex = null) {
@@ -7532,7 +8062,11 @@
     // Shared cells use one storage owner even when painted from another parent.
     const sharedSnapshots = new Map();
     const affectedTileHexIds = new Set([hex.id]);
-    layout.ownedSubhexes.forEach(subhex => {
+    const editedSubhexes = new Map([
+      ...(layout.ownedSubhexes || []),
+      ...(layout.contextSubhexes || [])
+    ].map(subhex => [getSubhexEditorCellKey(subhex), subhex]));
+    editedSubhexes.forEach(subhex => {
       const owner = subhex.owner;
       const key = getSubhexEditorCellKey(subhex);
       const hasDraft = Boolean(getSubhexEditorTerrainDraft(subhex));
@@ -7562,7 +8096,8 @@
         features: cell.features || [],
         elevation: Number.isFinite(Number(cell.elevation))
           ? Number(cell.elevation)
-          : getAutoTerrainElevation(cell.baseTerrain, cell.features || [])
+          : getAutoTerrainElevation(cell.baseTerrain, cell.features || []),
+        ...(cell.settlement ? { settlement: cell.settlement } : {})
       };
     });
 
@@ -7758,7 +8293,8 @@
       cells[key] = {
         base: cell.baseTerrain,
         features: cell.features || [],
-        elevation: Number.isFinite(Number(cell.elevation)) ? Number(cell.elevation) : getAutoTerrainElevation(cell.baseTerrain, cell.features || [])
+        elevation: Number.isFinite(Number(cell.elevation)) ? Number(cell.elevation) : getAutoTerrainElevation(cell.baseTerrain, cell.features || []),
+        ...(cell.settlement ? { settlement: cell.settlement } : {})
       };
     });
     renderer.subhexEditorAnchorDrafts?.forEach((draft, key) => {
@@ -7767,7 +8303,8 @@
         ? { points: draft.points.map(point => ({
             x: point.x,
             y: point.y,
-            ...(Number.isFinite(point.position) ? { position: point.position } : {})
+            ...(Number.isFinite(point.position) ? { position: point.position } : {}),
+            ...(["start", "end"].includes(point.routeEndpoint) ? { routeEndpoint: point.routeEndpoint } : {})
           })) }
         : { x: draft.x, y: draft.y };
     });
@@ -7789,7 +8326,8 @@
     return {
       baseTerrain: subhex.owner?.baseTerrain || "plains",
       features,
-      elevation: getSubhexGeneratedElevation(subhex)
+      elevation: getSubhexGeneratedElevation(subhex),
+      settlement: null
     };
   }
 
@@ -7803,7 +8341,8 @@
     return {
       baseTerrain,
       features,
-      elevation: Number.isFinite(Number(cell.elevation)) ? Number(cell.elevation) : getAutoTerrainElevation(baseTerrain, features)
+      elevation: Number.isFinite(Number(cell.elevation)) ? Number(cell.elevation) : getAutoTerrainElevation(baseTerrain, features),
+      settlement: normalizeSubhexSettlement(cell.settlement)
     };
   }
 
@@ -7949,12 +8488,32 @@
     const dpr = window.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(rect.width));
     const height = Math.max(1, Math.round(rect.height));
-    canvas.width = Math.max(1, Math.round(width * dpr));
-    canvas.height = Math.max(1, Math.round(height * dpr));
+    const pixelWidth = Math.max(1, Math.round(width * dpr));
+    const pixelHeight = Math.max(1, Math.round(height * dpr));
+    const transform = renderer.subhexEditorLayout.transform;
+    const cacheKey = [
+      hex.id,
+      pixelWidth,
+      pixelHeight,
+      transform.scale,
+      transform.offsetX,
+      transform.offsetY,
+      renderer.subhexEditorVisualRevision,
+      renderer.overlayRevision,
+      renderer.featureAssetsLoaded ? 1 : 0,
+      renderer.featureImages.size
+    ].join("|");
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const transform = renderer.subhexEditorLayout.transform;
+    const cachedCanvas = renderer.subhexEditorCanvasCache;
+    if (!renderer.drawing.subhexEditorDragActive && cachedCanvas?.key === cacheKey
+      && cachedCanvas.canvas?.width === pixelWidth && cachedCanvas.canvas?.height === pixelHeight) {
+      ctx.drawImage(cachedCanvas.canvas, 0, 0);
+      return;
+    }
     ctx.save();
     ctx.setTransform(
       transform.scale * dpr,
@@ -7968,13 +8527,14 @@
       cells.forEach(subhex => drawCanvasPolygon(ctx, subhex.points, getSubhexEditorTerrainFill(subhex), 1));
       cells.forEach(subhex => {
         const features = getSubhexEditorRenderedFeatures(subhex);
-        renderSubhexFarmlandOverlay(ctx, subhex, metrics, features);
-        const stack = getSubhexFeatureStack(subhex, features);
+        renderSubhexFarmlandOverlay(ctx, subhex, metrics, features, { editor: true });
+        const stack = getSubhexFeatureStack(subhex, features, { editor: true });
         stack.forEach((item, index) => {
           const image = getFeatureArtImage(item.file, item.tint, getSubhexFeatureImageUsage(subhex));
           if (!image) return;
           drawFeatureArtImage(ctx, image, getSubhexFeatureArtBox(subhex, metrics, index, stack.length), item.opacity);
         });
+        drawSubhexSettlement(ctx, subhex, metrics, { editor: true });
       });
     };
     drawCells(subhexes);
@@ -7991,6 +8551,13 @@
     drawCells(ownedSubhexes);
     ctx.restore();
     ctx.restore();
+    if (!renderer.drawing.subhexEditorDragActive) {
+      const cached = renderer.subhexEditorCanvasCache?.canvas || document.createElement("canvas");
+      cached.width = pixelWidth;
+      cached.height = pixelHeight;
+      cached.getContext("2d")?.drawImage(canvas, 0, 0);
+      renderer.subhexEditorCanvasCache = { key: cacheKey, canvas: cached };
+    }
   }
 
   function renderSubhexPreview(hexId, preview) {
@@ -8037,6 +8604,7 @@
           }
           drawFeatureArtImage(ctx, image, getSubhexFeatureArtBox(cell, metrics, index, stack.length), item.opacity);
         });
+        drawSubhexSettlement(ctx, cell, metrics);
       });
     };
     let imagesReady = true;
@@ -8113,21 +8681,32 @@
     previewWalls.forEach(wall => appendStraightSubhexWall(wallGroup, wall, { detail: true }));
     getSubhexWallJunctions(previewWalls)
       .filter(junction => junction.point.tower)
-      .forEach(junction => appendSubhexWallTower(wallGroup, junction, { detail: true }));
+      .forEach(junction => appendSubhexWallTower(wallGroup, junction, {
+        detail: true,
+        wallStyle: getSubhexJunctionWallStyle(junction, previewWalls)
+      }));
     svgFragment.appendChild(wallGroup);
     appendSubhexIdLabels(svgFragment, contextCells, {
       primaryKeys: new Set(ownedCells.map(getSubhexEditorCellKey))
     });
     pois.forEach((poi, index) => {
+      if (!isPoiSubhexVisible(poi)) return;
       const poiKey = getPoiRecordKey(poi, `${hex.id}:${index}`);
       const anchor = assignments.get(poiKey);
       if (!anchor?.center) return;
+      const savedAnchor = getSubhexEditorAnchorDraft(
+        getSubhexEditorPoiAnchorKey(hex, poi, `${hex.id}:${index}`), hex, true
+      );
+      const markerCenter = savedAnchor && savedAnchor.x != null && savedAnchor.y != null
+        && Number.isFinite(Number(savedAnchor.x)) && Number.isFinite(Number(savedAnchor.y))
+        ? { x: Number(savedAnchor.x), y: Number(savedAnchor.y) }
+        : anchor.center;
       const diameter = Math.max(7, Math.min(10.5, metrics.radius * 1.42));
       const shapeKind = getPoiMarkerShapeKind(poi);
       appendPoiMarkerGroup(poiGroup, {
         poi,
-        centerX: anchor.center.x,
-        centerY: anchor.center.y,
+        centerX: markerCenter.x,
+        centerY: markerCenter.y,
         markerRadius: diameter / 2 * getSubhexPoiProfileScale(shapeKind),
         baseIconSize: Math.max(4.5, Math.min(diameter - 2.8, metrics.radius * 1.02)) * getSubhexPoiIconScale(shapeKind),
         clipKey: `codex-subhex-${hex.id}-${poiKey}`,
@@ -8382,14 +8961,22 @@
     return handle;
   }
 
+  function getSubhexJunctionWallStyle(junction, walls = getEffectiveSubhexWalls()) {
+    const wallId = junction?.members?.[0]?.wallId;
+    const wall = (walls || []).find(candidate => candidate.__uuid === wallId);
+    return getWallBaseStyle(wall?.Style || "wall");
+  }
+
   function appendSubhexWallTower(fragment, junction, options = {}) {
     const radius = options.editor ? 2 : options.detail || options.compact ? 1.5 : 4.2;
+    const wallStyle = options.wallStyle || getSubhexJunctionWallStyle(junction);
+    const styleClass = wallStyle === "palisade" ? " is-palisade" : " is-wall";
     const points = Array.from({ length: 8 }, (_, index) => {
       const angle = Math.PI / 8 + index * Math.PI / 4;
       return `${junction.point.x + Math.cos(angle) * radius},${junction.point.y + Math.sin(angle) * radius}`;
     }).join(" ");
     const tower = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-    tower.setAttribute("class", `generated-map-subhex-wall-tower${options.compact ? " is-compact" : ""}`);
+    tower.setAttribute("class", `generated-map-subhex-wall-tower${styleClass}${options.compact ? " is-compact" : ""}`);
     tower.setAttribute("points", points);
     if (options.editor) {
       tower.dataset.subhexWallJunctionKey = junction.key;
@@ -8409,7 +8996,7 @@
         { x: center.x + tangent.x * radius * 0.18, y: center.y + tangent.y * radius * 0.18 }
       );
     });
-    crenellations.setAttribute("class", `generated-map-subhex-wall-tower-crenellations${options.compact ? " is-compact" : ""}`);
+    crenellations.setAttribute("class", `generated-map-subhex-wall-tower-crenellations${styleClass}${options.compact ? " is-compact" : ""}`);
     crenellations.setAttribute("d", commands.join(" "));
     fragment.appendChild(crenellations);
   }
@@ -8437,7 +9024,10 @@
     const anchorMode = (renderer.drawing.subhexEditorTool || "terrain") === "anchor";
     walls.forEach(wall => appendStraightSubhexWall(fragment, wall, { editor: true }));
     junctions.forEach(junction => {
-      if (junction.point.tower) appendSubhexWallTower(fragment, junction, { editor: true });
+      if (junction.point.tower) appendSubhexWallTower(fragment, junction, {
+        editor: true,
+        wallStyle: getSubhexJunctionWallStyle(junction, walls)
+      });
       else if (anchorMode) appendSubhexWallJunctionHandle(fragment, junction);
       if (anchorMode && junction.point.tower
         && junction.point.shared && junction.point.borderHexIds?.includes(hex.id)) {
@@ -8628,7 +9218,7 @@
     fragment.appendChild(wallGroup);
 
     selectionGroup.setAttribute("clip-path", `url(#${clipId})`);
-    if (isSubhexEditorPaintTool()) ownedSubhexes.forEach(subhex => {
+    if (isSubhexEditorPaintTool() && renderer.drawing.subhexEditorTool !== "settlement") ownedSubhexes.forEach(subhex => {
       const key = getSubhexEditorCellKey(subhex);
       const isSelected = key && key === renderer.drawing.subhexEditorSelectedKey;
       const isHovered = key && key === renderer.drawing.subhexEditorHoverKey;
@@ -8667,6 +9257,40 @@
     parentOutline.setAttribute("points", polygonPoints);
     fragment.appendChild(parentOutline);
 
+    if (renderer.drawing.subhexEditorTool === "settlement") {
+      const settlementGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      settlementGroup.setAttribute("class", "generated-map-subhex-editor-settlement-boundaries");
+      const appendBoundary = (settlement, drawing = false) => {
+        if (!settlement?.points?.length) return;
+        const selected = settlement.id && settlement.id === renderer.drawing.subhexEditorSelectedSettlementId;
+        const polygon = document.createElementNS("http://www.w3.org/2000/svg", drawing ? "polyline" : "polygon");
+        polygon.setAttribute("class", `generated-map-subhex-editor-settlement-boundary${selected ? " is-selected" : ""}${drawing ? " is-drawing" : ""}`);
+        polygon.setAttribute("points", settlement.points.map(point => `${point.x},${point.y}`).join(" "));
+        if (settlement.id) polygon.dataset.subhexSettlementId = settlement.id;
+        settlementGroup.appendChild(polygon);
+        if (!selected && !drawing) return;
+        const size = Math.max(0.7, getSubhexMetrics().radius * 0.19);
+        settlement.points.forEach((point, index) => {
+          const handle = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+          handle.setAttribute("class", `generated-map-subhex-editor-settlement-anchor${drawing && index === 0 ? " is-close-anchor" : ""}`);
+          handle.setAttribute("points", `${point.x},${point.y - size} ${point.x + size * 0.88},${point.y + size * 0.58} ${point.x - size * 0.88},${point.y + size * 0.58}`);
+          if (settlement.id) handle.dataset.subhexSettlementId = settlement.id;
+          handle.dataset.subhexSettlementAnchorIndex = String(index);
+          settlementGroup.appendChild(handle);
+        });
+      };
+      const activeSettlementDrag = renderer.subhexEditorActiveAnchorDrag?.type === "settlement"
+        ? renderer.subhexEditorActiveAnchorDrag : null;
+      getSubhexEditorSettlements().forEach(settlement => appendBoundary(
+        activeSettlementDrag?.key === settlement.id
+          ? { ...settlement, points: activeSettlementDrag.points }
+          : settlement
+      ));
+      const draftPoints = renderer.drawing.subhexEditorSettlementPoints || [];
+      if (draftPoints.length) appendBoundary({ points: draftPoints }, true);
+      fragment.appendChild(settlementGroup);
+    }
+
     appendSubhexEditorPoiMarkers(poiGroup, hex, getSubhexMetrics());
     fragment.appendChild(poiGroup);
 
@@ -8704,13 +9328,16 @@
       bounds,
       metrics,
       ownedSubhexes,
+      contextSubhexes,
       transform
     };
     syncSubhexEditorActionControls(hex);
     syncSubhexEditorPoiVisibilityControls(hex);
     syncSubhexEditorInspector(hex, ownedSubhexes);
     syncSubhexEditorFeatureControls();
-    renderSubhexEditorCanvas(hex, contextSubhexes, ownedSubhexes, metrics);
+    if (!renderer.subhexEditorActiveAnchorDrag) {
+      renderSubhexEditorCanvas(hex, contextSubhexes, ownedSubhexes, metrics);
+    }
     renderSubhexEditorSvg(hex, ownedSubhexes, contextSubhexes, viewport);
   }
 
@@ -9868,6 +10495,7 @@
         ctx.save();
         clipToMapHexArea(ctx, clipHexes);
         clipHexes.forEach(hex => drawCanvasPolygon(ctx, hex.points, hex.fill, 1, 1 / scale));
+        renderParentSettlementFills(ctx, rasterBounds);
         ctx.restore();
       }
       if (layer === "routes") {
@@ -9945,6 +10573,7 @@
       renderer.hexes.forEach(hex => {
         drawCanvasPolygon(ctx, hex.points, hex.fill);
       });
+      renderParentSettlementFills(ctx);
     } else {
       const dirtyBounds = getTerrainDirtyBounds();
       if (!dirtyBounds) return;
@@ -9958,8 +10587,51 @@
       patchHexes.forEach(hex => {
         drawCanvasPolygon(ctx, hex.points, hex.fill);
       });
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(
+        dirtyBounds.left,
+        dirtyBounds.top,
+        dirtyBounds.right - dirtyBounds.left,
+        dirtyBounds.bottom - dirtyBounds.top
+      );
+      ctx.clip();
+      renderParentSettlementFills(ctx, dirtyBounds);
+      ctx.restore();
     }
     renderer.cacheDirty = false;
+  }
+
+  function getSavedSubhexSettlements() {
+    const settlements = new Map();
+    renderer.hexes.forEach(hex => {
+      Object.values(hex.subhexSnapshot?.cells || {}).forEach(cell => {
+        const settlement = normalizeSubhexSettlement(cell?.settlement);
+        if (settlement?.version === 2 && !settlements.has(settlement.id)) {
+          settlements.set(settlement.id, settlement);
+        }
+      });
+    });
+    return [...settlements.values()];
+  }
+
+  function renderParentSettlementFills(ctx, bounds = null) {
+    getSavedSubhexSettlements().forEach(settlement => {
+      if (bounds && !renderBoundsIntersect(getRenderPointsBounds(settlement.points), bounds)) return;
+      ctx.save();
+      ctx.beginPath();
+      settlement.points.forEach((point, index) => (
+        index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)
+      ));
+      ctx.closePath();
+      ctx.fillStyle = settlement.style === "city"
+        ? "rgba(112, 72, 43, 0.62)"
+        : settlement.style === "village"
+          ? "rgba(128, 88, 49, 0.42)"
+          : "rgba(139, 103, 61, 0.24)";
+      ctx.fill();
+      ctx.restore();
+    });
   }
 
   function syncFeatureRenderMode() {
@@ -10597,6 +11269,7 @@
 
   function buildSubhexFeaturePlan(subhexes, metrics) {
     const commands = [];
+    const settlements = [];
     const images = new Map();
     subhexes.forEach(subhex => {
       const seededFeatures = getSubhexSeededFeatures(subhex);
@@ -10608,9 +11281,10 @@
       const stack = getSubhexFeatureStack(subhex, seededFeatures);
       stack.forEach((item, index) => commands.push({ file: item.file, tint: item.tint,
         box: getSubhexFeatureArtBox(subhex, metrics, index, stack.length), opacity: item.opacity }));
+      if (getSubhexSettlementForRender(subhex)) settlements.push(subhex);
     });
     commands.forEach(item => images.set(getFeatureImageCacheKey(item.file, item.tint, "subhex"), { file: item.file, tint: item.tint }));
-    return { commands, images: [...images.values()] };
+    return { commands, settlements, images: [...images.values()] };
   }
 
   function getSubhexFeatureTileScale() {
@@ -10825,6 +11499,7 @@
       const image = renderer.featureImages.get(getFeatureImageCacheKey(item.file, item.tint, "subhex"))?.image;
       if (image) drawFeatureArtImage(ctx, image, item.box, item.opacity);
     });
+    (plan.settlements || []).forEach(subhex => drawSubhexSettlement(ctx, subhex, getSubhexMetrics()));
     ctx.restore();
   }
 
@@ -10840,6 +11515,15 @@
     };
   }
 
+  function getSubhexSnapshotHash(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") return 0;
+    renderer.subhexSnapshotHashCache ||= new WeakMap();
+    if (!renderer.subhexSnapshotHashCache.has(snapshot)) {
+      renderer.subhexSnapshotHashCache.set(snapshot, stableHash(JSON.stringify(snapshot)));
+    }
+    return renderer.subhexSnapshotHashCache.get(snapshot);
+  }
+
   function getSubhexDetailTileKey(hex, metrics) {
     const featureScale = getSubhexFeatureTileScale();
     const featureSupersample = getFeatureImageSupersample("subhex");
@@ -10849,7 +11533,7 @@
       hex.baseTerrain,
       Number(hex.elevation || 0),
       (hex.features || []).join(","),
-      hex.subhexSnapshot ? stableHash(JSON.stringify(hex.subhexSnapshot)) : 0,
+      getSubhexSnapshotHash(hex.subhexSnapshot),
       getFarmlandOverlayHexIds().has(hex.id) ? 1 : 0,
       metrics.radius,
       metrics.hexHeight,
@@ -10870,6 +11554,13 @@
 
   function invalidateSubhexDetailForHex(hexId) {
     if (!hexId) return;
+    const hex = hexForPathPoint(hexId);
+    if (hex?.subhexSnapshot) {
+      renderer.subhexSnapshotHashCache?.delete?.(hex.subhexSnapshot);
+      renderer.subhexSnapshotRouteHashCache?.delete?.(hex.subhexSnapshot);
+    }
+    renderer.subhexRouteAnchorRevision = (renderer.subhexRouteAnchorRevision || 0) + 1;
+    renderer.subhexSettlementRouteSignatureCache?.clear?.();
     renderer.subhexRouteProjectionCache = { key: "", entries: [] };
     renderer.subhexSavedRoutePatchCache.delete(hexId);
     deleteSubhexDetailTile(hexId);
@@ -11241,9 +11932,10 @@
     ctx.restore();
   }
 
-  function getSubhexFeatureStack(subhex, seededFeatures = null) {
+  function getSubhexFeatureStack(subhex, seededFeatures = null, options = {}) {
     const owner = subhex.owner;
     if (!owner) return [];
+    if (getSubhexSettlementForRender(subhex, options)) return [];
     if (isSubhexFarmlandOwner(subhex)) return [];
 
     const features = Array.isArray(seededFeatures) ? seededFeatures : getSubhexSeededFeatures(subhex);
@@ -11267,7 +11959,758 @@
       .slice(0, 2);
   }
 
-  function renderSubhexFarmlandOverlay(ctx, subhex, metrics, seededFeatures = null) {
+  function getSubhexSettlementForRender(subhex, options = {}) {
+    const cell = options.editor ? getSubhexEditorCellSnapshot(subhex) : getSubhexSavedCellSnapshot(subhex);
+    return normalizeSubhexSettlement(cell?.settlement);
+  }
+
+  function isSubhexSettlementPointPainted(settlement, localX, localY) {
+    if (settlement?.version === 2) return pointInPolygon({ x: localX, y: localY }, settlement.points);
+    let painted = false;
+    settlement.dabs.forEach(dab => {
+      if (Math.hypot(localX - dab.x, localY - dab.y) <= dab.r) painted = dab.paint;
+    });
+    return painted;
+  }
+
+  function isSubhexSettlementPointBlocked(point, metrics, options = {}, footprintClearance = 0) {
+    const wallClearance = metrics.radius * 0.16 + footprintClearance;
+    const walls = options.editor ? getEffectiveSubhexWalls() : (renderer.subhexWalls || []);
+    if (walls.some(wall => (wall.Points || []).slice(1).some((end, index) => (
+      distanceToSegment(point, wall.Points[index], end) < wallClearance
+    )))) return true;
+    if (options.skipRoutes) return false;
+    if (typeof Path2D !== "function") return false;
+    const hitCanvas = renderer.subhexSettlementHitCanvas || document.createElement("canvas");
+    renderer.subhexSettlementHitCanvas = hitCanvas;
+    const hitCtx = hitCanvas.getContext("2d");
+    if (!hitCtx) return false;
+    hitCtx.setTransform(1, 0, 0, 1, 0, 0);
+    return getSubhexRouteProjectionEntries().some(entry => {
+      if (!entry.path || entry.type === "sea_route") return false;
+      try {
+        hitCtx.lineWidth = Math.max(metrics.radius * 0.2, entry.width + metrics.radius * 0.1)
+          + footprintClearance * 2;
+        entry.settlementHitPath ||= new Path2D(entry.path);
+        return hitCtx.isPointInStroke(entry.settlementHitPath, point.x, point.y);
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  function getSubhexSettlementBuildings(subhex, settlement, metrics, options = {}) {
+    const cell = options.editor ? getSubhexEditorCellSnapshot(subhex) : getSubhexSavedCellSnapshot(subhex);
+    if (!settlement || WATER_TERRAINS.has(cell?.baseTerrain || subhex.owner?.baseTerrain)) return [];
+    if (settlement.version === 2) return getSubhexBoundarySettlementBuildings(subhex, settlement, metrics, options);
+    renderer.subhexSettlementBuildingCache ||= new Map();
+    const legacyCacheKey = [
+      "legacy",
+      getSubhexEditorCellKey(subhex),
+      stableHash(JSON.stringify(settlement)),
+      renderer.overlayRevision || 0,
+      stableHash(getSubhexSettlementWallSignature(options)),
+      options.editor ? "editor" : "saved"
+    ].join("|");
+    if (renderer.subhexSettlementBuildingCache.has(legacyCacheKey)) return renderer.subhexSettlementBuildingCache.get(legacyCacheKey);
+    const density = settlement.density / 100;
+    const styleFactor = settlement.style === "rural" ? 0.72 : settlement.style === "city" ? 1.18 : 1;
+    const target = Math.round((10 + density * 34) * styleFactor);
+    const attempts = Math.max(70, target * 7);
+    const spacing = metrics.radius * (settlement.style === "city" ? 0.105 : settlement.style === "rural" ? 0.18 : 0.14)
+      * (1.2 - density * 0.35);
+    const buildings = [];
+    for (let index = 0; index < attempts && buildings.length < target; index += 1) {
+      const localX = (seededUnit(`${settlement.seed}:building-x:${index}`) * 2 - 1) * 0.88;
+      const localY = (seededUnit(`${settlement.seed}:building-y:${index}`) * 2 - 1) * 0.76;
+      if (!isSubhexSettlementPointPainted(settlement, localX, localY)) continue;
+      const point = {
+        x: subhex.center.x + localX * metrics.radius,
+        y: subhex.center.y + localY * metrics.radius
+      };
+      if (!pointInPolygon(point, subhex.points) || isSubhexSettlementPointBlocked(point, metrics, options)) continue;
+      if (buildings.some(building => Math.hypot(building.x - point.x, building.y - point.y) < spacing)) continue;
+      const sizeRoll = seededUnit(`${settlement.seed}:building-size:${index}`);
+      buildings.push({
+        ...point,
+        width: metrics.radius * (0.105 + sizeRoll * 0.075) * (settlement.style === "city" ? 1.04 : 1),
+        height: metrics.radius * (0.07 + sizeRoll * 0.045),
+        angle: (Math.floor(seededUnit(`${settlement.seed}:building-angle:${index}`) * 6) * Math.PI) / 3,
+        shade: seededUnit(`${settlement.seed}:building-shade:${index}`)
+      });
+    }
+    renderer.subhexSettlementBuildingCache.set(legacyCacheKey, buildings);
+    return buildings;
+  }
+
+  function getSubhexSettlementWallSignature(options = {}) {
+    if (!options.editor) return String(renderer.overlayRevision || 0);
+    return getEffectiveSubhexWalls().map(wall => `${wall.__uuid}:${(wall.Points || [])
+      .map(point => `${Number(point.x).toFixed(2)},${Number(point.y).toFixed(2)}`).join(";")}`).join("|");
+  }
+
+  function getSubhexSettlementCenter(settlement) {
+    const points = settlement?.points || [];
+    return points.length ? points.reduce((sum, point) => ({
+      x: sum.x + point.x / points.length,
+      y: sum.y + point.y / points.length
+    }), { x: 0, y: 0 }) : { x: 0, y: 0 };
+  }
+
+  function getSubhexSettlementRouteAnchorSignature(settlement) {
+    renderer.subhexSettlementRouteSignatureCache ||= new Map();
+    const cacheKey = [
+      settlement.id,
+      stableHash(JSON.stringify(settlement.points)),
+      renderer.subhexRouteAnchorRevision || 0
+    ].join("|");
+    if (renderer.subhexSettlementRouteSignatureCache.has(cacheKey)) {
+      return renderer.subhexSettlementRouteSignatureCache.get(cacheKey);
+    }
+    const bounds = getRenderPointsBounds(settlement.points, getSubhexMetrics().radius * 2);
+    renderer.subhexSnapshotRouteHashCache ||= new WeakMap();
+    const signature = getHexesForBounds(bounds).map(hex => {
+      const snapshot = hex?.subhexSnapshot;
+      if (!snapshot) return `${hex?.id || ""}:0`;
+      let routeHash = renderer.subhexSnapshotRouteHashCache.get(snapshot);
+      if (routeHash === undefined) {
+        const anchors = Object.entries(snapshot.anchors || {})
+          .filter(([key]) => key.startsWith("route:") || key.startsWith("junction:"))
+          .sort(([left], [right]) => left.localeCompare(right));
+        routeHash = stableHash(JSON.stringify(anchors));
+        renderer.subhexSnapshotRouteHashCache.set(snapshot, routeHash);
+      }
+      return `${hex.id}:${routeHash}`;
+    }).join("|");
+    renderer.subhexSettlementRouteSignatureCache.set(cacheKey, signature);
+    return signature;
+  }
+
+  function getSubhexSettlementUnpatchedRouteSpans(path, polygons = []) {
+    const points = sampleSubhexEditorPathPoints(path);
+    if (points.length < 2 || !polygons.length) return points.length >= 2 ? [points] : [];
+    const spans = [];
+    let current = [];
+    const pushCurrent = () => {
+      if (current.length >= 2) spans.push(current);
+      current = [];
+    };
+    for (let index = 1; index < points.length; index += 1) {
+      const start = points[index - 1];
+      const end = points[index];
+      const splitPoints = [start, end];
+      polygons.forEach(polygon => {
+        getSubhexEditorSegmentPolygonIntersections(start, end, polygon).forEach(point => splitPoints.push(point));
+      });
+      splitPoints.sort((left, right) => (
+        Math.hypot(left.x - start.x, left.y - start.y) - Math.hypot(right.x - start.x, right.y - start.y)
+      ));
+      const uniquePoints = splitPoints.filter((point, pointIndex) => !pointIndex || Math.hypot(
+        point.x - splitPoints[pointIndex - 1].x,
+        point.y - splitPoints[pointIndex - 1].y
+      ) > 0.01);
+      for (let pointIndex = 1; pointIndex < uniquePoints.length; pointIndex += 1) {
+        const from = uniquePoints[pointIndex - 1];
+        const to = uniquePoints[pointIndex];
+        const midpoint = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+        const patched = polygons.some(polygon => pointInPolygon(midpoint, polygon));
+        if (patched) {
+          pushCurrent();
+          continue;
+        }
+        if (!current.length) current.push(from);
+        else if (Math.hypot(current[current.length - 1].x - from.x, current[current.length - 1].y - from.y) > 0.01) {
+          pushCurrent();
+          current.push(from);
+        }
+        current.push(to);
+      }
+    }
+    pushCurrent();
+    return spans;
+  }
+
+  function getSubhexSettlementRouteContext(settlement) {
+    const bounds = getRenderPointsBounds(settlement.points, getSubhexMetrics().radius * 2);
+    const visibleHexes = getHexesForBounds(bounds);
+    const entries = getSubhexRouteProjectionEntries(visibleHexes);
+    const patches = getSubhexSavedRoutePatches(visibleHexes, entries);
+    const polylines = [];
+    const signatures = [];
+    entries.forEach(entry => {
+      if (!entry.path || !["road", "path"].includes(entry.type)) return;
+      const entryPatches = (patches.get(entry) || []).filter(patch => renderBoundsIntersect(
+        getRenderPointsBounds(patch.hex?.points || []), bounds
+      ));
+      const routeId = `${entry.type}:${stableHash(entry.path)}`;
+      const routeSpans = entryPatches.length
+        ? [
+          ...getSubhexSettlementUnpatchedRouteSpans(entry.path, entryPatches.map(patch => patch.hex.points)),
+          ...entryPatches.flatMap(patch => [patch.path, patch.untouchedPath]
+            .filter(Boolean).map(path => sampleSubhexEditorPathPoints(path)))
+        ]
+        : [sampleSubhexEditorPathPoints(entry.path)];
+      const spanHashes = new Set();
+      const uniqueSpans = routeSpans.filter(points => {
+        if (points.length < 2) return false;
+        const hash = stableHash(JSON.stringify(points));
+        if (spanHashes.has(hash)) return false;
+        spanHashes.add(hash);
+        return true;
+      });
+      uniqueSpans.forEach((points, index) => {
+        if (points.length < 2) return;
+        const nearBoundary = points.some(point => (
+          point.x >= bounds.left && point.x <= bounds.right && point.y >= bounds.top && point.y <= bounds.bottom
+        )) || points.slice(1).some((end, pointIndex) => renderBoundsIntersect(
+          getRenderPointsBounds([points[pointIndex], end]), bounds
+        ));
+        if (!nearBoundary) return;
+        polylines.push({ points, type: entry.type, routeId, generated: false });
+        signatures.push(`${entry.type}:${index}:${stableHash(JSON.stringify(points))}`);
+      });
+    });
+    return { polylines, signature: signatures.join("|") };
+  }
+
+  function getPolygonPerimeterPoint(points = [], fraction = 0) {
+    if (!points.length) return null;
+    const segments = points.map((start, index) => {
+      const end = points[(index + 1) % points.length];
+      return { start, end, length: Math.hypot(end.x - start.x, end.y - start.y) };
+    });
+    const total = segments.reduce((sum, segment) => sum + segment.length, 0);
+    let target = (((fraction % 1) + 1) % 1) * total;
+    for (const segment of segments) {
+      if (target <= segment.length) {
+        const ratio = segment.length ? target / segment.length : 0;
+        return {
+          x: segment.start.x + (segment.end.x - segment.start.x) * ratio,
+          y: segment.start.y + (segment.end.y - segment.start.y) * ratio
+        };
+      }
+      target -= segment.length;
+    }
+    return { ...points[0] };
+  }
+
+  function sampleQuadraticLane(start, control, end, steps = 18) {
+    return Array.from({ length: steps + 1 }, (_, index) => {
+      const t = index / steps;
+      const inverse = 1 - t;
+      return {
+        x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+        y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y
+      };
+    });
+  }
+
+  function getNearestSettlementRouteSegment(center, polylines = []) {
+    let nearest = null;
+    polylines.forEach(polyline => polyline.points.slice(1).forEach((end, index) => {
+      const start = polyline.points[index];
+      const point = getNearestPointOnSegment(center, start, end);
+      const distance = Math.hypot(center.x - point.x, center.y - point.y);
+      if (!nearest || distance < nearest.distance) nearest = {
+        point,
+        distance,
+        angle: Math.atan2(end.y - start.y, end.x - start.x)
+      };
+    }));
+    return nearest;
+  }
+
+  function buildSubhexSettlementGeneratedLanes(settlement, routeContext, metrics) {
+    const center = getSubhexSettlementCenter(settlement);
+    const nearestRoute = getNearestSettlementRouteSegment(center, routeContext.polylines);
+    const routeAngle = nearestRoute?.angle ?? seededUnit(`${settlement.seed}:lane-angle`) * Math.PI * 2;
+    const bounds = getRenderPointsBounds(settlement.points);
+    const extent = Math.hypot(bounds.right - bounds.left, bounds.bottom - bounds.top);
+    const structure = Math.max(0, Math.min(1, Number(settlement.roadStructure ?? 65) / 100));
+    const roadDensity = Math.max(0, Math.min(1, Number(settlement.roadDensity ?? 45) / 100));
+    const boundaryArea = getPolygonArea(settlement.points);
+    const subhexArea = Math.max(1, Math.sqrt(3) * 1.5 * metrics.radius * metrics.radius);
+    const areaInSubhexes = Math.max(0.5, boundaryArea / subhexArea);
+    const desiredLaneCount = settlement.style === "city"
+      ? 1 + Math.round(roadDensity * (16 + Math.sqrt(areaInSubhexes) * 4))
+      : settlement.style === "village"
+        ? 1 + Math.round(roadDensity * (8 + Math.sqrt(areaInSubhexes) * 2))
+        : 1 + (roadDensity > 0.78 ? 1 : 0);
+    const laneCount = Math.max(1, desiredLaneCount - Math.min(
+      routeContext.polylines.length,
+      settlement.style === "city" ? 2 : 1
+    ));
+    const structuredCount = Math.round(laneCount * structure);
+    const structuredIndices = new Set(Array.from({ length: laneCount }, (_, index) => ({
+      index,
+      order: seededUnit(`${settlement.seed}:structured-order:${index}`)
+    })).sort((left, right) => left.order - right.order)
+      .slice(0, structuredCount)
+      .map(item => item.index));
+    const lanes = [];
+    for (let index = 0; index < laneCount; index += 1) {
+      const salt = `${settlement.seed}:lane:${index}`;
+      const isStructured = structuredIndices.has(index);
+      const baseFraction = seededUnit(`${salt}:start`);
+      let organicStart;
+      let organicEnd;
+      if (!index) {
+        organicStart = nearestRoute?.point || getPolygonPerimeterPoint(settlement.points, baseFraction);
+        organicEnd = getPolygonPerimeterPoint(settlement.points, baseFraction + 0.48 + seededUnit(`${salt}:span`) * 0.08);
+      } else {
+        const parentLane = lanes[Math.min(lanes.length - 1, Math.floor((index - 1) / 2))] || lanes[0];
+        const branchAt = 0.2 + seededUnit(`${salt}:branch-at`) * 0.62;
+        const interiorParentPoints = parentLane.points.filter(point => pointInPolygon(point, settlement.points));
+        const branchPoints = interiorParentPoints.length ? interiorParentPoints : parentLane.points;
+        const parentIndex = Math.max(0, Math.min(branchPoints.length - 1,
+          Math.round(branchAt * (branchPoints.length - 1))));
+        organicStart = { ...branchPoints[parentIndex] };
+        organicEnd = getPolygonPerimeterPoint(settlement.points, baseFraction);
+      }
+      const axis = index % 2;
+      const slot = Math.floor(index / 2);
+      const signedSlot = slot ? (slot % 2 ? Math.ceil(slot / 2) : -Math.ceil(slot / 2)) : 0;
+      const orderedAngle = routeAngle + axis * Math.PI / 2
+        + (seededUnit(`${salt}:order-angle`) - 0.5) * 0.24 * (1 - structure);
+      const orderedOffset = signedSlot * metrics.radius * (settlement.style === "city" ? 0.92 : 1.18);
+      const orderedCenter = {
+        x: center.x - Math.sin(orderedAngle) * orderedOffset,
+        y: center.y + Math.cos(orderedAngle) * orderedOffset
+      };
+      const orderedStart = {
+        x: orderedCenter.x - Math.cos(orderedAngle) * extent,
+        y: orderedCenter.y - Math.sin(orderedAngle) * extent
+      };
+      const orderedEnd = {
+        x: orderedCenter.x + Math.cos(orderedAngle) * extent,
+        y: orderedCenter.y + Math.sin(orderedAngle) * extent
+      };
+      let start = { ...(isStructured ? orderedStart : organicStart) };
+      let end = { ...(isStructured ? orderedEnd : organicEnd) };
+      if (settlement.style === "rural" && nearestRoute) {
+        start = { ...nearestRoute.point };
+        end = getPolygonPerimeterPoint(settlement.points, baseFraction);
+      }
+      const bend = isStructured
+        ? extent * 0.006
+        : extent * (settlement.style === "city" ? 0.06 : settlement.style === "village" ? 0.10 : 0.15);
+      const segmentAngle = Math.atan2(end.y - start.y, end.x - start.x);
+      const bendDirection = seededUnit(`${salt}:bend-direction`) > 0.5 ? 1 : -1;
+      const control = {
+        x: (start.x + end.x) / 2 - Math.sin(segmentAngle) * bend * bendDirection,
+        y: (start.y + end.y) / 2 + Math.cos(segmentAngle) * bend * bendDirection
+      };
+      lanes.push({
+        points: sampleQuadraticLane(start, control, end, settlement.style === "rural" ? 12 : 20),
+        type: settlement.style === "city" && index % 4 === 0 ? "stone" : "brown",
+        generated: true
+      });
+    }
+    const networkLanes = lanes.slice();
+    const routeGroups = new Map();
+    routeContext.polylines.forEach(polyline => {
+      const key = polyline.routeId || `${polyline.type}:${routeGroups.size}`;
+      if (!routeGroups.has(key)) routeGroups.set(key, []);
+      routeGroups.get(key).push(polyline);
+    });
+    routeGroups.forEach((routePolylines, routeId) => {
+      const routePoints = [];
+      routePolylines.forEach(polyline => {
+        polyline.points.forEach(point => {
+          if (pointInPolygon(point, settlement.points)) routePoints.push(point);
+        });
+        polyline.points.slice(1).forEach((end, index) => {
+          getSubhexEditorSegmentPolygonIntersections(polyline.points[index], end, settlement.points)
+            .forEach(point => routePoints.push(point));
+        });
+      });
+      if (!routePoints.length || !networkLanes.length) return;
+      let nearest = null;
+      routePoints.forEach(routePoint => networkLanes.forEach(lane => {
+        lane.points.slice(1).forEach((end, index) => {
+          const lanePoint = getNearestPointOnSegment(routePoint, lane.points[index], end);
+          const distance = Math.hypot(routePoint.x - lanePoint.x, routePoint.y - lanePoint.y);
+          if (!nearest || distance < nearest.distance) nearest = { routePoint, lanePoint, distance };
+        });
+      }));
+      if (!nearest || nearest.distance <= metrics.radius * 0.16) return;
+      const angle = Math.atan2(nearest.lanePoint.y - nearest.routePoint.y, nearest.lanePoint.x - nearest.routePoint.x);
+      const bend = nearest.distance * 0.08 * (1 - structure);
+      const bendDirection = seededUnit(`${settlement.seed}:access:${routeId}`) > 0.5 ? 1 : -1;
+      const control = {
+        x: (nearest.routePoint.x + nearest.lanePoint.x) / 2 - Math.sin(angle) * bend * bendDirection,
+        y: (nearest.routePoint.y + nearest.lanePoint.y) / 2 + Math.cos(angle) * bend * bendDirection
+      };
+      lanes.push({
+        points: sampleQuadraticLane(nearest.routePoint, control, nearest.lanePoint, 10),
+        type: settlement.style === "city" ? "stone" : "brown",
+        generated: true,
+        access: true,
+        routeId
+      });
+    });
+    return lanes;
+  }
+
+  function getSubhexSettlementPolylineSamples(points = [], spacing = 1) {
+    if (points.length < 2) return [];
+    const samples = [];
+    let carry = 0;
+    for (let index = 1; index < points.length; index += 1) {
+      const start = points[index - 1];
+      const end = points[index];
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 0.001) continue;
+      let distance = carry ? spacing - carry : 0;
+      while (distance <= length) {
+        samples.push({
+          x: start.x + dx * distance / length,
+          y: start.y + dy * distance / length,
+          angle: Math.atan2(dy, dx)
+        });
+        distance += spacing;
+      }
+      carry = (carry + length) % spacing;
+    }
+    return samples;
+  }
+
+  function getSubhexOrganicSettlementPlan(settlement, metrics, options = {}) {
+    renderer.subhexSettlementPlanCache ||= new Map();
+    const wallSignature = getSubhexSettlementWallSignature(options);
+    const savedRouteSignature = getSubhexSettlementRouteAnchorSignature(settlement);
+    const routeDraftSignature = options.editor
+      ? stableHash(JSON.stringify([
+        savedRouteSignature,
+        [...(renderer.subhexEditorAnchorDrafts?.entries?.() || [])]
+      ]))
+      : stableHash(savedRouteSignature);
+    const baseCacheKey = [
+      stableHash(JSON.stringify(settlement)),
+      stableHash(wallSignature),
+      renderer.overlayRevision || 0,
+      routeDraftSignature,
+      metrics.radius,
+      options.editor ? "editor" : "saved"
+    ].join("|");
+    if (renderer.subhexSettlementPlanCache.has(baseCacheKey)) {
+      return renderer.subhexSettlementPlanCache.get(baseCacheKey);
+    }
+    const routeContext = getSubhexSettlementRouteContext(settlement);
+    const cacheKey = baseCacheKey;
+
+    const density = settlement.density / 100;
+    const densityJitter = Math.max(0, Math.min(1, Number(settlement.densityJitter ?? 35) / 100));
+    const lanes = buildSubhexSettlementGeneratedLanes(settlement, routeContext, metrics);
+    lanes.forEach(lane => { lane.bounds = getRenderPointsBounds(lane.points); });
+    const spines = [...routeContext.polylines, ...lanes];
+    const frontageSpacing = metrics.radius * (settlement.style === "city"
+      ? 0.17 - density * 0.035
+      : settlement.style === "village"
+        ? 0.28 - density * 0.045
+        : 0.55);
+    const frontageOffset = metrics.radius * (settlement.style === "city" ? 0.27 : settlement.style === "village" ? 0.30 : 0.34);
+    const boundaryArea = getPolygonArea(settlement.points);
+    const subhexArea = Math.max(1, Math.sqrt(3) * 1.5 * metrics.radius * metrics.radius);
+    const areaInSubhexes = Math.max(0.35, boundaryArea / subhexArea);
+    const areaTarget = settlement.style === "city"
+      ? Math.round(areaInSubhexes * (10 + density * 34))
+      : settlement.style === "village"
+        ? Math.round(areaInSubhexes * (3 + density * 10))
+        : Math.max(2, Math.round(areaInSubhexes * (0.25 + density * 0.7)));
+    const target = Math.min(settlement.style === "city" ? 1400 : settlement.style === "village" ? 600 : 80, areaTarget);
+    const occupancy = settlement.style === "city" ? 0.94 : settlement.style === "village" ? 0.72 : 0.46;
+    const buildings = [];
+    const spatial = new Map();
+    const collisionSize = metrics.radius * (settlement.style === "city" ? 0.16 : settlement.style === "village" ? 0.20 : 0.28);
+    const cellKey = point => `${Math.floor(point.x / collisionSize)}:${Math.floor(point.y / collisionSize)}`;
+    const canPlace = (point, clearance = collisionSize) => {
+      const x = Math.floor(point.x / collisionSize);
+      const y = Math.floor(point.y / collisionSize);
+      for (let offsetY = -2; offsetY <= 2; offsetY += 1) {
+        for (let offsetX = -2; offsetX <= 2; offsetX += 1) {
+          const nearby = spatial.get(`${x + offsetX}:${y + offsetY}`) || [];
+          if (nearby.some(building => Math.hypot(building.x - point.x, building.y - point.y)
+            < Math.max(clearance, building.clearance || collisionSize))) return false;
+        }
+      }
+      return true;
+    };
+
+    const placeBuilding = (point, angle, salt, frontageGroup, spineIndex = -1) => {
+      if (!pointInPolygon(point, settlement.points)) return false;
+      const sizeRoll = seededUnit(`${salt}:size`);
+      let width = metrics.radius * (settlement.style === "city"
+        ? 0.13 + sizeRoll * 0.13
+        : settlement.style === "village"
+          ? 0.12 + sizeRoll * 0.10
+          : 0.14 + sizeRoll * 0.12);
+      let height = metrics.radius * (settlement.style === "city"
+        ? 0.085 + seededUnit(`${salt}:depth`) * 0.09
+        : 0.08 + seededUnit(`${salt}:depth`) * 0.07);
+      const shapeRoll = seededUnit(`${salt}:shape`);
+      const circleCluster = settlement.style === "city"
+        && seededUnit(`${settlement.seed}:circle-cluster:${frontageGroup}`) > 0.78;
+      const largeCircle = settlement.style === "city" && shapeRoll > 0.975;
+      const shape = largeCircle || (circleCluster && seededUnit(`${salt}:circle`) > 0.24)
+        ? "circle"
+        : settlement.style === "city" && shapeRoll > 0.78
+          ? (shapeRoll > 0.91 ? "court" : "l")
+          : "rect";
+      if (shape === "circle") {
+        width = metrics.radius * (largeCircle
+          ? 0.28 + seededUnit(`${salt}:rotunda`) * 0.10
+          : 0.075 + seededUnit(`${salt}:round-size`) * 0.055);
+        height = width;
+      }
+      const footprintClearance = Math.hypot(width, height) * 0.5 + metrics.radius * 0.035;
+      if (isSubhexSettlementPointBlocked(point, metrics, { ...options, skipRoutes: true }, footprintClearance)) return false;
+      if (spines.some(spine => spine.points.slice(1).some((end, pointIndex) => (
+        distanceToSegment(point, spine.points[pointIndex], end) < footprintClearance
+      )))) return false;
+      const clearance = largeCircle ? width * 0.78 : shape === "circle" ? width * 0.9 : collisionSize;
+      if (!canPlace(point, clearance)) return false;
+      const building = {
+        ...point,
+        width,
+        height,
+        angle: angle + (seededUnit(`${salt}:angle`) - 0.5) * (settlement.style === "city" ? 0.18 : 0.34),
+        shade: seededUnit(`${salt}:shade`),
+        shape,
+        clearance,
+        spineIndex,
+        frontageGroup
+      };
+      buildings.push(building);
+      const key = cellKey(point);
+      if (!spatial.has(key)) spatial.set(key, []);
+      spatial.get(key).push(building);
+      return true;
+    };
+
+    const frontageTarget = settlement.style === "city"
+      ? Math.ceil(target * 0.48)
+      : settlement.style === "village" ? Math.ceil(target * 0.62) : target;
+    outer: for (let spineIndex = 0; spineIndex < spines.length; spineIndex += 1) {
+      const spine = spines[spineIndex];
+      const samples = getSubhexSettlementPolylineSamples(spine.points, frontageSpacing);
+      for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += 1) {
+        const sample = samples[sampleIndex];
+        for (const side of [-1, 1]) {
+          const frontageDepth = 1;
+          for (let depthIndex = 0; depthIndex < frontageDepth; depthIndex += 1) {
+          const salt = `${settlement.seed}:frontage:${spineIndex}:${sampleIndex}:${side}:${depthIndex}`;
+          const neighborhood = Math.floor(sampleIndex / 5);
+          const neighborhoodRoll = seededUnit(`${settlement.seed}:density-neighborhood:${spineIndex}:${neighborhood}`);
+          const localOccupancy = Math.max(0.08, Math.min(1,
+            occupancy + (neighborhoodRoll - 0.5) * densityJitter * 0.95));
+          if (seededUnit(`${salt}:occupancy`) > localOccupancy) continue;
+          if (settlement.style === "rural" && side < 0 && seededUnit(`${salt}:side`) < 0.7) continue;
+          const offset = frontageOffset * (0.82 + seededUnit(`${salt}:offset`) * 0.42)
+            + depthIndex * metrics.radius * (settlement.style === "city" ? 0.19 : 0.23);
+          const alongJitter = (seededUnit(`${salt}:along`) - 0.5) * frontageSpacing * 0.55;
+          const point = {
+            x: sample.x + Math.cos(sample.angle) * alongJitter - Math.sin(sample.angle) * offset * side,
+            y: sample.y + Math.sin(sample.angle) * alongJitter + Math.cos(sample.angle) * offset * side
+          };
+          placeBuilding(point, sample.angle, salt,
+            `frontage:${spineIndex}:${side}:${Math.floor(sampleIndex / 5)}`, spineIndex);
+          if (buildings.length >= frontageTarget) break outer;
+          }
+        }
+      }
+    }
+    if (settlement.style !== "rural" && buildings.length < target) {
+      const fillBounds = getRenderPointsBounds(settlement.points);
+      const attempts = Math.min(18000, Math.max(target * 10, 240));
+      for (let index = 0; index < attempts && buildings.length < target; index += 1) {
+        const point = {
+          x: fillBounds.left + seededUnit(`${settlement.seed}:fill-x:${index}`) * (fillBounds.right - fillBounds.left),
+          y: fillBounds.top + seededUnit(`${settlement.seed}:fill-y:${index}`) * (fillBounds.bottom - fillBounds.top)
+        };
+        if (!pointInPolygon(point, settlement.points)) continue;
+        const districtX = Math.floor(point.x / (metrics.radius * 1.15));
+        const districtY = Math.floor(point.y / (metrics.radius * 1.15));
+        const districtKey = `${districtX}:${districtY}`;
+        const districtRoll = seededUnit(`${settlement.seed}:fill-district:${districtKey}`);
+        const localOccupancy = Math.max(0.06, Math.min(1,
+          0.24 + density * 0.74 + (districtRoll - 0.5) * densityJitter * 0.95));
+        if (seededUnit(`${settlement.seed}:fill-occupancy:${index}`) > localOccupancy) continue;
+        const nearestSpine = getNearestSettlementRouteSegment(point, spines);
+        const angle = nearestSpine?.angle ?? seededUnit(`${settlement.seed}:fill-angle:${districtKey}`) * Math.PI;
+        placeBuilding(point, angle, `${settlement.seed}:fill:${index}`, `district:${districtKey}`);
+      }
+    }
+    const groundPatchBins = new Map();
+    if (settlement.style !== "rural") buildings.forEach(building => {
+      const group = groundPatchBins.get(building.frontageGroup) || [];
+      group.push(building);
+      groundPatchBins.set(building.frontageGroup, group);
+    });
+    const groundPatches = [...groundPatchBins.values()]
+      .filter(group => group.length >= (settlement.style === "city" ? 2 : 3))
+      .map(group => {
+        const angle = group.reduce((sum, building) => sum + building.angle, 0) / group.length;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const projected = group.map(building => ({
+          u: building.x * cos + building.y * sin,
+          v: -building.x * sin + building.y * cos,
+          halfWidth: building.width * 0.62,
+          halfHeight: building.height * 0.72
+        }));
+        const padding = metrics.radius * (settlement.style === "city" ? 0.075 : 0.11);
+        const minU = Math.min(...projected.map(point => point.u - point.halfWidth)) - padding;
+        const maxU = Math.max(...projected.map(point => point.u + point.halfWidth)) + padding;
+        const minV = Math.min(...projected.map(point => point.v - point.halfHeight)) - padding;
+        const maxV = Math.max(...projected.map(point => point.v + point.halfHeight)) + padding;
+        const centerU = (minU + maxU) / 2;
+        const centerV = (minV + maxV) / 2;
+        const halfWidth = (maxU - minU) / 2;
+        const halfHeight = (maxV - minV) / 2;
+        const chamfer = Math.min(halfWidth, halfHeight) * 0.22;
+        const localPoints = [
+          [-halfWidth + chamfer, -halfHeight], [halfWidth - chamfer, -halfHeight],
+          [halfWidth, -halfHeight + chamfer], [halfWidth, halfHeight - chamfer],
+          [halfWidth - chamfer, halfHeight], [-halfWidth + chamfer, halfHeight],
+          [-halfWidth, halfHeight - chamfer], [-halfWidth, -halfHeight + chamfer]
+        ];
+        const center = {
+          x: centerU * cos - centerV * sin,
+          y: centerU * sin + centerV * cos
+        };
+        const points = localPoints.map(([u, v]) => ({
+          x: center.x + u * cos - v * sin,
+          y: center.y + u * sin + v * cos
+        }));
+        return { points, bounds: getRenderPointsBounds(points) };
+      });
+    const plan = { key: cacheKey, lanes, buildings, groundPatches, routeContext };
+    renderer.subhexSettlementPlanCache.set(cacheKey, plan);
+    if (renderer.subhexSettlementPlanCache.size > 120) renderer.subhexSettlementPlanCache.clear();
+    return plan;
+  }
+
+  function getSubhexBoundarySettlementBuildings(subhex, settlement, metrics, options = {}) {
+    renderer.subhexSettlementBuildingCache ||= new Map();
+    const plan = getSubhexOrganicSettlementPlan(settlement, metrics, options);
+    const cacheKey = `${getSubhexEditorCellKey(subhex)}|${plan.key}`;
+    if (renderer.subhexSettlementBuildingCache.has(cacheKey)) return renderer.subhexSettlementBuildingCache.get(cacheKey);
+    const buildings = plan.buildings.filter(building => pointInPolygon(building, subhex.points));
+    renderer.subhexSettlementBuildingCache.set(cacheKey, buildings);
+    if (renderer.subhexSettlementBuildingCache.size > 900) {
+      const staleKeys = [...renderer.subhexSettlementBuildingCache.keys()].slice(0, 300);
+      staleKeys.forEach(key => renderer.subhexSettlementBuildingCache.delete(key));
+    }
+    return buildings;
+  }
+
+  function drawSubhexSettlementStreets(ctx, subhex, settlement, metrics, options = {}) {
+    if (settlement?.version !== 2 || settlement.points.length < 3) return;
+    const plan = getSubhexOrganicSettlementPlan(settlement, metrics, options);
+    const subhexBounds = getRenderPointsBounds(subhex.points);
+    ctx.save();
+    ctx.beginPath();
+    subhex.points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+    ctx.closePath();
+    ctx.clip();
+    ctx.beginPath();
+    settlement.points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+    ctx.closePath();
+    ctx.clip();
+
+    ctx.fillStyle = settlement.style === "city"
+      ? "rgba(117, 80, 48, 0.58)"
+      : "rgba(125, 88, 52, 0.13)";
+    (plan.groundPatches || []).forEach(patch => {
+      if (patch.bounds && !renderBoundsIntersect(patch.bounds, subhexBounds)) return;
+      ctx.beginPath();
+      patch.points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    plan.lanes.forEach((lane, laneIndex) => {
+      if (lane.points.length < 2) return;
+      if (lane.bounds && !renderBoundsIntersect(lane.bounds, subhexBounds)) return;
+      const main = settlement.style === "city" && (lane.type === "stone" || laneIndex === 0);
+      ctx.strokeStyle = main ? "rgba(157, 150, 133, 0.88)" : "rgba(91, 57, 31, 0.82)";
+      ctx.lineWidth = metrics.radius * (main ? 0.095 : settlement.style === "rural" ? 0.075 : 0.065);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      lane.points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function addSubhexSettlementBuildingPath(ctx, building, inset = 0) {
+    const halfWidth = Math.max(0.1, building.width / 2 - inset);
+    const halfHeight = Math.max(0.1, building.height / 2 - inset);
+    ctx.beginPath();
+    if (building.shape === "circle") {
+      ctx.ellipse(0, 0, halfWidth, halfHeight, 0, 0, Math.PI * 2);
+    } else if (building.shape === "l") {
+      ctx.moveTo(-halfWidth, -halfHeight);
+      ctx.lineTo(halfWidth, -halfHeight);
+      ctx.lineTo(halfWidth, -halfHeight * 0.1);
+      ctx.lineTo(halfWidth * 0.18, -halfHeight * 0.1);
+      ctx.lineTo(halfWidth * 0.18, halfHeight);
+      ctx.lineTo(-halfWidth, halfHeight);
+    } else if (building.shape === "court") {
+      ctx.rect(-halfWidth, -halfHeight, halfWidth * 2, halfHeight * 2);
+      const courtWidth = halfWidth * 0.86;
+      const courtHeight = halfHeight * 0.72;
+      ctx.rect(-courtWidth / 2, -courtHeight / 2, courtWidth, courtHeight);
+    } else {
+      ctx.rect(-halfWidth, -halfHeight, halfWidth * 2, halfHeight * 2);
+    }
+    ctx.closePath();
+  }
+
+  function drawSubhexSettlement(ctx, subhex, metrics, options = {}) {
+    const settlement = getSubhexSettlementForRender(subhex, options);
+    if (!settlement) return;
+    const cell = options.editor ? getSubhexEditorCellSnapshot(subhex) : getSubhexSavedCellSnapshot(subhex);
+    if (WATER_TERRAINS.has(cell?.baseTerrain || subhex.owner?.baseTerrain)) return;
+    drawSubhexSettlementStreets(ctx, subhex, settlement, metrics, options);
+    const buildings = getSubhexSettlementBuildings(subhex, settlement, metrics, options);
+    buildings.forEach(building => {
+      ctx.save();
+      ctx.translate(building.x, building.y);
+      ctx.rotate(building.angle);
+      ctx.fillStyle = "rgba(31, 23, 18, 0.30)";
+      ctx.translate(metrics.radius * 0.025, metrics.radius * 0.025);
+      addSubhexSettlementBuildingPath(ctx, building);
+      ctx.fill("evenodd");
+      ctx.translate(-metrics.radius * 0.025, -metrics.radius * 0.025);
+      ctx.fillStyle = settlement.style === "rural"
+        ? (building.shade > 0.5 ? "#a97a4a" : "#8f623a")
+        : settlement.style === "city"
+          ? (building.shade > 0.5 ? "#b8aaa0" : "#8f8179")
+          : (building.shade > 0.5 ? "#b48b5b" : "#9b7148");
+      ctx.strokeStyle = "rgba(42, 29, 20, 0.92)";
+      ctx.lineWidth = Math.max(0.16, metrics.radius * 0.018);
+      addSubhexSettlementBuildingPath(ctx, building);
+      ctx.fill("evenodd");
+      ctx.stroke();
+      if (building.shape !== "court") {
+        ctx.beginPath();
+        ctx.moveTo(-building.width * 0.38, 0);
+        ctx.lineTo(building.width * 0.38, 0);
+        ctx.strokeStyle = "rgba(255, 236, 196, 0.42)";
+        ctx.lineWidth *= 0.72;
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+  }
+
+  function renderSubhexFarmlandOverlay(ctx, subhex, metrics, seededFeatures = null, options = {}) {
+    if (getSubhexSettlementForRender(subhex, options)) return;
     if (!shouldRenderSubhexFarmland(subhex, seededFeatures)) return;
     const file = FEATURE_ART_FILES.farmland;
     const image = getFeatureArtImage(
@@ -11357,7 +12800,8 @@
     return {
       baseTerrain,
       features,
-      elevation: Number.isFinite(Number(cell.elevation)) ? Number(cell.elevation) : getAutoTerrainElevation(baseTerrain, features)
+      elevation: Number.isFinite(Number(cell.elevation)) ? Number(cell.elevation) : getAutoTerrainElevation(baseTerrain, features),
+      settlement: normalizeSubhexSettlement(cell.settlement)
     };
   }
 
@@ -13151,7 +14595,10 @@
       walls.forEach(wall => appendStraightSubhexWall(fragment, wall, { compact }));
       getSubhexWallJunctions(walls)
         .filter(junction => junction.point.tower)
-        .forEach(junction => appendSubhexWallTower(fragment, junction, { compact }));
+        .forEach(junction => appendSubhexWallTower(fragment, junction, {
+          compact,
+          wallStyle: getSubhexJunctionWallStyle(junction, walls)
+        }));
     }
   }
 

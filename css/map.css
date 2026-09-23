@@ -3363,11 +3363,12 @@ body.generated-map-subhex-editor-active .map-generation-popout {
 }
 
 .generated-map-subhex-editor-rail-main {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .generated-map-subhex-editor-terrain-options,
 .generated-map-subhex-editor-feature-options,
+.generated-map-subhex-editor-settlement-options,
 .generated-map-subhex-editor-anchor-options,
 .generated-map-subhex-editor-wall-options {
   display: none;
@@ -3393,6 +3394,10 @@ body.generated-map-subhex-editor-active .map-generation-popout {
   display: flex;
 }
 
+.generated-map-subhex-editor-shell.is-subhex-settlement-tool .generated-map-subhex-editor-settlement-options {
+  display: flex;
+}
+
 .generated-map-subhex-editor-shell.is-subhex-anchor-tool .generated-map-subhex-editor-anchor-options,
 .generated-map-subhex-editor-shell.is-subhex-anchor-tool .generated-map-subhex-editor-wall-options {
   display: flex;
@@ -3411,6 +3416,78 @@ body.generated-map-subhex-editor-active .map-generation-popout {
   border: 1px solid rgba(214, 168, 94, 0.20);
   border-radius: 6px;
   background: rgba(18, 12, 8, 0.24);
+}
+
+.generated-map-subhex-editor-settlement-options {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.generated-map-subhex-editor-settlement-actions,
+.generated-map-subhex-editor-settlement-styles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.generated-map-subhex-editor-settlement-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.generated-map-subhex-editor-settlement-range {
+  display: grid;
+  gap: 3px;
+  color: #ead3a2;
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 0.72rem;
+}
+
+.generated-map-subhex-editor-settlement-range > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.generated-map-subhex-editor-shell.is-subhex-settlement-tool .generated-map-subhex-editor-stage {
+  cursor: crosshair;
+}
+
+.generated-map-subhex-editor-settlement-boundary {
+  fill: rgba(226, 194, 114, 0.08);
+  stroke: rgba(255, 230, 157, 0.76);
+  stroke-width: 1.15;
+  vector-effect: non-scaling-stroke;
+  pointer-events: visiblePainted;
+  cursor: pointer;
+}
+
+.generated-map-subhex-editor-settlement-boundary.is-selected {
+  fill: rgba(244, 211, 126, 0.13);
+  stroke: rgba(255, 240, 190, 0.96);
+}
+
+.generated-map-subhex-editor-settlement-boundary.is-drawing {
+  fill: none;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.generated-map-subhex-editor-settlement-anchor {
+  fill: rgba(246, 225, 171, 0.94);
+  stroke: rgba(73, 49, 28, 0.96);
+  stroke-width: 0.9;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+  pointer-events: all;
+}
+
+.generated-map-subhex-editor-settlement-anchor:active {
+  cursor: grabbing;
+}
+
+.generated-map-subhex-editor-settlement-anchor.is-close-anchor {
+  fill: rgba(255, 244, 190, 1);
+  stroke: rgba(119, 71, 29, 1);
 }
 
 .generated-map-subhex-editor-wall-type-row {
@@ -3915,6 +3992,15 @@ body.generated-map-subhex-editor-active .map-generation-popout {
   stroke-linecap: square;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
+}
+
+.generated-map-subhex-wall-tower.is-palisade {
+  fill: #8a4f27;
+  stroke: #1d120b;
+}
+
+.generated-map-subhex-wall-tower-crenellations.is-palisade {
+  stroke: #d29a57;
 }
 
 .generated-map-subhex-wall-fixture {
