@@ -18,7 +18,7 @@ const exposed = `window.mapTest = { renderer, buildHexModel, rebuildHexIndexes, 
   setLoading, beginInitialMapLoadingVeil, checkInitialMapLoadingVeil, drawTouchMapCacheSlice,
   renderSubhexTileTerrain, renderSubhexDetailTileLayer,
   queueSubhexFeatureArtWarmupForHexes, getSubhexDetailTileState, deleteSubhexDetailTile,
-  getSubhexSeededFeatures, renderSubhexFarmlandOverlay, getSubhexFeatureStack,
+  getSubhexSeededFeatures, renderSubhexFarmlandOverlay, getSubhexFeatureStack, getSubhexWaterDabColor,
   getFeatureArtImage, drawFeatureArtImage, getSubhexFeatureArtBox, getSubhexFeatureImageUsage,
   getFeatureImageCacheKey, getHexesForBounds, startSubhexDetailPrecache,
   markFeatureImageUsageDirty, getDefaultVisibleOverlays, shouldUseTouchMapRenderer,
@@ -346,6 +346,13 @@ const exposed = `window.mapTest = { renderer, buildHexModel, rebuildHexIndexes, 
       return { compared, mismatches };
     });
     assert.deepEqual(featurePixels.mismatches, [], 'cached feature placement changed the drawing');
+    const waterTint = await page.evaluate(() => ({
+      plains: mapTest.getSubhexWaterDabColor('plains'),
+      desert: mapTest.getSubhexWaterDabColor('desert'),
+      water: mapTest.getSubhexWaterDabColor('inland_water')
+    }));
+    assert.notEqual(waterTint.plains, waterTint.desert, 'water brush tint ignored the terrain beneath it');
+    assert.notEqual(waterTint.plains, waterTint.water, 'water brush tint did not adapt to water terrain');
     const completion = await page.evaluate(async () => {
       const t = mapTest, r = t.renderer, hex = r.hexesById.get('5:5');
       r.initialMapLoadingActive = true;

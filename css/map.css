@@ -3602,6 +3602,42 @@ body.generated-map-subhex-editor-active .map-generation-popout {
   cursor: default;
 }
 
+.generated-map-subhex-editor-water-heading {
+  flex-basis: 100%;
+  margin-top: 3px;
+  color: rgba(244, 223, 175, 0.72);
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.generated-map-subhex-editor-water-option {
+  border-color: rgba(121, 181, 190, 0.38);
+}
+
+.generated-map-subhex-editor-water-size {
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: rgba(244, 223, 175, 0.82);
+  font-family: 'Marcellus SC', Georgia, serif;
+  font-size: 0.64rem;
+}
+
+.generated-map-subhex-editor-water-size input {
+  min-width: 0;
+  accent-color: #70b8cb;
+}
+
+.generated-map-subhex-editor-water-size output {
+  min-width: 30px;
+  text-align: right;
+  color: #b7e5ed;
+}
+
 .generated-map-subhex-editor-inspector {
   position: relative;
   z-index: 1;
@@ -3752,6 +3788,32 @@ body.generated-map-subhex-editor-active .map-generation-popout {
 
 .generated-map-subhex-editor-shell.is-subhex-terrain-tool .generated-map-subhex-editor-stage {
   cursor: crosshair;
+}
+
+.generated-map-subhex-editor-shell.is-subhex-water-tool .generated-map-subhex-editor-stage,
+.generated-map-subhex-editor-shell.is-subhex-water-tool .generated-map-subhex-editor-stage:active {
+  cursor: crosshair;
+}
+
+.generated-map-subhex-editor-water-preview {
+  pointer-events: none;
+}
+
+.generated-map-subhex-editor-water-preview > circle:not(.generated-map-subhex-editor-water-cursor) {
+  stroke: none;
+}
+
+.generated-map-subhex-editor-water-cursor {
+  fill: rgba(45, 147, 184, 0.12);
+  stroke: rgba(225, 249, 255, 0.96);
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 2px rgba(11, 54, 72, 0.9));
+}
+
+.generated-map-subhex-editor-water-cursor.is-eraser {
+  fill: rgba(181, 67, 48, 0.12);
+  stroke: rgba(255, 205, 184, 0.98);
 }
 
 .generated-map-subhex-editor-shell .generated-map-subhex-editor-stage.is-over-neighbor {
