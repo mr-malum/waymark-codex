@@ -4,6 +4,13 @@
 
 This is production code. Respect the existing architecture, file structure, style, and data model.
 
+## Live Testing Campaign
+
+- Use the **Testing Grounds** campaign for live browser testing.
+- The large settlement performance fixture spans hexes **17:12** and **18:13**.
+- Do not open, edit, or otherwise interact with the **Kadesh** campaign for testing. Leave its data untouched.
+- Use the user's existing local server; do not start another server unless explicitly requested.
+
 Do not introduce frameworks, build tools, servers, package managers, or large rewrites unless explicitly requested or clearly already part of the project.
 
 ## Core Rules

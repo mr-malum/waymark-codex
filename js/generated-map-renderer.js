@@ -504,6 +504,8 @@
     subhexVisibleHexIds: new Set(),
     touchMapRenderer: null,
     subhexGridPathCache: new Map(),
+    subhexSettlementRasterCache: new Map(),
+    savedSubhexSettlementsCache: null,
     subhexPoiAnchorCache: new Map(),
     subhexSavedRoutePatchCache: new Map(),
     subhexPoiRouteSegmentCache: { key: "", road: [], river: [] },
@@ -674,6 +676,11 @@
       subhexEditorSelectedKey: "",
       subhexEditorTerrainBase: "plains",
       subhexEditorFeatureBrush: "woods",
+      subhexEditorWaterDabDrafts: null,
+      subhexEditorWaterBrushSize: 70,
+      subhexEditorWaterLastPoint: null,
+      subhexEditorWaterStrokeId: "",
+      subhexEditorWaterStrokeStartIndex: 0,
       subhexEditorSettlementAction: "",
       subhexEditorSettlementStyle: "village",
       subhexEditorSettlementDensity: 55,
@@ -1063,6 +1070,7 @@
         const action = button.dataset.subhexEditorAnchorAction || "";
         const isActive = renderer.drawing.subhexEditorAnchorAction === action;
         renderer.drawing.subhexEditorAnchorAction = isActive ? "" : action;
+        renderer.drawing.subhexEditorWallAction = "";
         renderer.drawing.subhexEditorHoveredRouteKey = "";
         renderSubhexEditorShell();
       });
@@ -1291,12 +1299,24 @@
     const anchors = value.anchors && typeof value.anchors === "object" && !Array.isArray(value.anchors)
       ? value.anchors
       : {};
+    const rawWaterDabs = Array.isArray(value.water_dabs) ? value.water_dabs : value.waterDabs;
+    const waterDabs = Array.isArray(rawWaterDabs) ? rawWaterDabs
+      .map(dab => ({
+        id: String(dab?.id || ""),
+        x: Number(dab?.x),
+        y: Number(dab?.y),
+        r: Number(dab?.r)
+      }))
+      .filter(dab => dab.id && Number.isFinite(dab.x) && Number.isFinite(dab.y)
+        && Number.isFinite(dab.r) && dab.r > 0)
+      : [];
     return {
       version: Number(value.version) || 1,
       mode: value.mode || "materialized",
       generator_version: Number(value.generator_version || value.generatorVersion) || 1,
       cells,
-      anchors
+      anchors,
+      water_dabs: waterDabs
     };
   }
 
@@ -3216,6 +3236,9 @@
     renderer.featureImageUsage.clear();
     renderer.subhexRouteAnchorCache?.clear?.();
     renderer.subhexDetailTileCache.forEach((tile, id) => deleteSubhexDetailTile(id));
+    renderer.subhexSettlementRasterCache.forEach(entry => releaseMapCanvas(entry.canvas));
+    renderer.subhexSettlementRasterCache.clear();
+    renderer.savedSubhexSettlementsCache = null;
     renderer.subhexVisibleHexIds.clear();
     renderer.subhexGridPathCache.clear();
     renderer.parentGridPath = "";
@@ -3549,6 +3572,9 @@
         + [...renderer.touchMapCache.tiles.values()].reduce((sum, tile) => sum + Object.values(tile.layers).reduce((total, canvas) => total + bytes(canvas), 0), 0),
       featureImageBytes: [...renderer.featureImages.values()].reduce((sum, entry) => sum + bytes(entry.image), 0),
       subhexBytes: [...renderer.subhexDetailTileCache.values()].reduce((sum, tile) => sum + bytes(tile.terrainCanvas) + bytes(tile.featureCanvas), 0),
+      settlementBytes: [...renderer.subhexSettlementRasterCache.values()].reduce((sum, entry) => sum + bytes(entry.canvas), 0),
+      settlementRasters: renderer.subhexSettlementRasterCache.size,
+      editorBytes: bytes(renderer.subhexEditorCanvas) + bytes(renderer.subhexEditorCanvasCache?.canvas),
       parentTiles: renderer.touchMapCache.tiles.size,
       parentTileBuilds: renderer.touchMapCache.builds,
       subhexTiles: renderer.subhexDetailTileCache.size,
@@ -5439,6 +5465,7 @@
     const previousTools = options.preserveTools ? {
       terrainBase: renderer.drawing.subhexEditorTerrainBase,
       featureBrush: renderer.drawing.subhexEditorFeatureBrush,
+      waterBrushSize: renderer.drawing.subhexEditorWaterBrushSize,
       settlementAction: renderer.drawing.subhexEditorSettlementAction,
       settlementStyle: renderer.drawing.subhexEditorSettlementStyle,
       settlementDensity: renderer.drawing.subhexEditorSettlementDensity,
@@ -5456,6 +5483,8 @@
     renderer.drawing.subhexEditorTerrainBase = previousTools?.terrainBase
       || (hex.baseTerrain && TERRAIN_COLORS[hex.baseTerrain] ? hex.baseTerrain : "plains");
     renderer.drawing.subhexEditorFeatureBrush = previousTools?.featureBrush || "woods";
+    renderer.drawing.subhexEditorWaterDabDrafts = null;
+    renderer.drawing.subhexEditorWaterBrushSize = previousTools?.waterBrushSize ?? 70;
     renderer.drawing.subhexEditorSettlementAction = previousTools?.settlementAction || "";
     renderer.drawing.subhexEditorSettlementStyle = previousTools?.settlementStyle || "village";
     renderer.drawing.subhexEditorSettlementDensity = previousTools?.settlementDensity || 55;
@@ -5473,6 +5502,7 @@
     renderer.drawing.subhexEditorSelectedWallId = "";
     renderer.drawing.subhexEditorHoveredRouteKey = "";
     renderer.drawing.subhexEditorTerrainDraft = new Map();
+    renderer.drawing.subhexEditorWaterDabDrafts = null;
     renderer.subhexEditorUndoStack = [];
     renderer.subhexEditorRedoStack = [];
     renderer.drawing.subhexEditorDragActive = false;
@@ -5524,6 +5554,7 @@
     const neighbor = getParentHexForSubhexPoint(point, renderer.hexes);
     if (!neighbor || neighbor.id === renderer.drawing.subhexEditorHexId) return false;
     const hasDrafts = renderer.drawing.subhexEditorTerrainDraft?.size
+      || Array.isArray(renderer.drawing.subhexEditorWaterDabDrafts)
       || renderer.subhexEditorAnchorDrafts?.size
       || renderer.subhexEditorWallDrafts?.size
       || renderer.subhexEditorPoiVisibilityDrafts?.size;
@@ -5557,6 +5588,7 @@
     renderer.drawing.subhexEditorSelectedKey = "";
     renderer.drawing.subhexEditorTerrainBase = "plains";
     renderer.drawing.subhexEditorFeatureBrush = "woods";
+    renderer.drawing.subhexEditorWaterDabDrafts = null;
     renderer.drawing.subhexEditorSettlementPointer = null;
     renderer.drawing.subhexEditorSettlementAction = "";
     renderer.drawing.subhexEditorSettlementPoints = [];
@@ -5630,6 +5662,7 @@
   function captureSubhexEditorDraft() {
     return JSON.stringify({
       terrain: [...renderer.drawing.subhexEditorTerrainDraft],
+      waterDabs: renderer.drawing.subhexEditorWaterDabDrafts,
       anchors: [...renderer.subhexEditorAnchorDrafts],
       walls: [...renderer.subhexEditorWallDrafts],
       poiVisibility: [...renderer.subhexEditorPoiVisibilityDrafts]
@@ -5655,6 +5688,7 @@
   function restoreSubhexEditorDraft(snapshot) {
     const state = JSON.parse(snapshot);
     renderer.drawing.subhexEditorTerrainDraft = new Map(state.terrain || []);
+    renderer.drawing.subhexEditorWaterDabDrafts = Array.isArray(state.waterDabs) ? state.waterDabs : null;
     renderer.subhexEditorAnchorDrafts = new Map(state.anchors || []);
     renderer.subhexEditorWallDrafts = new Map(state.walls || []);
     renderer.subhexEditorPoiVisibilityDrafts = new Map(state.poiVisibility || []);
@@ -5736,8 +5770,13 @@
 
   function paintSubhexEditorCellForTool(subhex, tool = renderer.drawing.subhexEditorTool || "terrain", worldPoint = null) {
     if (tool === "terrain") return paintSubhexEditorTerrainCell(subhex);
+    if (tool === "feature" && isSubhexEditorWaterBrush()) return paintSubhexEditorWaterAt(worldPoint);
     if (tool === "feature") return paintSubhexEditorFeatureCell(subhex);
     return false;
+  }
+
+  function isSubhexEditorWaterBrush() {
+    return ["__water_brush", "__erase_water"].includes(renderer.drawing.subhexEditorFeatureBrush);
   }
 
   function resetSubhexEditorDragState() {
@@ -5745,10 +5784,14 @@
     renderer.drawing.subhexEditorDragBefore = null;
     renderer.drawing.subhexEditorDragTool = "";
     renderer.drawing.subhexEditorDragPaintedKeys = new Set();
+    renderer.drawing.subhexEditorWaterLastPoint = null;
+    renderer.drawing.subhexEditorWaterStrokeId = "";
+    renderer.drawing.subhexEditorWaterStrokeStartIndex = 0;
   }
 
   function paintSubhexEditorDragCell(subhex, worldPoint = null) {
     const tool = renderer.drawing.subhexEditorDragTool || renderer.drawing.subhexEditorTool || "terrain";
+    if (tool === "feature" && isSubhexEditorWaterBrush()) return paintSubhexEditorWaterAt(worldPoint);
     const key = getSubhexEditorCellKey(subhex);
     if (!key) return false;
     const shouldPreventRepeatToggle = tool === "feature" && renderer.drawing.subhexEditorFeatureBrush !== "__erase";
@@ -6159,6 +6202,8 @@
   }
 
   function handleSubhexEditorWallAction(action) {
+    renderer.drawing.subhexEditorAnchorAction = "";
+    renderer.drawing.subhexEditorHoveredRouteKey = "";
     const selectedId = renderer.drawing.subhexEditorSelectedWallId;
     const selected = getEffectiveSubhexWall(selectedId);
     if (action === "new") {
@@ -6175,7 +6220,7 @@
       return;
     }
     if (action === "finish") {
-      if (selected?.Points?.length >= 2) {
+      if (renderer.drawing.subhexEditorWallAction === "draw" && selected?.Points?.length >= 2) {
         renderer.drawing.subhexEditorWallAction = "";
         renderer.drawing.subhexEditorSelectedWallId = "";
       }
@@ -6824,6 +6869,7 @@
     });
     renderer.subhexEditorShell?.classList.toggle("is-subhex-terrain-tool", activeTool === "terrain");
     renderer.subhexEditorShell?.classList.toggle("is-subhex-feature-tool", activeTool === "feature");
+    renderer.subhexEditorShell?.classList.toggle("is-subhex-water-tool", activeTool === "feature" && isSubhexEditorWaterBrush());
     renderer.subhexEditorShell?.classList.toggle("is-subhex-settlement-tool", activeTool === "settlement");
     renderer.subhexEditorShell?.classList.toggle("is-subhex-anchor-tool", activeTool === "anchor");
     if (renderer.subhexEditorShell) {
@@ -6845,8 +6891,8 @@
       const wall = getEffectiveSubhexWall(renderer.drawing.subhexEditorSelectedWallId);
       button.classList.toggle("is-active", action === renderer.drawing.subhexEditorWallAction);
       button.disabled = renderer.drawing.saving
-        || (action === "finish" && !wall)
-        || (action === "finish" && (wall?.Points?.length || 0) < 2);
+        || (action === "finish" && renderer.drawing.subhexEditorWallAction !== "draw")
+        || (action === "finish" && (!wall || (wall.Points?.length || 0) < 2));
     });
     syncSubhexEditorTerrainControls();
     syncSubhexEditorFeatureControls();
@@ -6932,7 +6978,11 @@
         <button class="generated-map-subhex-editor-feature-option" type="button" data-subhex-editor-feature="${escapeHtml(featureId)}" aria-label="${escapeHtml(TERRAIN_FEATURE_LABELS[featureId] || featureId)}">
           ${escapeHtml(TERRAIN_FEATURE_LABELS[featureId] || featureId)}
         </button>
-      `)
+      `),
+      `<div class="generated-map-subhex-editor-water-heading">Freehand Water</div>`,
+      `<button class="generated-map-subhex-editor-feature-option generated-map-subhex-editor-water-option" type="button" data-subhex-editor-feature="__water_brush" aria-label="Paint freehand water">Paint Water</button>`,
+      `<button class="generated-map-subhex-editor-feature-option generated-map-subhex-editor-water-option" type="button" data-subhex-editor-feature="__erase_water" aria-label="Erase freehand water">Erase Water</button>`,
+      `<label class="generated-map-subhex-editor-water-size">Brush Size <input type="range" min="10" max="150" step="5" data-subhex-editor-water-size><output data-subhex-editor-water-size-value></output></label>`
     ].join("");
     container.querySelectorAll("[data-subhex-editor-feature]").forEach(button => {
       button.addEventListener("click", event => {
@@ -6941,14 +6991,25 @@
         setSubhexEditorFeatureBrush(button.dataset.subhexEditorFeature || "woods");
       });
     });
+    const waterSize = container.querySelector("[data-subhex-editor-water-size]");
+    waterSize?.addEventListener("input", () => {
+      renderer.drawing.subhexEditorWaterBrushSize = Number(waterSize.value) || 70;
+      const output = container.querySelector("[data-subhex-editor-water-size-value]");
+      if (output) output.textContent = `${renderer.drawing.subhexEditorWaterBrushSize}%`;
+    });
     syncSubhexEditorFeatureControls();
   }
 
   function setSubhexEditorFeatureBrush(featureId) {
-    const normalized = featureId === "__erase" || TERRAIN_FEATURE_LABELS[featureId] ? featureId : "woods";
+    const normalized = featureId === "__erase" || ["__water_brush", "__erase_water"].includes(featureId) || TERRAIN_FEATURE_LABELS[featureId]
+      ? featureId : "woods";
     renderer.drawing.subhexEditorFeatureBrush = normalized;
     renderer.drawing.subhexEditorTool = "feature";
     renderer.drawing.subhexEditorInspectMode = false;
+    if (["__water_brush", "__erase_water"].includes(normalized)) {
+      renderer.drawing.subhexEditorHoverKey = "";
+      renderer.drawing.subhexEditorSelectedKey = "";
+    }
     syncSubhexEditorToolbar();
     renderSubhexEditorShell();
   }
@@ -6964,8 +7025,10 @@
 
   function syncSubhexEditorTerrainControls() {
     const activeBase = renderer.drawing.subhexEditorTerrainBase || "plains";
+    const terrainToolActive = renderer.drawing.subhexEditorTool === "terrain"
+      && !renderer.drawing.subhexEditorInspectMode;
     renderer.subhexEditorTerrainOptions?.querySelectorAll("[data-subhex-editor-terrain]").forEach(button => {
-      const isActive = button.dataset.subhexEditorTerrain === activeBase;
+      const isActive = terrainToolActive && button.dataset.subhexEditorTerrain === activeBase;
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
@@ -6973,13 +7036,9 @@
 
   function syncSubhexEditorFeatureControls() {
     let activeFeature = renderer.drawing.subhexEditorFeatureBrush || "woods";
-    const activeCell = getActiveSubhexEditorCell();
-    const contextCell = activeCell
-      || renderer.subhexEditorLayout?.ownedSubhexes?.find(subhex => subhex.editorCenterOwnedByHex)
-      || null;
-    const activeSnapshot = contextCell ? getSubhexEditorCellSnapshot(contextCell) : null;
-    const validFeatures = new Set(activeSnapshot ? getValidFeaturesForTerrainSelection(activeSnapshot.baseTerrain) : ALL_TERRAIN_FEATURES);
-    if (activeFeature !== "__erase" && !validFeatures.has(activeFeature)) {
+    const validFeatures = getSubhexEditorAvailableFeatures();
+    const activeIsWater = ["__water_brush", "__erase_water"].includes(activeFeature);
+    if (activeFeature !== "__erase" && !activeIsWater && !validFeatures.has(activeFeature)) {
       activeFeature = [...validFeatures][0] || "__erase";
       renderer.drawing.subhexEditorFeatureBrush = activeFeature;
     }
@@ -6987,10 +7046,26 @@
       const featureId = button.dataset.subhexEditorFeature || "";
       const isErase = featureId === "__erase";
       const isActive = featureId === activeFeature;
+      const isWater = ["__water_brush", "__erase_water"].includes(featureId);
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
-      button.disabled = Boolean(activeSnapshot && !isErase && !validFeatures.has(featureId));
+      button.disabled = !isErase && !isWater && !validFeatures.has(featureId);
     });
+    const waterSize = renderer.subhexEditorFeatureOptions?.querySelector("[data-subhex-editor-water-size]");
+    const waterSizeValue = renderer.subhexEditorFeatureOptions?.querySelector("[data-subhex-editor-water-size-value]");
+    if (waterSize) waterSize.value = String(renderer.drawing.subhexEditorWaterBrushSize ?? 70);
+    if (waterSizeValue) waterSizeValue.textContent = `${renderer.drawing.subhexEditorWaterBrushSize ?? 70}%`;
+  }
+
+  function getSubhexEditorAvailableFeatures(subhexes = renderer.subhexEditorLayout?.ownedSubhexes || []) {
+    if (!subhexes.length) return new Set(ALL_TERRAIN_FEATURES);
+    const available = new Set();
+    subhexes.forEach(subhex => {
+      const cell = getSubhexEditorCellSnapshot(subhex);
+      const baseTerrain = cell?.baseTerrain || subhex.owner?.baseTerrain || "plains";
+      getValidFeaturesForTerrainSelection(baseTerrain).forEach(featureId => available.add(featureId));
+    });
+    return available;
   }
 
   function getActiveSubhexEditorCell() {
@@ -7077,6 +7152,18 @@
     const cell = getSubhexEditorCellAtPoint(worldPoint);
     const neighbor = !cell && worldPoint ? getParentHexForSubhexPoint(worldPoint, renderer.hexes) : null;
     renderer.subhexEditorStage?.classList.toggle("is-over-neighbor", Boolean(neighbor && neighbor.id !== renderer.drawing.subhexEditorHexId));
+    if (isSubhexEditorWaterBrush() && renderer.drawing.subhexEditorTool === "feature") {
+      renderer.subhexEditorStage?.classList.remove("is-over-neighbor");
+      renderer.drawing.subhexEditorHoverKey = "";
+      if (renderer.drawing.subhexEditorDragActive) {
+        event.preventDefault();
+        event.stopPropagation();
+        paintSubhexEditorDragCell(cell, worldPoint);
+      } else {
+        renderSubhexEditorShell();
+      }
+      return;
+    }
     if (["anchor", "wall", "settlement"].includes(renderer.drawing.subhexEditorTool || "terrain")) {
       return;
     }
@@ -7097,6 +7184,11 @@
     renderer.subhexEditorStage?.classList.remove("is-over-neighbor");
     renderer.drawing.subhexEditorSettlementPointer = null;
     if (renderer.drawing.subhexEditorDragActive) return;
+    if (isSubhexEditorWaterBrush() && renderer.drawing.subhexEditorTool === "feature") {
+      renderer.drawing.subhexEditorHoverKey = "";
+      renderSubhexEditorShell();
+      return;
+    }
     if (!renderer.drawing.subhexEditorHoverKey) return;
     renderer.drawing.subhexEditorHoverKey = "";
     renderSubhexEditorShell();
@@ -7107,38 +7199,49 @@
     const tool = renderer.drawing.subhexEditorTool || "terrain";
     if (tool === "settlement") return;
     if (!isSubhexEditorPaintTool(tool)) return;
-    const cell = getSubhexEditorCellFromEvent(event);
-    if (!cell) return;
+    const worldPoint = getSubhexEditorWorldPoint(event);
+    const cell = getSubhexEditorCellAtPoint(worldPoint);
+    if (!cell && !isSubhexEditorWaterBrush()) return;
+    if (isSubhexEditorWaterBrush() && !pointInPolygon(worldPoint, getSubhexEditorActiveParentHex()?.points || [])) return;
     event.preventDefault();
     event.stopPropagation();
     renderer.drawing.subhexEditorDragActive = true;
     renderer.drawing.subhexEditorDragBefore = captureSubhexEditorDraft();
     renderer.drawing.subhexEditorDragTool = tool;
     renderer.drawing.subhexEditorDragPaintedKeys = new Set();
+    if (isSubhexEditorWaterBrush()) {
+      renderer.drawing.subhexEditorWaterStrokeStartIndex = ensureSubhexEditorWaterDabDrafts().length;
+      renderer.drawing.subhexEditorWaterStrokeId = `water-stroke-${Date.now().toString(36)}`;
+      renderer.drawing.subhexEditorWaterLastPoint = null;
+    }
     renderer.drawing.subhexEditorSuppressClickUntil = performance.now() + 450;
     renderer.subhexEditorStage?.setPointerCapture?.(event.pointerId);
     renderer.drawing.subhexEditorHoverKey = getSubhexEditorCellKey(cell);
-    renderer.drawing.subhexEditorSettlementPointer = getSubhexEditorWorldPoint(event);
+    renderer.drawing.subhexEditorSettlementPointer = worldPoint;
     paintSubhexEditorDragCell(cell, renderer.drawing.subhexEditorSettlementPointer);
   }
 
   function handleSubhexEditorPointerUp(event) {
     if (!renderer.drawing.subhexEditorDragActive) return;
+    const finishedWaterStroke = renderer.drawing.subhexEditorDragTool === "feature" && isSubhexEditorWaterBrush();
     event.preventDefault();
     event.stopPropagation();
     renderer.subhexEditorStage?.releasePointerCapture?.(event.pointerId);
     renderer.drawing.subhexEditorSuppressClickUntil = performance.now() + 900;
     recordSubhexEditorDraftChange(renderer.drawing.subhexEditorDragBefore);
     resetSubhexEditorDragState();
+    if (finishedWaterStroke) renderSubhexEditorShell();
   }
 
   function handleSubhexEditorPointerCancel(event) {
     if (!renderer.drawing.subhexEditorDragActive) return;
+    const finishedWaterStroke = renderer.drawing.subhexEditorDragTool === "feature" && isSubhexEditorWaterBrush();
     event.preventDefault();
     event.stopPropagation();
     renderer.drawing.subhexEditorSuppressClickUntil = performance.now() + 900;
     recordSubhexEditorDraftChange(renderer.drawing.subhexEditorDragBefore);
     resetSubhexEditorDragState();
+    if (finishedWaterStroke) renderSubhexEditorShell();
   }
 
   function handleSubhexEditorAnchorPointerDown(event) {
@@ -7814,7 +7917,7 @@
       if (!intersects && existing?.id !== settlement.id) return;
       renderer.drawing.subhexEditorTerrainDraft.set(key, {
         baseTerrain: cell.baseTerrain || subhex.owner?.baseTerrain || "plains",
-        features: intersects ? [] : (cell.features || []),
+        features: cell.features || [],
         elevation: Number.isFinite(Number(cell.elevation))
           ? Number(cell.elevation)
           : getAutoTerrainElevation(cell.baseTerrain, cell.features || []),
@@ -7855,7 +7958,7 @@
       updateSelectedSubhexSettlement({ seed: `settlement-${Date.now().toString(36)}` });
       return;
     }
-    if (action === "delete" && window.confirm("Delete this settlement boundary? Cleared feature art will remain cleared.")) {
+    if (action === "delete" && window.confirm("Delete this settlement boundary?")) {
       const before = captureSubhexEditorDraft();
       const id = renderer.drawing.subhexEditorSelectedSettlementId;
       getSubhexEditorSettlementCells().forEach(subhex => {
@@ -7917,6 +8020,7 @@
 
   function syncSubhexEditorActionControls(hex = null) {
     const hasDrafts = (renderer.drawing.subhexEditorTerrainDraft?.size || 0) > 0;
+    const hasWaterDabDrafts = Array.isArray(renderer.drawing.subhexEditorWaterDabDrafts);
     const hasAnchorDrafts = (renderer.subhexEditorAnchorDrafts?.size || 0) > 0;
     const hasWallDrafts = (renderer.subhexEditorWallDrafts?.size || 0) > 0;
     const hasSavableWallDrafts = [...(renderer.subhexEditorWallDrafts?.values() || [])]
@@ -7926,8 +8030,8 @@
     const applyButton = renderer.subhexEditorShell?.querySelector('[data-subhex-editor-action="apply"]');
     const resetButton = renderer.subhexEditorShell?.querySelector('[data-subhex-editor-action="reset"]');
     const rebuildButton = renderer.subhexEditorShell?.querySelector('[data-subhex-editor-action="rebuild"]');
-    if (applyButton) applyButton.disabled = renderer.drawing.saving || (!hasDrafts && !hasAnchorDrafts && !hasSavableWallDrafts && !hasPoiVisibilityDrafts && !hasSharedCellsToMigrate);
-    if (resetButton) resetButton.disabled = renderer.drawing.saving || (!hasDrafts && !hasAnchorDrafts && !hasWallDrafts && !hasPoiVisibilityDrafts);
+    if (applyButton) applyButton.disabled = renderer.drawing.saving || (!hasDrafts && !hasWaterDabDrafts && !hasAnchorDrafts && !hasSavableWallDrafts && !hasPoiVisibilityDrafts && !hasSharedCellsToMigrate);
+    if (resetButton) resetButton.disabled = renderer.drawing.saving || (!hasDrafts && !hasWaterDabDrafts && !hasAnchorDrafts && !hasWallDrafts && !hasPoiVisibilityDrafts);
     if (rebuildButton) rebuildButton.disabled = renderer.drawing.saving || !hex?.id;
     renderer.subhexEditorShell?.querySelectorAll("[data-subhex-editor-history]").forEach(button => {
       const stack = button.dataset.subhexEditorHistory === "undo"
@@ -7945,6 +8049,114 @@
   function getSubhexEditorTerrainDraft(subhex) {
     const key = getSubhexEditorCellKey(subhex);
     return key ? renderer.drawing.subhexEditorTerrainDraft?.get(key) || null : null;
+  }
+
+  function getSubhexSavedWaterDabs(hex) {
+    const dabs = hex?.subhexSnapshot?.water_dabs;
+    return Array.isArray(dabs) ? dabs : [];
+  }
+
+  function getSubhexEditorWaterDabs(hex = getSubhexEditorActiveParentHex()) {
+    const drafts = renderer.drawing.subhexEditorWaterDabDrafts;
+    const activeHex = getSubhexEditorActiveParentHex();
+    return hex?.id === activeHex?.id && Array.isArray(drafts) ? drafts : getSubhexSavedWaterDabs(hex);
+  }
+
+  function getSubhexEditorContextWaterDabs(subhexes = [], activeHex = getSubhexEditorActiveParentHex()) {
+    const owners = new Map();
+    if (activeHex?.id) owners.set(activeHex.id, activeHex);
+    subhexes.forEach(subhex => {
+      if (subhex.owner?.id) owners.set(subhex.owner.id, subhex.owner);
+    });
+    return [...owners.values()].flatMap(owner => {
+      const dabs = owner.id === activeHex?.id
+        ? getSubhexEditorWaterDabs(owner)
+        : getSubhexSavedWaterDabs(owner);
+      return dabs.map(dab => ({
+        ...dab,
+        clipPoints: owner.points || [],
+        color: getSubhexWaterDabColor(owner.id === activeHex?.id
+          ? getSubhexEditorTerrainAtPoint(dab, subhexes, owner)
+          : getSubhexSavedTerrainAtPoint(dab, subhexes, owner))
+      }));
+    });
+  }
+
+  function getSubhexSavedContextWaterDabs(subhexes = [], extraHex = null) {
+    const owners = new Map();
+    if (extraHex?.id) owners.set(extraHex.id, extraHex);
+    subhexes.forEach(subhex => {
+      if (subhex.owner?.id) owners.set(subhex.owner.id, subhex.owner);
+    });
+    return [...owners.values()].flatMap(owner => getSubhexSavedWaterDabs(owner).map(dab => ({
+      ...dab,
+      clipPoints: owner.points || [],
+      color: getSubhexWaterDabColor(getSubhexSavedTerrainAtPoint(dab, subhexes, owner))
+    })));
+  }
+
+  function ensureSubhexEditorWaterDabDrafts() {
+    if (!Array.isArray(renderer.drawing.subhexEditorWaterDabDrafts)) {
+      renderer.drawing.subhexEditorWaterDabDrafts = getSubhexSavedWaterDabs(getSubhexEditorActiveParentHex())
+        .map(dab => ({ ...dab }));
+    }
+    return renderer.drawing.subhexEditorWaterDabDrafts;
+  }
+
+  function queueSubhexEditorWaterRender() {
+    if (renderer.subhexEditorWaterRenderFrame) return;
+    renderer.subhexEditorWaterRenderFrame = window.requestAnimationFrame(() => {
+      renderer.subhexEditorWaterRenderFrame = 0;
+      if (renderer.drawing.subhexEditorHexId) renderSubhexEditorShell();
+    });
+  }
+
+  function getSubhexEditorWaterBrushRadius() {
+    const size = Math.max(10, Math.min(150, Number(renderer.drawing.subhexEditorWaterBrushSize) || 70));
+    return getSubhexMetrics().radius * (size / 100);
+  }
+
+  function paintSubhexEditorWaterAt(point) {
+    const hex = getSubhexEditorActiveParentHex();
+    if (!hex || !point || !pointInPolygon(point, hex.points)) return false;
+    const dabs = ensureSubhexEditorWaterDabDrafts();
+    const radius = getSubhexEditorWaterBrushRadius();
+    const previous = renderer.drawing.subhexEditorWaterLastPoint;
+    const distance = previous ? Math.hypot(point.x - previous.x, point.y - previous.y) : 0;
+    const spacing = Math.max(radius * 0.24, getSubhexMetrics().radius * 0.025);
+    const steps = previous ? Math.max(1, Math.ceil(distance / spacing)) : 1;
+    const samples = Array.from({ length: steps }, (_, index) => {
+      const progress = (index + 1) / steps;
+      return previous ? {
+        x: previous.x + (point.x - previous.x) * progress,
+        y: previous.y + (point.y - previous.y) * progress
+      } : { x: point.x, y: point.y };
+    }).filter(sample => pointInPolygon(sample, hex.points));
+    renderer.drawing.subhexEditorWaterLastPoint = { x: point.x, y: point.y };
+    if (renderer.drawing.subhexEditorFeatureBrush === "__erase_water") {
+      const before = dabs.length;
+      renderer.drawing.subhexEditorWaterDabDrafts = dabs.filter(dab => (
+        !samples.some(sample => Math.hypot(sample.x - dab.x, sample.y - dab.y) <= radius + (Number(dab.r) || 0) * 0.45)
+      ));
+      const changed = renderer.drawing.subhexEditorWaterDabDrafts.length !== before;
+      if (changed) queueSubhexEditorWaterRender();
+      return changed;
+    }
+    let changed = false;
+    samples.forEach(sample => {
+      const last = dabs[dabs.length - 1];
+      if (last && Math.hypot(sample.x - last.x, sample.y - last.y) < radius * 0.2) return;
+      dabs.push({
+        id: `${renderer.drawing.subhexEditorWaterStrokeId || "water"}-${dabs.length.toString(36)}`,
+        x: sample.x,
+        y: sample.y,
+        r: radius
+      });
+      changed = true;
+    });
+    if (!changed) return false;
+    queueSubhexEditorWaterRender();
+    return true;
   }
 
   function getSubhexEditorRenderedFeatures(subhex) {
@@ -8025,12 +8237,13 @@
     const layout = renderer.subhexEditorLayout;
     if (!campaign?.id || !hex?.id || !layout?.ownedSubhexes?.length || renderer.drawing.saving) return false;
     const hasTerrainDrafts = renderer.drawing.subhexEditorTerrainDraft?.size > 0;
+    const hasWaterDabDrafts = Array.isArray(renderer.drawing.subhexEditorWaterDabDrafts);
     const hasAnchorDrafts = renderer.subhexEditorAnchorDrafts?.size > 0;
     const hasWallDrafts = [...(renderer.subhexEditorWallDrafts?.values() || [])]
       .some(draft => draft?.Deleted || (draft?.Points?.length || 0) >= 2);
     const hasPoiVisibilityDrafts = renderer.subhexEditorPoiVisibilityDrafts?.size > 0;
     const hasSharedCellsToMigrate = hasSubhexEditorSharedCellsToMigrate(hex, layout);
-    const hasMapDrafts = hasTerrainDrafts || hasAnchorDrafts || hasSharedCellsToMigrate;
+    const hasMapDrafts = hasTerrainDrafts || hasWaterDabDrafts || hasAnchorDrafts || hasSharedCellsToMigrate;
     if (!hasMapDrafts && !hasPoiVisibilityDrafts && !hasWallDrafts) return false;
 
     if (!hasMapDrafts) {
@@ -8085,7 +8298,8 @@
             mode: "materialized",
             generator_version: ownerSnapshot.generator_version || 1,
             cells: { ...(ownerSnapshot.cells || {}) },
-            anchors: { ...(ownerSnapshot.anchors || {}) }
+            anchors: { ...(ownerSnapshot.anchors || {}) },
+            water_dabs: getSubhexSavedWaterDabs(owner).map(dab => ({ ...dab }))
           }
         };
         sharedSnapshots.set(owner.id, shared);
@@ -8140,6 +8354,7 @@
       });
       clearSubhexEditorHistory();
       renderer.drawing.subhexEditorTerrainDraft = new Map();
+      renderer.drawing.subhexEditorWaterDabDrafts = null;
       renderer.subhexEditorAnchorDrafts = new Map();
       if (hasWallDrafts) await persistSubhexEditorWallDrafts(campaign.id);
       affectedTileHexIds.forEach(invalidateSubhexDetailForHex);
@@ -8160,12 +8375,14 @@
 
   async function resetSubhexEditorDetail() {
     const hasTerrainDrafts = renderer.drawing.subhexEditorTerrainDraft?.size > 0;
+    const hasWaterDabDrafts = Array.isArray(renderer.drawing.subhexEditorWaterDabDrafts);
     const hasAnchorDrafts = renderer.subhexEditorAnchorDrafts?.size > 0;
     const hasWallDrafts = renderer.subhexEditorWallDrafts?.size > 0;
     const hasPoiVisibilityDrafts = renderer.subhexEditorPoiVisibilityDrafts?.size > 0;
-    if (!hasTerrainDrafts && !hasAnchorDrafts && !hasWallDrafts && !hasPoiVisibilityDrafts) return false;
+    if (!hasTerrainDrafts && !hasWaterDabDrafts && !hasAnchorDrafts && !hasWallDrafts && !hasPoiVisibilityDrafts) return false;
     const before = captureSubhexEditorDraft();
     renderer.drawing.subhexEditorTerrainDraft = new Map();
+    renderer.drawing.subhexEditorWaterDabDrafts = null;
     renderer.subhexEditorAnchorDrafts = new Map();
     renderer.subhexEditorWallDrafts = new Map();
     renderer.drawing.subhexEditorWallAction = "";
@@ -8191,12 +8408,14 @@
       if (!snapshot) return false;
       const previous = hex.subhexSnapshot;
       const anchors = { ...(previous?.anchors || {}) };
-      const subhexSnapshot = Object.keys(anchors).length ? {
+      const waterDabs = getSubhexSavedWaterDabs(hex);
+      const subhexSnapshot = Object.keys(anchors).length || waterDabs.length ? {
         version: previous?.version || 1,
         mode: "anchored",
         generator_version: previous?.generator_version || 1,
         cells: {},
-        anchors
+        anchors,
+        water_dabs: waterDabs
       } : null;
       const data = await persistGeneratedHexTerrainSnapshot(campaign.id, hex.id, {
         ...snapshot,
@@ -8313,7 +8532,8 @@
       mode: "materialized",
       generator_version: 1,
       cells,
-      anchors
+      anchors,
+      water_dabs: getSubhexEditorWaterDabs(hex).map(dab => ({ ...dab }))
     };
   }
 
@@ -8503,15 +8723,21 @@
       renderer.featureAssetsLoaded ? 1 : 0,
       renderer.featureImages.size
     ].join("|");
-    canvas.width = pixelWidth;
-    canvas.height = pixelHeight;
-
+    const cachedCanvas = renderer.subhexEditorCanvasCache;
+    const canReuseCachedCanvas = !renderer.drawing.subhexEditorDragActive
+      || (renderer.drawing.subhexEditorDragTool === "feature"
+        && renderer.drawing.subhexEditorFeatureBrush === "__water_brush");
+    if (canReuseCachedCanvas && cachedCanvas?.key === cacheKey
+      && cachedCanvas.targetCanvas === canvas && canvas.width === pixelWidth && canvas.height === pixelHeight) return;
+    if (cachedCanvas) cachedCanvas.targetCanvas = null;
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const cachedCanvas = renderer.subhexEditorCanvasCache;
-    if (!renderer.drawing.subhexEditorDragActive && cachedCanvas?.key === cacheKey
+    if (canReuseCachedCanvas && cachedCanvas?.key === cacheKey
       && cachedCanvas.canvas?.width === pixelWidth && cachedCanvas.canvas?.height === pixelHeight) {
       ctx.drawImage(cachedCanvas.canvas, 0, 0);
+      cachedCanvas.targetCanvas = canvas;
       return;
     }
     ctx.save();
@@ -8523,21 +8749,33 @@
       transform.offsetX * dpr,
       transform.offsetY * dpr
     );
-    const drawCells = cells => {
+    const settlementPlans = new Map();
+    const drawCells = (cells, options = {}) => {
       cells.forEach(subhex => drawCanvasPolygon(ctx, subhex.points, getSubhexEditorTerrainFill(subhex), 1));
       cells.forEach(subhex => {
         const features = getSubhexEditorRenderedFeatures(subhex);
         renderSubhexFarmlandOverlay(ctx, subhex, metrics, features, { editor: true });
         const stack = getSubhexFeatureStack(subhex, features, { editor: true });
+        const featureClip = getSubhexFeatureClipAwayPoints(subhex, { editor: true });
         stack.forEach((item, index) => {
           const image = getFeatureArtImage(item.file, item.tint, getSubhexFeatureImageUsage(subhex));
           if (!image) return;
-          drawFeatureArtImage(ctx, image, getSubhexFeatureArtBox(subhex, metrics, index, stack.length), item.opacity);
+          drawSubhexFeatureArtImage(ctx, image, getSubhexFeatureArtBox(subhex, metrics, index, stack.length), item.opacity, featureClip);
         });
-        drawSubhexSettlement(ctx, subhex, metrics, { editor: true });
+        if (options.skipSettlements) return;
+        const settlement = getSubhexSettlementForRender(subhex, { editor: true });
+        if (settlement) {
+          const key = JSON.stringify(settlement);
+          if (settlement.version === 2 && !settlementPlans.has(key)) {
+            settlementPlans.set(key, getSubhexOrganicSettlementPlan(settlement, metrics, { editor: true }));
+          }
+          drawSubhexSettlement(ctx, subhex, metrics, { editor: true, settlement, plan: settlementPlans.get(key) });
+        }
       });
     };
-    drawCells(subhexes);
+    drawCells(subhexes, { skipSettlements: true });
+    drawSubhexWaterDabs(ctx, getSubhexEditorContextWaterDabs(subhexes, hex));
+    drawSubhexEditorSettlements(ctx, subhexes, metrics, settlementPlans);
 
     ctx.save();
     ctx.beginPath();
@@ -8548,7 +8786,11 @@
     ctx.closePath();
     ctx.clip();
     drawCanvasPolygon(ctx, hex.points, hex.fill || TERRAIN_COLORS[hex.baseTerrain] || TERRAIN_COLORS.plains, 1);
-    drawCells(ownedSubhexes);
+    drawCells(ownedSubhexes, { skipSettlements: true });
+    drawSubhexWaterDabs(ctx, getSubhexEditorWaterDabs(hex), {
+      terrainAt: point => getSubhexEditorTerrainAtPoint(point, ownedSubhexes, hex)
+    });
+    drawSubhexEditorSettlements(ctx, ownedSubhexes, metrics, settlementPlans);
     ctx.restore();
     ctx.restore();
     if (!renderer.drawing.subhexEditorDragActive) {
@@ -8556,8 +8798,20 @@
       cached.width = pixelWidth;
       cached.height = pixelHeight;
       cached.getContext("2d")?.drawImage(canvas, 0, 0);
-      renderer.subhexEditorCanvasCache = { key: cacheKey, canvas: cached };
+      renderer.subhexEditorCanvasCache = { key: cacheKey, canvas: cached, targetCanvas: canvas };
     }
+  }
+
+  function drawSubhexEditorSettlements(ctx, subhexes, metrics, plans = new Map()) {
+    (subhexes || []).forEach(subhex => {
+      const settlement = getSubhexSettlementForRender(subhex, { editor: true });
+      if (!settlement) return;
+      const key = JSON.stringify(settlement);
+      if (settlement.version === 2 && !plans.has(key)) {
+        plans.set(key, getSubhexOrganicSettlementPlan(settlement, metrics, { editor: true }));
+      }
+      drawSubhexSettlement(ctx, subhex, metrics, { editor: true, settlement, plan: plans.get(key) });
+    });
   }
 
   function renderSubhexPreview(hexId, preview) {
@@ -8596,15 +8850,17 @@
         const features = getSubhexSeededFeatures(cell);
         renderSubhexFarmlandOverlay(ctx, cell, metrics, features);
         const stack = getSubhexFeatureStack(cell, features);
+        const featureClip = getSubhexFeatureClipAwayPoints(cell);
         stack.forEach((item, index) => {
           const image = getFeatureArtImage(item.file, item.tint, getSubhexFeatureImageUsage(cell));
           if (!image) {
             imagesReady = false;
             return;
           }
-          drawFeatureArtImage(ctx, image, getSubhexFeatureArtBox(cell, metrics, index, stack.length), item.opacity);
+          drawSubhexFeatureArtImage(ctx, image, getSubhexFeatureArtBox(cell, metrics, index, stack.length), item.opacity, featureClip);
         });
-        drawSubhexSettlement(ctx, cell, metrics);
+        const settlement = getSubhexSettlementForRender(cell);
+        if (settlement?.version === 1) drawSubhexSettlement(ctx, cell, metrics, { settlement });
       });
     };
     let imagesReady = true;
@@ -8614,13 +8870,31 @@
     ctx.save();
     ctx.setTransform(scale, 0, 0, scale, -left * scale, -top * scale);
     drawCells(contextCells);
+    drawSubhexWaterDabs(ctx, getSubhexSavedContextWaterDabs(contextCells, hex));
     ctx.save();
     ctx.beginPath();
     addSubhexRouteClipPolygon(ctx, hex);
     ctx.clip();
     drawCanvasPolygon(ctx, hex.points, hex.fill || TERRAIN_COLORS[hex.baseTerrain] || TERRAIN_COLORS.plains, 1);
     drawCells(ownedCells);
+    drawSubhexWaterDabs(ctx, getSubhexSavedWaterDabs(hex), {
+      terrainAt: point => getSubhexSavedTerrainAtPoint(point, ownedCells, hex)
+    });
     ctx.restore();
+
+    getSavedSubhexSettlements()
+      .filter(settlement => renderBoundsIntersect(getRenderPointsBounds(settlement.points), viewport))
+      .forEach(settlement => {
+        const raster = getSavedSubhexSettlementRaster(settlement, metrics);
+        if (!raster?.canvas?.width || !raster.canvas.height) return;
+        ctx.drawImage(
+          raster.canvas,
+          raster.bounds.left,
+          raster.bounds.top,
+          raster.bounds.right - raster.bounds.left,
+          raster.bounds.bottom - raster.bounds.top
+        );
+      });
 
     const entries = getSubhexRouteProjectionEntries(visibleHexes);
     const patches = getSubhexSavedRoutePatches(visibleHexes, entries);
@@ -9149,6 +9423,35 @@
     });
   }
 
+  function appendSubhexEditorWaterBrushPreview(fragment, hex, ownedSubhexes) {
+    if (!isSubhexEditorWaterBrush() || renderer.drawing.subhexEditorTool !== "feature") return;
+    const point = renderer.drawing.subhexEditorSettlementPointer;
+    const inside = point && pointInPolygon(point, hex.points);
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.setAttribute("class", "generated-map-subhex-editor-water-preview");
+    if (renderer.drawing.subhexEditorDragActive && renderer.drawing.subhexEditorFeatureBrush === "__water_brush") {
+      getSubhexEditorWaterDabs(hex)
+        .slice(renderer.drawing.subhexEditorWaterStrokeStartIndex || 0)
+        .forEach(dab => {
+          const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          circle.setAttribute("cx", String(dab.x));
+          circle.setAttribute("cy", String(dab.y));
+          circle.setAttribute("r", String(dab.r));
+          circle.setAttribute("fill", getSubhexWaterDabColor(getSubhexEditorTerrainAtPoint(dab, ownedSubhexes, hex)));
+          group.appendChild(circle);
+        });
+    }
+    if (inside) {
+      const cursor = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      cursor.setAttribute("class", `generated-map-subhex-editor-water-cursor${renderer.drawing.subhexEditorFeatureBrush === "__erase_water" ? " is-eraser" : ""}`);
+      cursor.setAttribute("cx", String(point.x));
+      cursor.setAttribute("cy", String(point.y));
+      cursor.setAttribute("r", String(getSubhexEditorWaterBrushRadius()));
+      group.appendChild(cursor);
+    }
+    fragment.appendChild(group);
+  }
+
   function renderSubhexEditorSvg(hex, ownedSubhexes, contextSubhexes, viewport) {
     const svg = renderer.subhexEditorSvg;
     if (!svg || !hex?.id) return;
@@ -9210,6 +9513,8 @@
     renderSubhexPoiMarkers(contextPois, getHexesForBounds(viewport).filter(candidate => candidate.id !== hex.id));
     fragment.appendChild(contextPois);
 
+    appendSubhexEditorWaterBrushPreview(fragment, hex, ownedSubhexes);
+
     routeGroup.setAttribute("clip-path", `url(#${clipId})`);
     appendSubhexEditorRoutePaths(routeGroup, hex);
     fragment.appendChild(routeGroup);
@@ -9218,7 +9523,7 @@
     fragment.appendChild(wallGroup);
 
     selectionGroup.setAttribute("clip-path", `url(#${clipId})`);
-    if (isSubhexEditorPaintTool() && renderer.drawing.subhexEditorTool !== "settlement") ownedSubhexes.forEach(subhex => {
+    if (isSubhexEditorPaintTool() && renderer.drawing.subhexEditorTool !== "settlement" && !isSubhexEditorWaterBrush()) ownedSubhexes.forEach(subhex => {
       const key = getSubhexEditorCellKey(subhex);
       const isSelected = key && key === renderer.drawing.subhexEditorSelectedKey;
       const isHovered = key && key === renderer.drawing.subhexEditorHoverKey;
@@ -9374,6 +9679,7 @@
     timeRenderPerfMark("drawRoutes", () => drawCacheSlice(ctx, renderer.routeCacheCanvas, width, height, getParentRouteLayerOpacity()));
     timeRenderPerfMark("drawFeatures", () => drawCacheSlice(ctx, renderer.featureCacheCanvas, width, height, getParentFeatureLayerOpacity()));
     timeRenderPerfMark("drawSubhexFeatures", () => renderSubhexDetailTileLayer(ctx, visibleHexes, "features"));
+    timeRenderPerfMark("drawSubhexSettlements", () => renderSavedSubhexSettlementLayer(ctx));
     timeRenderPerfMark("drawSubhexRoutes", () => renderSubhexRouteProjectionLayer(ctx, visibleHexes));
     timeRenderPerfMark("drawOverlays", () => drawCacheSlice(ctx, renderer.overlayCacheCanvas, width, height));
     renderer.drawing.terrainDirtyHexIds.clear();
@@ -10603,6 +10909,10 @@
   }
 
   function getSavedSubhexSettlements() {
+    const revision = renderer.subhexRouteAnchorRevision || 0;
+    if (renderer.savedSubhexSettlementsCache?.revision === revision) {
+      return renderer.savedSubhexSettlementsCache.settlements;
+    }
     const settlements = new Map();
     renderer.hexes.forEach(hex => {
       Object.values(hex.subhexSnapshot?.cells || {}).forEach(cell => {
@@ -10612,7 +10922,15 @@
         }
       });
     });
-    return [...settlements.values()];
+    const savedSettlements = [...settlements.values()];
+    const savedIds = new Set(savedSettlements.map(settlement => settlement.id));
+    renderer.subhexSettlementRasterCache.forEach((entry, id) => {
+      if (savedIds.has(id)) return;
+      releaseMapCanvas(entry.canvas);
+      renderer.subhexSettlementRasterCache.delete(id);
+    });
+    renderer.savedSubhexSettlementsCache = { revision, settlements: savedSettlements };
+    return savedSettlements;
   }
 
   function renderParentSettlementFills(ctx, bounds = null) {
@@ -11271,20 +11589,33 @@
     const commands = [];
     const settlements = [];
     const images = new Map();
+    const waterDabs = new Map();
     subhexes.forEach(subhex => {
       const seededFeatures = getSubhexSeededFeatures(subhex);
+      const featureClip = getSubhexFeatureClipAwayPoints(subhex);
       if (shouldRenderSubhexFarmland(subhex, seededFeatures)) {
         const file = FEATURE_ART_FILES.farmland;
         commands.push({ file, tint: getFeatureArtTint(subhex.owner, { featureId: "farmland", file }),
-          box: getSubhexFarmlandArtBox(subhex, metrics), opacity: 0.64 });
+          box: getSubhexFarmlandArtBox(subhex, metrics), opacity: 0.64, clipAwayPoints: featureClip });
       }
       const stack = getSubhexFeatureStack(subhex, seededFeatures);
       stack.forEach((item, index) => commands.push({ file: item.file, tint: item.tint,
-        box: getSubhexFeatureArtBox(subhex, metrics, index, stack.length), opacity: item.opacity }));
-      if (getSubhexSettlementForRender(subhex)) settlements.push(subhex);
+        box: getSubhexFeatureArtBox(subhex, metrics, index, stack.length), opacity: item.opacity,
+        clipAwayPoints: featureClip }));
+      if (getSubhexSettlementForRender(subhex)?.version === 1) settlements.push(subhex);
+      getSubhexSavedWaterDabs(subhex.owner).forEach(dab => {
+        if (!dab?.id || waterDabs.has(`${subhex.owner?.id}:${dab.id}`)) return;
+        waterDabs.set(`${subhex.owner?.id}:${dab.id}`, {
+          ...dab,
+          clipPoints: subhex.owner?.points || [],
+          color: getSubhexWaterDabColor(getSubhexSavedTerrainAtPoint(dab, null, subhex.owner))
+        });
+      });
     });
-    commands.forEach(item => images.set(getFeatureImageCacheKey(item.file, item.tint, "subhex"), { file: item.file, tint: item.tint }));
-    return { commands, settlements, images: [...images.values()] };
+    commands.forEach(item => images.set(
+      getFeatureImageCacheKey(item.file, item.tint, "subhex"), { file: item.file, tint: item.tint }
+    ));
+    return { commands, waterDabs: [...waterDabs.values()], settlements, images: [...images.values()] };
   }
 
   function getSubhexFeatureTileScale() {
@@ -11497,8 +11828,9 @@
     clipToMapHexArea(ctx, getHexesForBounds(bounds));
     plan.commands.forEach(item => {
       const image = renderer.featureImages.get(getFeatureImageCacheKey(item.file, item.tint, "subhex"))?.image;
-      if (image) drawFeatureArtImage(ctx, image, item.box, item.opacity);
+      if (image) drawSubhexFeatureArtImage(ctx, image, item.box, item.opacity, item.clipAwayPoints);
     });
+    drawSubhexWaterDabs(ctx, plan.waterDabs || []);
     (plan.settlements || []).forEach(subhex => drawSubhexSettlement(ctx, subhex, getSubhexMetrics()));
     ctx.restore();
   }
@@ -11561,6 +11893,12 @@
     }
     renderer.subhexRouteAnchorRevision = (renderer.subhexRouteAnchorRevision || 0) + 1;
     renderer.subhexSettlementRouteSignatureCache?.clear?.();
+    for (const [id, raster] of renderer.subhexSettlementRasterCache) {
+      if (!raster.dependencyHexIds?.has(hexId)) continue;
+      releaseMapCanvas(raster.canvas);
+      renderer.subhexSettlementRasterCache.delete(id);
+      renderer.subhexSettlementPlanCache?.delete(raster.planKey);
+    }
     renderer.subhexRouteProjectionCache = { key: "", entries: [] };
     renderer.subhexSavedRoutePatchCache.delete(hexId);
     deleteSubhexDetailTile(hexId);
@@ -11935,7 +12273,7 @@
   function getSubhexFeatureStack(subhex, seededFeatures = null, options = {}) {
     const owner = subhex.owner;
     if (!owner) return [];
-    if (getSubhexSettlementForRender(subhex, options)) return [];
+    if (getSubhexSettlementForRender(subhex, options)?.version === 1) return [];
     if (isSubhexFarmlandOwner(subhex)) return [];
 
     const features = Array.isArray(seededFeatures) ? seededFeatures : getSubhexSeededFeatures(subhex);
@@ -11959,6 +12297,109 @@
       .slice(0, 2);
   }
 
+  function getSubhexFeatureClipAwayPoints(subhex, options = {}) {
+    const settlement = getSubhexSettlementForRender(subhex, options);
+    return settlement?.version === 2 && settlement.points.length >= 3 ? settlement.points : null;
+  }
+
+  function drawSubhexFeatureArtImage(ctx, image, box, opacity, clipAwayPoints = null) {
+    if (!clipAwayPoints?.length) {
+      drawFeatureArtImage(ctx, image, box, opacity);
+      return;
+    }
+    const padding = Math.max(box.width, box.height) + 1;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x - padding, box.y - padding, box.width + padding * 2, box.height + padding * 2);
+    clipAwayPoints.forEach((point, index) => {
+      if (index) ctx.lineTo(point.x, point.y);
+      else ctx.moveTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.clip("evenodd");
+    drawFeatureArtImage(ctx, image, box, opacity);
+    ctx.restore();
+  }
+
+  function getSubhexTerrainAtPoint(point, cells, fallbackHex, getTerrain) {
+    const candidates = cells || getSubhexesForBounds({
+      left: point.x - 0.1,
+      right: point.x + 0.1,
+      top: point.y - 0.1,
+      bottom: point.y + 0.1
+    }, fallbackHex ? [fallbackHex] : renderer.hexes);
+    const cell = candidates.find(candidate => pointInPolygon(point, candidate.points));
+    return cell ? getTerrain(cell) : (fallbackHex?.baseTerrain || "plains");
+  }
+
+  function getSubhexSavedTerrainAtPoint(point, cells = null, fallbackHex = null) {
+    return getSubhexTerrainAtPoint(point, cells, fallbackHex, subhex => (
+      getSubhexSavedCellSnapshot(subhex)?.baseTerrain || subhex.owner?.baseTerrain || "plains"
+    ));
+  }
+
+  function getSubhexEditorTerrainAtPoint(point, cells = null, fallbackHex = null) {
+    return getSubhexTerrainAtPoint(point, cells, fallbackHex, subhex => (
+      getSubhexEditorCellSnapshot(subhex)?.baseTerrain || subhex.owner?.baseTerrain || "plains"
+    ));
+  }
+
+  function mixSubhexWaterColor(base, water, amount) {
+    const parse = value => [1, 3, 5].map(index => Number.parseInt(value.slice(index, index + 2), 16));
+    const [baseR, baseG, baseB] = parse(base);
+    const [waterR, waterG, waterB] = parse(water);
+    const ratio = Math.max(0, Math.min(1, amount));
+    return `rgb(${Math.round(baseR + (waterR - baseR) * ratio)}, ${Math.round(baseG + (waterG - baseG) * ratio)}, ${Math.round(baseB + (waterB - baseB) * ratio)})`;
+  }
+
+  function getSubhexWaterDabColor(baseTerrain) {
+    const terrainColor = TERRAIN_COLORS[baseTerrain] || TERRAIN_COLORS.plains;
+    return mixSubhexWaterColor(terrainColor, "#2d93b8", WATER_TERRAINS.has(baseTerrain) ? 0.28 : 0.68);
+  }
+
+  function addSubhexWaterDabPath(ctx, dab) {
+    const radius = Number(dab?.radius ?? dab?.r);
+    if (!Number.isFinite(dab?.x) || !Number.isFinite(dab?.y) || !Number.isFinite(radius) || radius <= 0) return false;
+    ctx.moveTo(dab.x + radius, dab.y);
+    ctx.arc(dab.x, dab.y, radius, 0, Math.PI * 2);
+    return true;
+  }
+
+  function drawSubhexWaterDabs(ctx, dabs = [], options = {}) {
+    const groups = new Map();
+    (dabs || []).forEach(dab => {
+      const radius = Number(dab?.r);
+      if (!Number.isFinite(dab?.x) || !Number.isFinite(dab?.y) || !Number.isFinite(radius) || radius <= 0) return;
+      const color = dab.color || getSubhexWaterDabColor(options.terrainAt?.(dab) || "plains");
+      const clipKey = dab.clipPoints?.length >= 3
+        ? stableHash(dab.clipPoints.map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join("|"))
+        : "none";
+      const key = `${color}:${clipKey}`;
+      if (!groups.has(key)) groups.set(key, { color, clipPoints: dab.clipPoints, dabs: [] });
+      groups.get(key).dabs.push({ ...dab, radius });
+    });
+    groups.forEach(group => {
+      ctx.save();
+      if (group.clipPoints?.length >= 3) {
+        ctx.beginPath();
+        group.clipPoints.forEach((point, index) => {
+          if (index) ctx.lineTo(point.x, point.y);
+          else ctx.moveTo(point.x, point.y);
+        });
+        ctx.closePath();
+        ctx.clip();
+      }
+      ctx.beginPath();
+      group.dabs.forEach(dab => {
+        addSubhexWaterDabPath(ctx, dab);
+      });
+      ctx.fillStyle = group.color;
+      ctx.globalAlpha = 1;
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+
   function getSubhexSettlementForRender(subhex, options = {}) {
     const cell = options.editor ? getSubhexEditorCellSnapshot(subhex) : getSubhexSavedCellSnapshot(subhex);
     return normalizeSubhexSettlement(cell?.settlement);
@@ -11973,12 +12414,40 @@
     return painted;
   }
 
+  function getSubhexSettlementWaterDabs(settlement, options = {}) {
+    if (settlement?.version !== 2 || settlement.points.length < 3) return [];
+    const bounds = getRenderPointsBounds(settlement.points, getSubhexMetrics().radius * 1.6);
+    const activeHexId = renderer.drawing.subhexEditorHexId;
+    return getHexesForBounds(bounds).flatMap(hex => {
+      const dabs = options.editor && hex.id === activeHexId
+        ? getSubhexEditorWaterDabs(hex)
+        : getSubhexSavedWaterDabs(hex);
+      return dabs.map(dab => ({ ...dab, clipPoints: hex.points }));
+    }).filter(dab => (
+      Number.isFinite(Number(dab.x))
+      && Number.isFinite(Number(dab.y))
+      && Number.isFinite(Number(dab.r))
+      && dab.x + dab.r >= bounds.left
+      && dab.x - dab.r <= bounds.right
+      && dab.y + dab.r >= bounds.top
+      && dab.y - dab.r <= bounds.bottom
+    ));
+  }
+
+  function isPointBlockedBySubhexWater(point, waterDabs = [], clearance = 0) {
+    return waterDabs.some(dab => (
+      (!dab.clipPoints?.length || pointInPolygon(point, dab.clipPoints))
+      && Math.hypot(point.x - dab.x, point.y - dab.y) <= Number(dab.r) * 1.08 + clearance
+    ));
+  }
+
   function isSubhexSettlementPointBlocked(point, metrics, options = {}, footprintClearance = 0) {
     const wallClearance = metrics.radius * 0.16 + footprintClearance;
-    const walls = options.editor ? getEffectiveSubhexWalls() : (renderer.subhexWalls || []);
+    const walls = options.walls || (options.editor ? getEffectiveSubhexWalls() : (renderer.subhexWalls || []));
     if (walls.some(wall => (wall.Points || []).slice(1).some((end, index) => (
       distanceToSegment(point, wall.Points[index], end) < wallClearance
     )))) return true;
+    if (isPointBlockedBySubhexWater(point, options.waterDabs || [], footprintClearance)) return true;
     if (options.skipRoutes) return false;
     if (typeof Path2D !== "function") return false;
     const hitCanvas = renderer.subhexSettlementHitCanvas || document.createElement("canvas");
@@ -12205,22 +12674,99 @@
     });
   }
 
+  function buildSubhexSettlementWaterfrontLanes(settlement, waterDabs = [], metrics) {
+    if (settlement.style === "rural" || waterDabs.length < 3) return [];
+    const strokes = new Map();
+    waterDabs.forEach((dab, sourceIndex) => {
+      const match = String(dab?.id || "").match(/^(.+)-([0-9a-z]+)$/i);
+      if (!match) return;
+      const strokeIndex = Number.parseInt(match[2], 36);
+      if (!Number.isFinite(strokeIndex)) return;
+      if (!strokes.has(match[1])) strokes.set(match[1], []);
+      strokes.get(match[1]).push({
+        ...dab,
+        sourceIndex,
+        strokeIndex
+      });
+    });
+    const roadDensity = Math.max(0, Math.min(1, Number(settlement.roadDensity ?? 45) / 100));
+    const sideCount = settlement.style === "city" && roadDensity >= 0.4 ? 2 : 1;
+    const minimumLength = metrics.radius * (settlement.style === "city" ? 1.15 : 1.55);
+    const lanes = [];
+    strokes.forEach((stroke, strokeId) => {
+      stroke.sort((left, right) => left.strokeIndex - right.strokeIndex || left.sourceIndex - right.sourceIndex);
+      const relevant = stroke.filter(dab => (
+        pointInPolygon(dab, settlement.points)
+        || settlement.points.some(point => Math.hypot(point.x - dab.x, point.y - dab.y) <= Number(dab.r) * 1.4)
+      ));
+      if (relevant.length < 3) return;
+      const sampleSpacing = Math.max(metrics.radius * 0.3, Number(relevant[0].r) * 0.48);
+      const points = relevant.filter((dab, index) => !index || index === relevant.length - 1 || Math.hypot(
+        dab.x - relevant[index - 1].x,
+        dab.y - relevant[index - 1].y
+      ) >= sampleSpacing);
+      const length = points.slice(1).reduce((sum, point, index) => sum + Math.hypot(
+        point.x - points[index].x,
+        point.y - points[index].y
+      ), 0);
+      if (points.length < 3 || length < minimumLength) return;
+      const preferredSide = seededUnit(`${settlement.seed}:waterfront-side:${strokeId}`) > 0.5 ? 1 : -1;
+      Array.from({ length: sideCount }, (_, sideIndex) => sideIndex ? -preferredSide : preferredSide)
+        .forEach(side => {
+          const lanePoints = points.map((point, index) => {
+            const previous = points[Math.max(0, index - 1)];
+            const next = points[Math.min(points.length - 1, index + 1)];
+            const dx = next.x - previous.x;
+            const dy = next.y - previous.y;
+            const distance = Math.max(0.001, Math.hypot(dx, dy));
+            const offset = Number(point.r) * 1.14 + metrics.radius * 0.11;
+            return {
+              x: point.x - dy / distance * offset * side,
+              y: point.y + dx / distance * offset * side
+            };
+          });
+          if (lanePoints.some(point => pointInPolygon(point, settlement.points))) {
+            lanes.push({
+              points: lanePoints,
+              type: settlement.style === "city" && sideCount === 2 && side < 0 ? "stone" : "brown",
+              generated: true,
+              waterfront: true,
+              waterStrokeId: strokeId
+            });
+          }
+        });
+    });
+    return lanes;
+  }
+
   function getNearestSettlementRouteSegment(center, polylines = []) {
     let nearest = null;
-    polylines.forEach(polyline => polyline.points.slice(1).forEach((end, index) => {
-      const start = polyline.points[index];
-      const point = getNearestPointOnSegment(center, start, end);
-      const distance = Math.hypot(center.x - point.x, center.y - point.y);
-      if (!nearest || distance < nearest.distance) nearest = {
-        point,
-        distance,
-        angle: Math.atan2(end.y - start.y, end.x - start.x)
-      };
-    }));
+    for (const polyline of polylines) {
+      const bounds = polyline.bounds;
+      if (nearest && bounds && (
+        center.x < bounds.left - nearest.distance || center.x > bounds.right + nearest.distance
+        || center.y < bounds.top - nearest.distance || center.y > bounds.bottom + nearest.distance
+      )) continue;
+      for (let index = 1; index < polyline.points.length; index += 1) {
+        const start = polyline.points[index - 1];
+        const end = polyline.points[index];
+        if (nearest && (
+          center.x < Math.min(start.x, end.x) - nearest.distance
+          || center.x > Math.max(start.x, end.x) + nearest.distance
+          || center.y < Math.min(start.y, end.y) - nearest.distance
+          || center.y > Math.max(start.y, end.y) + nearest.distance
+        )) continue;
+        const point = getNearestPointOnSegment(center, start, end);
+        const distance = Math.hypot(center.x - point.x, center.y - point.y);
+        if (!nearest || distance < nearest.distance) nearest = {
+          point, distance, angle: Math.atan2(end.y - start.y, end.x - start.x)
+        };
+      }
+    }
     return nearest;
   }
 
-  function buildSubhexSettlementGeneratedLanes(settlement, routeContext, metrics) {
+  function buildSubhexSettlementGeneratedLanes(settlement, routeContext, metrics, waterDabs = []) {
     const center = getSubhexSettlementCenter(settlement);
     const nearestRoute = getNearestSettlementRouteSegment(center, routeContext.polylines);
     const routeAngle = nearestRoute?.angle ?? seededUnit(`${settlement.seed}:lane-angle`) * Math.PI * 2;
@@ -12247,7 +12793,8 @@
     })).sort((left, right) => left.order - right.order)
       .slice(0, structuredCount)
       .map(item => item.index));
-    const lanes = [];
+    const lanes = buildSubhexSettlementWaterfrontLanes(settlement, waterDabs, metrics);
+    const waterfrontLaneCount = lanes.length;
     for (let index = 0; index < laneCount; index += 1) {
       const salt = `${settlement.seed}:lane:${index}`;
       const isStructured = structuredIndices.has(index);
@@ -12258,7 +12805,9 @@
         organicStart = nearestRoute?.point || getPolygonPerimeterPoint(settlement.points, baseFraction);
         organicEnd = getPolygonPerimeterPoint(settlement.points, baseFraction + 0.48 + seededUnit(`${salt}:span`) * 0.08);
       } else {
-        const parentLane = lanes[Math.min(lanes.length - 1, Math.floor((index - 1) / 2))] || lanes[0];
+        const generatedLanes = lanes.slice(waterfrontLaneCount);
+        const parentLane = generatedLanes[Math.min(generatedLanes.length - 1, Math.floor((index - 1) / 2))]
+          || generatedLanes[0] || lanes[0];
         const branchAt = 0.2 + seededUnit(`${salt}:branch-at`) * 0.62;
         const interiorParentPoints = parentLane.points.filter(point => pointInPolygon(point, settlement.points));
         const branchPoints = interiorParentPoints.length ? interiorParentPoints : parentLane.points;
@@ -12381,6 +12930,8 @@
     renderer.subhexSettlementPlanCache ||= new Map();
     const wallSignature = getSubhexSettlementWallSignature(options);
     const savedRouteSignature = getSubhexSettlementRouteAnchorSignature(settlement);
+    const waterDabs = getSubhexSettlementWaterDabs(settlement, options);
+    const waterSignature = stableHash(JSON.stringify(waterDabs.map(dab => [dab.id, dab.x, dab.y, dab.r])));
     const routeDraftSignature = options.editor
       ? stableHash(JSON.stringify([
         savedRouteSignature,
@@ -12392,6 +12943,7 @@
       stableHash(wallSignature),
       renderer.overlayRevision || 0,
       routeDraftSignature,
+      waterSignature,
       metrics.radius,
       options.editor ? "editor" : "saved"
     ].join("|");
@@ -12403,9 +12955,15 @@
 
     const density = settlement.density / 100;
     const densityJitter = Math.max(0, Math.min(1, Number(settlement.densityJitter ?? 35) / 100));
-    const lanes = buildSubhexSettlementGeneratedLanes(settlement, routeContext, metrics);
+    const lanes = buildSubhexSettlementGeneratedLanes(settlement, routeContext, metrics, waterDabs);
     lanes.forEach(lane => { lane.bounds = getRenderPointsBounds(lane.points); });
     const spines = [...routeContext.polylines, ...lanes];
+    spines.forEach(spine => { spine.bounds ||= getRenderPointsBounds(spine.points); });
+    const blockingOptions = {
+      ...options, skipRoutes: true,
+      walls: options.editor ? getEffectiveSubhexWalls() : (renderer.subhexWalls || []),
+      waterDabs
+    };
     const frontageSpacing = metrics.radius * (settlement.style === "city"
       ? 0.17 - density * 0.035
       : settlement.style === "village"
@@ -12466,17 +13024,29 @@
         height = width;
       }
       const footprintClearance = Math.hypot(width, height) * 0.5 + metrics.radius * 0.035;
-      if (isSubhexSettlementPointBlocked(point, metrics, { ...options, skipRoutes: true }, footprintClearance)) return false;
-      if (spines.some(spine => spine.points.slice(1).some((end, pointIndex) => (
-        distanceToSegment(point, spine.points[pointIndex], end) < footprintClearance
-      )))) return false;
+      if (isSubhexSettlementPointBlocked(point, metrics, blockingOptions, footprintClearance)) return false;
+      for (const spine of spines) {
+        const bounds = spine.bounds;
+        if (point.x < bounds.left - footprintClearance || point.x > bounds.right + footprintClearance
+          || point.y < bounds.top - footprintClearance || point.y > bounds.bottom + footprintClearance) continue;
+        for (let index = 1; index < spine.points.length; index += 1) {
+          const start = spine.points[index - 1];
+          const end = spine.points[index];
+          if (point.x < Math.min(start.x, end.x) - footprintClearance
+            || point.x > Math.max(start.x, end.x) + footprintClearance
+            || point.y < Math.min(start.y, end.y) - footprintClearance
+            || point.y > Math.max(start.y, end.y) + footprintClearance) continue;
+          if (distanceToSegment(point, start, end) < footprintClearance) return false;
+        }
+      }
       const clearance = largeCircle ? width * 0.78 : shape === "circle" ? width * 0.9 : collisionSize;
       if (!canPlace(point, clearance)) return false;
       const building = {
         ...point,
         width,
         height,
-        angle: angle + (seededUnit(`${salt}:angle`) - 0.5) * (settlement.style === "city" ? 0.18 : 0.34),
+        angle: (typeof angle === "function" ? angle() : angle)
+          + (seededUnit(`${salt}:angle`) - 0.5) * (settlement.style === "city" ? 0.18 : 0.34),
         shade: seededUnit(`${salt}:shade`),
         shape,
         clearance,
@@ -12538,8 +13108,8 @@
         const localOccupancy = Math.max(0.06, Math.min(1,
           0.24 + density * 0.74 + (districtRoll - 0.5) * densityJitter * 0.95));
         if (seededUnit(`${settlement.seed}:fill-occupancy:${index}`) > localOccupancy) continue;
-        const nearestSpine = getNearestSettlementRouteSegment(point, spines);
-        const angle = nearestSpine?.angle ?? seededUnit(`${settlement.seed}:fill-angle:${districtKey}`) * Math.PI;
+        const angle = () => getNearestSettlementRouteSegment(point, spines)?.angle
+          ?? seededUnit(`${settlement.seed}:fill-angle:${districtKey}`) * Math.PI;
         placeBuilding(point, angle, `${settlement.seed}:fill:${index}`, `district:${districtKey}`);
       }
     }
@@ -12587,7 +13157,7 @@
         }));
         return { points, bounds: getRenderPointsBounds(points) };
       });
-    const plan = { key: cacheKey, lanes, buildings, groundPatches, routeContext };
+    const plan = { key: cacheKey, lanes, buildings, groundPatches, routeContext, waterDabs };
     renderer.subhexSettlementPlanCache.set(cacheKey, plan);
     if (renderer.subhexSettlementPlanCache.size > 120) renderer.subhexSettlementPlanCache.clear();
     return plan;
@@ -12595,7 +13165,7 @@
 
   function getSubhexBoundarySettlementBuildings(subhex, settlement, metrics, options = {}) {
     renderer.subhexSettlementBuildingCache ||= new Map();
-    const plan = getSubhexOrganicSettlementPlan(settlement, metrics, options);
+    const plan = options.plan || getSubhexOrganicSettlementPlan(settlement, metrics, options);
     const cacheKey = `${getSubhexEditorCellKey(subhex)}|${plan.key}`;
     if (renderer.subhexSettlementBuildingCache.has(cacheKey)) return renderer.subhexSettlementBuildingCache.get(cacheKey);
     const buildings = plan.buildings.filter(building => pointInPolygon(building, subhex.points));
@@ -12607,9 +13177,28 @@
     return buildings;
   }
 
+  function clipSubhexSettlementAwayFromWater(ctx, waterDabs = [], bounds = null) {
+    if (!waterDabs.length || !bounds) return;
+    const padding = Math.max(bounds.right - bounds.left, bounds.bottom - bounds.top) + 1;
+    waterDabs.forEach(dab => {
+      const radius = Number(dab?.radius ?? dab?.r);
+      if (dab.x + radius < bounds.left || dab.x - radius > bounds.right
+        || dab.y + radius < bounds.top || dab.y - radius > bounds.bottom) return;
+      ctx.beginPath();
+      ctx.rect(
+        bounds.left - padding,
+        bounds.top - padding,
+        bounds.right - bounds.left + padding * 2,
+        bounds.bottom - bounds.top + padding * 2
+      );
+      addSubhexWaterDabPath(ctx, dab);
+      ctx.clip("evenodd");
+    });
+  }
+
   function drawSubhexSettlementStreets(ctx, subhex, settlement, metrics, options = {}) {
     if (settlement?.version !== 2 || settlement.points.length < 3) return;
-    const plan = getSubhexOrganicSettlementPlan(settlement, metrics, options);
+    const plan = options.plan || getSubhexOrganicSettlementPlan(settlement, metrics, options);
     const subhexBounds = getRenderPointsBounds(subhex.points);
     ctx.save();
     ctx.beginPath();
@@ -12620,6 +13209,7 @@
     settlement.points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
     ctx.closePath();
     ctx.clip();
+    clipSubhexSettlementAwayFromWater(ctx, plan.waterDabs || [], subhexBounds);
 
     ctx.fillStyle = settlement.style === "city"
       ? "rgba(117, 80, 48, 0.58)"
@@ -12635,9 +13225,11 @@
     plan.lanes.forEach((lane, laneIndex) => {
       if (lane.points.length < 2) return;
       if (lane.bounds && !renderBoundsIntersect(lane.bounds, subhexBounds)) return;
-      const main = settlement.style === "city" && (lane.type === "stone" || laneIndex === 0);
-      ctx.strokeStyle = main ? "rgba(157, 150, 133, 0.88)" : "rgba(91, 57, 31, 0.82)";
-      ctx.lineWidth = metrics.radius * (main ? 0.095 : settlement.style === "rural" ? 0.075 : 0.065);
+      const main = !lane.waterfront && settlement.style === "city" && (lane.type === "stone" || laneIndex === 0);
+      ctx.strokeStyle = lane.waterfront
+        ? "rgba(78, 48, 27, 0.92)"
+        : main ? "rgba(157, 150, 133, 0.88)" : "rgba(91, 57, 31, 0.82)";
+      ctx.lineWidth = metrics.radius * (lane.waterfront ? 0.082 : main ? 0.095 : settlement.style === "rural" ? 0.075 : 0.065);
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.beginPath();
@@ -12672,7 +13264,7 @@
   }
 
   function drawSubhexSettlement(ctx, subhex, metrics, options = {}) {
-    const settlement = getSubhexSettlementForRender(subhex, options);
+    const settlement = options.settlement || getSubhexSettlementForRender(subhex, options);
     if (!settlement) return;
     const cell = options.editor ? getSubhexEditorCellSnapshot(subhex) : getSubhexSavedCellSnapshot(subhex);
     if (WATER_TERRAINS.has(cell?.baseTerrain || subhex.owner?.baseTerrain)) return;
@@ -12709,8 +13301,112 @@
     });
   }
 
+  function trimSubhexSettlementRasterCache() {
+    const maxBytes = shouldUseSubhexLiteMode() ? 72 * 1024 * 1024 : 192 * 1024 * 1024;
+    let bytes = [...renderer.subhexSettlementRasterCache.values()]
+      .reduce((total, entry) => total + (entry.canvas?.width || 0) * (entry.canvas?.height || 0) * 4, 0);
+    for (const [id, entry] of renderer.subhexSettlementRasterCache) {
+      if (bytes <= maxBytes || renderer.subhexSettlementRasterCache.size <= 1) break;
+      bytes -= (entry.canvas?.width || 0) * (entry.canvas?.height || 0) * 4;
+      releaseMapCanvas(entry.canvas);
+      renderer.subhexSettlementRasterCache.delete(id);
+    }
+  }
+
+  function getSavedSubhexSettlementRaster(settlement, metrics = getSubhexMetrics()) {
+    if (!settlement?.id || settlement.version !== 2) return null;
+    const pad = Math.max(2, metrics.radius * 0.65);
+    const bounds = getRenderPointsBounds(settlement.points, pad);
+    const width = Math.max(1, bounds.right - bounds.left);
+    const height = Math.max(1, bounds.bottom - bounds.top);
+    const preferredScale = SUBHEX_FEATURE_TILE_MAX_SCALE;
+    const scale = Math.max(1, Math.min(
+      preferredScale,
+      8192 / width,
+      8192 / height,
+      Math.sqrt((40 * 1024 * 1024) / (width * height))
+    ));
+    const sourceKey = [
+      stableHash(JSON.stringify(settlement)),
+      renderer.overlayRevision || 0,
+      scale.toFixed(4),
+      metrics.radius,
+      metrics.hexHeight
+    ].join("|");
+    const cached = renderer.subhexSettlementRasterCache.get(settlement.id);
+    if (cached?.sourceKey === sourceKey && cached.canvas?.width && cached.canvas?.height) {
+      renderer.subhexSettlementRasterCache.delete(settlement.id);
+      renderer.subhexSettlementRasterCache.set(settlement.id, cached);
+      return cached;
+    }
+    const plan = getSubhexOrganicSettlementPlan(settlement, metrics);
+    const key = [
+      plan.key,
+      sourceKey
+    ].join("|");
+    if (cached?.key === key && cached.canvas?.width && cached.canvas?.height) {
+      renderer.subhexSettlementRasterCache.delete(settlement.id);
+      renderer.subhexSettlementRasterCache.set(settlement.id, cached);
+      return cached;
+    }
+    if (cached) releaseMapCanvas(cached.canvas);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.ceil(width * scale));
+    canvas.height = Math.max(1, Math.ceil(height * scale));
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.setTransform(scale, 0, 0, scale, -bounds.left * scale, -bounds.top * scale);
+    const cells = getSubhexesForBounds(bounds).filter(subhex => (
+      normalizeSubhexSettlement(getSubhexSavedCellSnapshot(subhex)?.settlement)?.id === settlement.id
+    ));
+    cells.forEach(subhex => drawSubhexSettlement(ctx, subhex, metrics, { settlement, plan }));
+    [...(renderer.subhexSettlementBuildingCache?.keys?.() || [])]
+      .filter(buildingKey => buildingKey.endsWith(`|${plan.key}`))
+      .forEach(buildingKey => renderer.subhexSettlementBuildingCache.delete(buildingKey));
+
+    const dependencyHexIds = new Set(getHexesForBounds(
+      getRenderPointsBounds(settlement.points, metrics.radius * 2)
+    ).map(hex => hex.id));
+    const raster = { key, sourceKey, canvas, bounds, scale, planKey: plan.key, dependencyHexIds };
+    renderer.subhexSettlementRasterCache.delete(settlement.id);
+    renderer.subhexSettlementRasterCache.set(settlement.id, raster);
+    trimSubhexSettlementRasterCache();
+    return raster;
+  }
+
+  function renderSavedSubhexSettlementLayer(ctx) {
+    if (!isSubhexLayerActive() || !renderer.drawing.visibleOverlays.features) return;
+    const progress = getSubhexLayerProgress();
+    if (!progress) return;
+    const visibleBounds = getVisibleBounds(getSubhexMetrics().radius * 2);
+    const settlements = getSavedSubhexSettlements().filter(settlement => (
+      renderBoundsIntersect(getRenderPointsBounds(settlement.points), visibleBounds)
+    ));
+    if (!settlements.length) return;
+    withWorldCanvasTransform(ctx, () => {
+      ctx.save();
+      ctx.globalAlpha = progress;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      settlements.forEach(settlement => {
+        const raster = getSavedSubhexSettlementRaster(settlement);
+        if (!raster?.canvas?.width || !raster.canvas.height) return;
+        ctx.drawImage(
+          raster.canvas,
+          raster.bounds.left,
+          raster.bounds.top,
+          raster.bounds.right - raster.bounds.left,
+          raster.bounds.bottom - raster.bounds.top
+        );
+      });
+      ctx.restore();
+    });
+  }
+
   function renderSubhexFarmlandOverlay(ctx, subhex, metrics, seededFeatures = null, options = {}) {
-    if (getSubhexSettlementForRender(subhex, options)) return;
+    if (getSubhexSettlementForRender(subhex, options)?.version === 1) return;
     if (!shouldRenderSubhexFarmland(subhex, seededFeatures)) return;
     const file = FEATURE_ART_FILES.farmland;
     const image = getFeatureArtImage(
@@ -12719,11 +13415,12 @@
       getSubhexFeatureImageUsage(subhex)
     );
     if (!image) return;
-    drawFeatureArtImage(
+    drawSubhexFeatureArtImage(
       ctx,
       image,
       getSubhexFarmlandArtBox(subhex, metrics),
-      0.64
+      0.64,
+      getSubhexFeatureClipAwayPoints(subhex, options)
     );
   }
 
