@@ -532,6 +532,44 @@ function renderCodexSubhexEditAction(hexId) {
   `;
 }
 
+async function exportCodexSubhexPng(hexId) {
+  const controls = document.querySelector("#codex-detail-subhex [data-codex-subhex-export]");
+  const button = controls?.querySelector("[data-codex-subhex-export-button]");
+  const status = controls?.querySelector("[data-codex-subhex-export-status]");
+  if (!controls || !window.generatedMapRenderer?.exportSubhexPng) return;
+  const setStatus = (message, isError = false) => {
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("is-error", Boolean(isError));
+  };
+  const options = {
+    scale: Number(controls.querySelector("[data-subhex-export-scale]")?.value || 2),
+    grid: controls.querySelector("[data-subhex-export-grid]")?.checked !== false,
+    labels: controls.querySelector("[data-subhex-export-labels]")?.checked !== false,
+    pois: controls.querySelector("[data-subhex-export-pois]")?.checked !== false
+  };
+  if (button) button.disabled = true;
+  setStatus("Preparing saved detail PNG...");
+  try {
+    const result = await window.generatedMapRenderer.exportSubhexPng(hexId, options);
+    setStatus(`Exported ${result.width} x ${result.height} PNG.`);
+  } catch (error) {
+    console.error("Codex subhex export failed:", error);
+    setStatus(`Export failed: ${error?.message || "Try a smaller image size."}`, true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+if (!window.__codexSubhexArchiveOutsideBound) {
+  document.addEventListener("pointerdown", event => {
+    document.querySelectorAll(".codex-hex-subhex-archive[open]").forEach(details => {
+      if (!details.contains(event.target)) details.open = false;
+    });
+  }, true);
+  window.__codexSubhexArchiveOutsideBound = true;
+}
+
 function renderCodexHexPage(hexId) {
   codexHexPreviewResizeObserver?.disconnect();
   codexHexPreviewResizeObserver = null;
@@ -590,9 +628,32 @@ function renderCodexHexPage(hexId) {
 
   const sections = [
     ...(hasSubhexDetail ? [renderCodexDetailRailSection("codex-detail-subhex", "Sub-Hex", `
-      <div class="codex-hex-subhex-preview">
-        <canvas width="720" height="640" role="img" aria-label="Subhex map of hex ${escapeHtml(hexId)}"></canvas>
-        <svg aria-hidden="true"></svg>
+      <div class="codex-hex-subhex-stage">
+        <div class="codex-hex-subhex-preview">
+          <canvas width="720" height="640" role="img" aria-label="Subhex map of hex ${escapeHtml(hexId)}"></canvas>
+          <svg aria-hidden="true"></svg>
+        </div>
+        <details class="codex-hex-subhex-archive">
+          <summary>Archive</summary>
+          <div class="codex-hex-subhex-export" data-codex-subhex-export>
+            <label>
+              <span>PNG Size</span>
+              <select data-subhex-export-scale>
+                <option value="1">Standard</option>
+                <option value="2" selected>2x</option>
+                <option value="3">3x</option>
+                <option value="4">4x</option>
+              </select>
+            </label>
+            <div class="codex-hex-subhex-export-toggles">
+              <label><input type="checkbox" data-subhex-export-grid checked> Grid</label>
+              <label><input type="checkbox" data-subhex-export-labels checked> Labels</label>
+              <label><input type="checkbox" data-subhex-export-pois checked> POIs</label>
+            </div>
+            <button class="codex-detail-zoom-to-button" type="button" data-codex-subhex-export-button onclick="exportCodexSubhexPng('${escapeJsString(hexId)}')">Export PNG</button>
+            <div class="codex-hex-subhex-export-status" data-codex-subhex-export-status aria-live="polite"></div>
+          </div>
+        </details>
       </div>
       <div class="codex-hex-subhex-scale" aria-label="Map scale: one hex equals 1 mile"><span aria-hidden="true">⬡</span> = 1 mi</div>
     `, "", true)] : []),
@@ -614,16 +675,17 @@ function renderCodexHexPage(hexId) {
   document.getElementById("codex-content").classList.add("codex-detail-page", "codex-hex-detail-page");
   if (hasSubhexDetail) {
     const preview = document.querySelector("#codex-detail-subhex .codex-hex-subhex-preview");
-    const content = preview?.parentElement;
+    const stage = preview?.closest(".codex-hex-subhex-stage");
+    const content = preview?.closest(".codex-detail-rail-section-content");
     const fitPreview = () => {
       if (!preview?.isConnected) return;
       if (window.matchMedia("(max-width: 700px)").matches) {
-        preview.style.width = "";
+        if (stage) stage.style.width = "";
         return;
       }
       if (content.clientHeight < 100) return;
       const availableHeight = content.clientHeight - 48;
-      preview.style.width = `${Math.max(100, Math.min(500, content.clientWidth, availableHeight * 9 / 8))}px`;
+      if (stage) stage.style.width = `${Math.max(100, Math.min(500, content.clientWidth, availableHeight * 9 / 8))}px`;
     };
     if (content) {
       codexHexPreviewResizeObserver = new ResizeObserver(fitPreview);
