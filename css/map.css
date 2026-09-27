@@ -3363,14 +3363,15 @@ body.generated-map-subhex-editor-active .map-generation-popout {
 }
 
 .generated-map-subhex-editor-rail-main {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .generated-map-subhex-editor-terrain-options,
 .generated-map-subhex-editor-feature-options,
 .generated-map-subhex-editor-settlement-options,
 .generated-map-subhex-editor-anchor-options,
-.generated-map-subhex-editor-wall-options {
+.generated-map-subhex-editor-wall-options,
+.generated-map-subhex-editor-archive-options {
   display: none;
   align-items: center;
   gap: 6px;
@@ -3403,6 +3404,10 @@ body.generated-map-subhex-editor-active .map-generation-popout {
   display: flex;
 }
 
+.generated-map-subhex-editor-shell.is-subhex-archive-tool .generated-map-subhex-editor-archive-options {
+  display: flex;
+}
+
 .generated-map-subhex-editor-anchor-options {
   align-items: stretch;
   flex-direction: column;
@@ -3419,6 +3424,11 @@ body.generated-map-subhex-editor-active .map-generation-popout {
 }
 
 .generated-map-subhex-editor-settlement-options {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.generated-map-subhex-editor-archive-options {
   align-items: stretch;
   flex-direction: column;
 }
@@ -4221,6 +4231,59 @@ body.generated-map-subhex-editor-active .map-generation-popout {
   margin-top: 0;
 }
 
+.generated-map-subhex-export-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgba(214, 168, 94, 0.24);
+  border-radius: 6px;
+  background: rgba(24, 15, 8, 0.52);
+}
+
+.generated-map-subhex-export-controls > label {
+  display: grid;
+  grid-template-columns: auto minmax(82px, 1fr);
+  align-items: center;
+  gap: 7px;
+  color: rgba(250, 226, 174, 0.9);
+  font-family: "Marcellus SC", Georgia, serif;
+  font-size: 0.76rem;
+}
+
+.generated-map-subhex-export-controls select {
+  min-width: 0;
+  color: #f7dfaa;
+  border: 1px solid rgba(214, 168, 94, 0.42);
+  border-radius: 4px;
+  background: rgba(24, 15, 8, 0.92);
+}
+
+.generated-map-subhex-export-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: rgba(250, 226, 174, 0.82);
+  font-size: 0.72rem;
+}
+
+.generated-map-subhex-export-controls > .generated-map-subhex-editor-action,
+.generated-map-subhex-export-status {
+  grid-column: 1 / -1;
+}
+
+.generated-map-subhex-export-status {
+  min-height: 1em;
+  color: rgba(229, 205, 156, 0.76);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.generated-map-subhex-export-status.is-error {
+  color: #f0a090;
+}
+
 .generated-map-subhex-editor-actions .generated-map-subhex-editor-action {
   width: 100%;
 }
@@ -4314,7 +4377,7 @@ body.generated-map-subhex-editor-active .map-generation-popout {
 }
 
 .generated-map-subhex-editor-toolbar.map-edit-section-menu .generated-map-subhex-editor-rail-main {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 @media (max-width: 979px), (max-height: 719px) {
